@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "corpus_root": "corpus/",
+  "libraries": [
+    {
+      "id": "library-decision-analysis",
+      "kind": "library",
+      "name": "Decision Analysis",
+      "path": "libraries/Decision Analysis",
+      "enabled": true,
+      "auto_registered": false,
+      "description": "Frameworks for efficient, structured decision-making in complex and high-stakes situations. Three-lens framework: FRAME -> ANALYZE -> DECIDE.",
+      "tags": ["decision-making", "frameworks"],
+      "framework": "FRAME -> ANALYZE -> DECIDE"
+    },
+    {
+      "id": "library-ai-monetization",
+      "kind": "library",
+      "name": "AI Monetization",
+      "path": "libraries/AI Monetization",
+      "enabled": true,
+      "auto_registered": false,
+      "description": "Practical guidance for generating revenue using AI systems. Products, services, infrastructure. Three-lens framework: IDENTIFY -> EVALUATE -> EXECUTE.",
+      "tags": ["business", "monetization", "AI"],
+      "framework": "IDENTIFY -> EVALUATE -> EXECUTE"
+    },
+    {
+      "id": "library-system-design",
+      "kind": "library",
+      "name": "System Design",
+      "path": "libraries/System Design",
+      "enabled": true,
+      "auto_registered": false,
+      "description": "Design-oriented companion: blueprints, workflows, data contracts, roadmaps. Three-lens framework: FRAME -> DESIGN -> EVOLVE.",
+      "tags": ["engineering", "architecture"],
+      "framework": "FRAME -> DESIGN -> EVOLVE"
+    },
+    {
+      "id": "library-demo",
+      "kind": "library",
+      "name": "Demo Library",
+      "path": "samples/demo-library",
+      "enabled": false,
+      "auto_registered": false,
+      "description": "Minimal scaffolding reference; disabled by default.",
+      "tags": ["sample", "demo"]
+    }
+  ],
+  "skills": [
+    {
+      "id": "skill-demo",
+      "kind": "skill",
+      "name": "Demo Skill",
+      "path": "samples/demo-skill",
+      "enabled": true,
+      "auto_registered": false,
+      "description": "Minimal example skill package shipped with the engine.",
+      "external_deps": []
+    }
+  ],
+  "tools": [],
+  "lifecycle": {
+    "watch_enabled": false,
+    "schedule": null,
+    "auto_register_new_folders": true,
+    "on_toggle_reindex": "next-cycle"
+  }
+}

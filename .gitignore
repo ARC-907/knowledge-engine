@@ -1,0 +1,92 @@
+# --- workspace-level (covers workspace + deliverables tree) ---
+
+# Internal-only material — context for building the product, never shipped to
+# buyers and never part of any public mirror. Only deliverables/ is the product.
+productization-plan/
+internal-planning/
+
+# Python (anywhere in the tree)
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+**/.venv/
+**/venv/
+**/env/
+**/*.egg-info/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+
+# State / runtime data
+**/state/
+**/logs/
+**/*.log
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/engine/data/*.db
+
+# Optional-layer state (relative anywhere)
+**/sandbox_nemoclaw/state/
+**/sandbox_nemoclaw/identity/
+**/sandbox_nemoclaw/logs/
+**/routing_local/data/
+
+# Generated graph artifacts (regenerable)
+**/corpus/.graph/graph.html
+**/corpus/.graph/graph.json
+**/corpus/.graph/GRAPH_REPORT.md
+**/corpus/.graph/native.json
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+**/secrets/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Obsidian (workspace-local state, but keep config)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+
+# Build / dist artifacts
+**/dist/
+**/build/
+
+# === Cruft prevention (added 2026-05-27 by portfolio sweep) ===
+# These patterns are blocked by default because operator-side tooling, IDE
+# config, planning material, and superseded code repeatedly leaked into
+# shipping repos. Provenance of removed-superseded content lives in the
+# ARC-907/products-cloud-archive bundles, NOT in product repos.
+
+# Operator-side / internal planning
+
+# IDE / editor config
+.obsidian/
+
+# Cloudflare wrangler cache (contains operator email + account ID)
+.wrangler/
+
+# Superseded / cold-storage
+archive/
+legacy/
+
+# Operator dev tooling
+tools/
+pre-publish-grep.ps1
+pre-publish-grep.sh
+audit-fix.ps1
+audit-fix.sh
+
+# OS junk
+desktop.ini

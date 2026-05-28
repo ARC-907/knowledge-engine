@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Knowledge Engine — Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>[x-cloak]{display:none}</style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+<div x-data="dashboard()" x-init="load()" x-cloak class="max-w-6xl mx-auto p-6">
+  <header class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-semibold">Knowledge Engine</h1>
+    <div class="text-sm text-slate-400">
+      <span x-text="counts.libraries"></span> libraries ·
+      <span x-text="counts.skills"></span> skills ·
+      <span x-text="counts.tools"></span> tools
+    </div>
+  </header>
+
+  <!-- First-run onboarding banner. Dismissed state persists in localStorage. -->
+  <div x-show="showWelcome" x-cloak
+    class="mb-6 bg-sky-950 border border-sky-800 rounded-lg p-4 text-sm">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <div class="font-semibold text-sky-200 mb-1">Welcome to Knowledge-Engine</div>
+        <p class="text-slate-300 mb-2">
+          You're looking at three <em>demonstration</em> libraries. To make this
+          your knowledge engine:
+        </p>
+        <ol class="list-decimal list-inside text-slate-300 space-y-1">
+          <li>Drop your markdown into <code class="text-sky-300 bg-slate-900 px-1 rounded">corpus/libraries/</code> (one folder per library).</li>
+          <li>Run <code class="text-sky-300 bg-slate-900 px-1 rounded">knowledge-engine bootstrap</code> to register it.</li>
+          <li>Run <code class="text-sky-300 bg-slate-900 px-1 rounded">knowledge-engine reindex</code> &mdash; or click <span class="text-emerald-400">Reindex</span> below.</li>
+          <li>Search here, from the CLI, or from your AI assistant via MCP.</li>
+        </ol>
+        <p class="text-slate-400 mt-2">
+          Full walkthrough: <code class="text-slate-300">docs/BRING-YOUR-OWN-CORPUS.md</code> ·
+          Wire up Claude / Cursor / Continue: <code class="text-slate-300">docs/MCP-WIRING.md</code>
+        </p>
+      </div>
+      <button @click="dismissWelcome()"
+        class="shrink-0 text-slate-400 hover:text-slate-100 text-xs border border-slate-700 rounded px-2 py-1">
+        Dismiss
+      </button>
+    </div>
+  </div>
+
+  <div class="flex gap-2 mb-4">
+    <input x-model="query" @keydown.enter="search()"
+      placeholder="Search the corpus..."
+      class="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-sky-500">
+    <button @click="search()" class="bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded">Search</button>
+  </div>
+
+  <template x-if="results.length">
+    <div class="mb-8 space-y-2">
+      <template x-for="r in results" :key="r.path">
+        <div class="bg-slate-900 border border-slate-800 rounded p-3">
+          <div class="text-xs text-slate-500 mb-1">
+            <span x-text="r.entry_kind"></span> · <span x-text="r.entry_id"></span>
+          </div>
+          <div class="text-sm" x-html="r.snippet"></div>
+          <div class="text-xs text-slate-600 mt-1" x-text="r.path"></div>
+        </div>
+      </template>
+    </div>
+  </template>
+
+  <h2 class="text-lg font-semibold mb-2">Registry</h2>
+  <div class="flex gap-2 mb-3 text-sm">
+    <button @click="filter='all'" :class="filter==='all' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">All</button>
+    <button @click="filter='library'" :class="filter==='library' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Libraries</button>
+    <button @click="filter='skill'" :class="filter==='skill' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Skills</button>
+    <button @click="filter='tool'" :class="filter==='tool' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Tools</button>
+    <button @click="reindex()" class="ml-auto bg-emerald-700 hover:bg-emerald-600 px-3 py-1 rounded">Reindex</button>
+  </div>
+
+  <table class="w-full text-sm">
+    <thead class="text-left text-slate-500 border-b border-slate-800">
+      <tr><th class="py-2">Enabled</th><th>Kind</th><th>Name</th><th>Path</th></tr>
+    </thead>
+    <tbody>
+      <template x-for="e in filteredEntries()" :key="e.id">
+        <tr class="border-b border-slate-900">
+          <td class="py-2">
+            <input type="checkbox" :checked="e.enabled" @change="toggle(e.id, $event.target.checked)">
+          </td>
+          <td class="text-slate-400" x-text="e.kind"></td>
+          <td x-text="e.name"></td>
+          <td class="text-slate-500" x-text="e.path"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+
+<script>
+function dashboard() {
+  return {
+    query: "", results: [], entries: [], filter: "all",
+    counts: {libraries: 0, skills: 0, tools: 0},
+    showWelcome: false,
+    async load() {
+      // Show the onboarding banner until the user dismisses it once.
+      this.showWelcome = localStorage.getItem('ke-welcome-dismissed') !== '1';
+      const info = await fetch('/info').then(r => r.json()).catch(() => null);
+      if (info) this.counts = info.counts;
+      const r = await fetch('/registry').then(r => r.json());
+      this.entries = (Array.isArray(r) ? r : (r.entries || [])).sort((a, b) => a.name.localeCompare(b.name));
+    },
+    dismissWelcome() {
+      this.showWelcome = false;
+      localStorage.setItem('ke-welcome-dismissed', '1');
+    },
+    filteredEntries() {
+      return this.filter === "all" ? this.entries : this.entries.filter(e => e.kind === this.filter);
+    },
+    async search() {
+      if (!this.query.trim()) return;
+      const r = await fetch(`/search?q=${encodeURIComponent(this.query)}&limit=15`).then(r => r.json());
+      this.results = r.results || [];
+    },
+    async toggle(id, enabled) {
+      await fetch(`/registry/${id}/toggle`, {method: 'PATCH', headers: {'content-type': 'application/json'}, body: JSON.stringify({enabled})});
+      const e = this.entries.find(x => x.id === id);
+      if (e) e.enabled = enabled;
+    },
+    async reindex() {
+      await fetch('/search/reindex', {method: 'POST'});
+      alert('Reindex triggered.');
+    }
+  }
+}
+</script>
+</body>
+</html>

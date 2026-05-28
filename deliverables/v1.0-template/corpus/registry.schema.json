@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://knowledge-engine.local/registry.schema.json",
+  "title": "Knowledge-Engine Corpus Registry",
+  "description": "Source of truth for libraries, skills, and tools enabled in this corpus. Mirrored to engine/data/registry.db (SQLite) for FTS joins.",
+  "type": "object",
+  "required": [
+    "version",
+    "corpus_root",
+    "libraries",
+    "skills",
+    "tools",
+    "lifecycle"
+  ],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "corpus_root": {
+      "type": "string",
+      "description": "Path (relative to repo root) of the corpus directory. Default 'corpus/'."
+    },
+    "libraries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "enabled"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": {
+            "type": "string",
+            "description": "Path relative to corpus_root."
+          },
+          "enabled": { "type": "boolean" },
+          "indexed_at": { "type": ["string", "null"], "format": "date-time" },
+          "size_bytes": { "type": "integer", "minimum": 0 },
+          "doc_count": { "type": "integer", "minimum": 0 },
+          "status": {
+            "type": "string",
+            "enum": ["ready", "indexing", "error", "pending"]
+          },
+          "framework": {
+            "type": ["string", "null"],
+            "description": "Three-lens declared in library README."
+          },
+          "description": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "enabled"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": {
+            "type": "string",
+            "description": "Path relative to corpus_root."
+          },
+          "description": { "type": ["string", "null"] },
+          "source_library": {
+            "type": ["string", "null"],
+            "description": "If skill came from a library, name of that library."
+          },
+          "enabled": { "type": "boolean" },
+          "indexed_at": { "type": ["string", "null"], "format": "date-time" },
+          "external_deps": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Free-text list of external dependencies (e.g. 'ba_* MCP', 'Tavily API key')."
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind", "enabled"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "kind": { "type": "string", "enum": ["mcp", "cli", "service"] },
+          "deps": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "enabled": { "type": "boolean" },
+          "endpoint": {
+            "type": ["string", "null"],
+            "description": "URI / command / module path used to invoke."
+          }
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "required": [
+        "watch_enabled",
+        "auto_register_new_folders",
+        "on_toggle_reindex"
+      ],
+      "properties": {
+        "watch_enabled": { "type": "boolean" },
+        "schedule": {
+          "type": ["string", "null"],
+          "description": "Cron-like or interval string ('15m', '1h', '24h'); null = no schedule."
+        },
+        "auto_register_new_folders": { "type": "boolean" },
+        "on_toggle_reindex": {
+          "type": "string",
+          "enum": ["immediate", "next-cycle", "manual"]
+        }
+      }
+    }
+  }
+}

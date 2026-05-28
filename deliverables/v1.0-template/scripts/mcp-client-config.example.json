@@ -1,0 +1,21 @@
+# MCP client config example - Claude Desktop / Cursor / Continue
+#
+# Add to your MCP client's config file. For Claude Desktop on Windows that's:
+#   %APPDATA%\Claude\claude_desktop_config.json
+# On macOS:
+#   ~/Library/Application Support/Claude/claude_desktop_config.json
+#
+# Replace ABSOLUTE_PATH with the full path to your knowledge-engine checkout.
+{
+  "mcpServers": {
+    "knowledge-engine": {
+      "command": "ABSOLUTE_PATH/engine/.venv/Scripts/python.exe",
+      "args": ["-m", "knowledge_engine.mcp_server"],
+      "env": {
+        "KE_CORPUS_ROOT": "ABSOLUTE_PATH/corpus",
+        "KE_DATA_DIR": "ABSOLUTE_PATH/engine/data",
+        "KE_REGISTRY_PATH": "ABSOLUTE_PATH/corpus/registry.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "knowledge-engine"
+version = "1.0.0"
+description = "Corpus-agnostic knowledge engine: registry, FTS5 indexer, FastAPI, MCP server."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "knowledge-engine contributors" }]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "watchdog>=4.0",
+    "jsonschema>=4.21",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+local = ["ollama>=0.2"]
+mcp = ["mcp>=1.0"]
+
+[project.scripts]
+knowledge-engine = "knowledge_engine.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
