@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import shlex
 import subprocess
 import uuid as _uuid
 from datetime import datetime, timezone
@@ -208,7 +209,16 @@ def invoke_script(
     tool: dict[str, Any],
     input_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run a script tool and capture output."""
+    """Run a script tool and capture output.
+
+    Trust boundary: ``command`` comes from ``register_tool()`` / ``update_tool()``,
+    which are library-level Python APIs — not HTTP input. The interpreter
+    allowlist + timeout cap remain in place. The command is parsed with
+    ``shlex.split`` and passed to ``subprocess.run`` as an argv list (no shell).
+    Shell features (pipes, variable expansion, globs, command substitution) are
+    not available; if a tool author needs them, they should write a wrapper
+    script and register that.
+    """
     cfg = _load_tool_host_config()
     max_timeout = cfg.get("max_script_timeout", 120)
     allowed_interpreters = cfg.get("allowed_script_interpreters", ["python", "node", "bash"])
@@ -217,7 +227,14 @@ def invoke_script(
     if not command:
         return {"ok": False, "error": "No command configured for this tool"}
 
-    first_word = command.split()[0] if command else ""
+    try:
+        argv = shlex.split(command, posix=True)
+    except ValueError as exc:
+        return {"ok": False, "error": f"Unparseable command string: {exc}"}
+    if not argv:
+        return {"ok": False, "error": "No command configured for this tool"}
+
+    first_word = argv[0]
     if first_word not in allowed_interpreters:
         return {"ok": False, "error": f"Interpreter '{first_word}' not in allowed list"}
 
@@ -227,9 +244,9 @@ def invoke_script(
     stdin_data = json.dumps(input_data or {})
 
     try:
-        result = subprocess.run(
-            command,
-            shell=True,
+        result = subprocess.run(  # noqa: S603 — argv list, no shell, allowlisted interpreter
+            argv,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -252,6 +269,8 @@ def invoke_script(
         }
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"Script timed out after {timeout}s"}
+    except FileNotFoundError as e:
+        return {"ok": False, "error": f"Interpreter not found on PATH: {e}"}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)}
 
