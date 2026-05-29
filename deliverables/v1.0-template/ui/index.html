@@ -60,7 +60,10 @@
           <div class="text-xs text-slate-500 mb-1">
             <span x-text="r.entry_kind"></span> · <span x-text="r.entry_id"></span>
           </div>
-          <div class="text-sm" x-html="r.snippet"></div>
+          <!-- x-text (not x-html): FTS5 snippet text comes from indexed corpus
+               markdown, which may contain user-authored HTML. x-html would
+               execute embedded script tags from any hostile indexed source. -->
+          <div class="text-sm" x-text="r.snippet"></div>
           <div class="text-xs text-slate-600 mt-1" x-text="r.path"></div>
         </div>
       </template>
