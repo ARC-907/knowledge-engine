@@ -3,46 +3,13 @@
   "corpus_root": "corpus/",
   "libraries": [
     {
-      "id": "library-decision-analysis",
-      "kind": "library",
-      "name": "Decision Analysis",
-      "path": "libraries/Decision Analysis",
-      "enabled": true,
-      "auto_registered": false,
-      "description": "Frameworks for efficient, structured decision-making in complex and high-stakes situations. Three-lens framework: FRAME -> ANALYZE -> DECIDE.",
-      "tags": ["decision-making", "frameworks"],
-      "framework": "FRAME -> ANALYZE -> DECIDE"
-    },
-    {
-      "id": "library-ai-monetization",
-      "kind": "library",
-      "name": "AI Monetization",
-      "path": "libraries/AI Monetization",
-      "enabled": true,
-      "auto_registered": false,
-      "description": "Practical guidance for generating revenue using AI systems. Products, services, infrastructure. Three-lens framework: IDENTIFY -> EVALUATE -> EXECUTE.",
-      "tags": ["business", "monetization", "AI"],
-      "framework": "IDENTIFY -> EVALUATE -> EXECUTE"
-    },
-    {
-      "id": "library-system-design",
-      "kind": "library",
-      "name": "System Design",
-      "path": "libraries/System Design",
-      "enabled": true,
-      "auto_registered": false,
-      "description": "Design-oriented companion: blueprints, workflows, data contracts, roadmaps. Three-lens framework: FRAME -> DESIGN -> EVOLVE.",
-      "tags": ["engineering", "architecture"],
-      "framework": "FRAME -> DESIGN -> EVOLVE"
-    },
-    {
       "id": "library-demo",
       "kind": "library",
       "name": "Demo Library",
       "path": "samples/demo-library",
-      "enabled": false,
+      "enabled": true,
       "auto_registered": false,
-      "description": "Minimal scaffolding reference; disabled by default.",
+      "description": "Minimal scaffolding reference shipped with the free MIT engine. The paid Standard bundle (delivered via Polar) adds 3 curated reference libraries: Decision Analysis, AI Monetization, System Design.",
       "tags": ["sample", "demo"]
     }
   ],

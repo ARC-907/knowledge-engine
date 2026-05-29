@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from .registry import Registry
 
 INDEX_FILENAME = "index.db"
 TEXT_SUFFIXES = {".md", ".txt", ".rst"}
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -53,11 +56,19 @@ class Indexer:
         with self._lock:
             cur = self._conn.cursor()
             cur.execute("DELETE FROM docs")
-            counts = {"entries": 0, "files": 0}
+            counts = {"entries": 0, "files": 0, "missing": 0}
             for entry in self.registry.list(enabled_only=True):
                 counts["entries"] += 1
                 entry_root = (self.config.corpus_root / entry["path"]).resolve()
                 if not entry_root.exists():
+                    counts["missing"] += 1
+                    _logger.warning(
+                        "Library %r referenced in registry.json but not found "
+                        "at %s — see README for the Pro bundle (delivered via Polar) "
+                        "if you expected curated libraries to be present.",
+                        entry.get("name") or entry.get("id"),
+                        entry_root,
+                    )
                     continue
                 if entry_root.is_file():
                     files: Iterable[Path] = [entry_root]

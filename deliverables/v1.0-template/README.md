@@ -34,7 +34,11 @@ knowledge-engine reindex
 # open http://127.0.0.1:9210/ui/
 ```
 
-After `serve`, the dashboard is at <http://127.0.0.1:9210/ui/> and the OpenAPI docs are at <http://127.0.0.1:9210/docs>. With only the free MIT material, `reindex` will index the demo corpus under `corpus/samples/`. To use the full reference libraries + buyer guides, get the Standard bundle.
+After `serve`, the dashboard is at <http://127.0.0.1:9210/ui/> and the OpenAPI docs are at <http://127.0.0.1:9210/docs>.
+
+**Public starter ships 1 demo library** (`samples/demo-library`, enabled by default) plus 1 demo skill — enough for `reindex` to do real work on a fresh clone. The Standard bundle adds **3 curated reference libraries** (Decision Analysis, AI Monetization, System Design) plus 9 buyer guides — see [buy.polar.sh/fb5e8614-3965-4e8a-86db-59846c11143e](https://buy.polar.sh/fb5e8614-3965-4e8a-86db-59846c11143e).
+
+If `corpus/registry.json` references a library that isn't present in `corpus/` (for example, you've copied a registry from the Pro bundle into a free repo), the indexer skips it and `knowledge-engine bootstrap` will print a warning naming the missing library.
 
 **To bring your own corpus:** drop folders into `corpus/libraries/` (which is gitignored / buyer-tier in the public repo), or anywhere you point the registry at. Authoring guidance lives in the Standard bundle's `docs/BRING-YOUR-OWN-CORPUS.md` and `docs/LIBRARY-AUTHORING.md`.
 
