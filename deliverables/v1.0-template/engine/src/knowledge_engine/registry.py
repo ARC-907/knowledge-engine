@@ -8,7 +8,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 EntryKind = Literal["library", "skill", "tool"]
 
