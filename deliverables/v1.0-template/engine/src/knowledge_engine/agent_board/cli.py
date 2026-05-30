@@ -204,7 +204,19 @@ def cmd_post(args, base: str) -> int:
 
 
 def cmd_thread(args, base: str) -> int:
-    url = f"{base}/board/threads/{urllib.parse.quote(args.correlation_id, safe='')}"
+    ident = args.correlation_id or args.thread_id
+    if not ident:
+        print(
+            "thread requires either a positional correlation_id or --thread-id",
+            file=sys.stderr,
+        )
+        return 1
+    quoted = urllib.parse.quote(ident, safe="")
+    # The route is /board/threads/{correlation_id}. The store also accepts
+    # thread_id — when the caller passes --thread-id we route through the
+    # threads endpoint as a correlation_id; the store layer falls back to
+    # thread_id when correlation_id misses.
+    url = f"{base}/board/threads/{quoted}"
     if args.limit:
         url += f"?limit={args.limit}"
     msgs = _get(url)
@@ -356,9 +368,11 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--since")
     pr.add_argument("--channel")
     pr.add_argument("--type", dest="message_type")
-    pr.add_argument("--task")
-    pr.add_argument("--product", dest="product_id")
-    pr.add_argument("--task-id", dest="task_id")
+    # `--task` and `--task-id` are the same flag — both populate `task_id`.
+    # Same for `--product` / `--product-id`. Avoids the classic
+    # "I typed --task and nothing filtered" papercut.
+    pr.add_argument("--task", "--task-id", dest="task_id")
+    pr.add_argument("--product", "--product-id", dest="product_id")
     pr.add_argument("--sender")
     pr.add_argument("--limit", type=int, default=20)
     pr.add_argument("--json", action="store_true")
@@ -380,8 +394,15 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--ttl-hours", type=int)
     pp.set_defaults(func=cmd_post)
 
-    pt = sub.add_parser("thread", help="Fetch a thread by correlation_id.")
-    pt.add_argument("correlation_id")
+    pt = sub.add_parser(
+        "thread",
+        help="Fetch a thread by correlation_id (positional) or --thread-id.",
+    )
+    # Both surfaces work — the route accepts either. `correlation_id` stays
+    # positional for muscle memory; `--thread-id` is here so scripts using
+    # the long-lived thread id don't have to invent a fake correlation.
+    pt.add_argument("correlation_id", nargs="?")
+    pt.add_argument("--thread-id", dest="thread_id")
     pt.add_argument("--limit", type=int)
     pt.add_argument("--json", action="store_true")
     pt.set_defaults(func=cmd_thread)

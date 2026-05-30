@@ -400,7 +400,12 @@ def get_key(req: Request, key_id: str) -> dict[str, Any]:
 @router.patch("/keys/{key_id}/toggle")
 def toggle_key(req: Request, key_id: str) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="admin")
-    updated = keys.toggle_key(key_id)
+    try:
+        updated = keys.toggle_key(key_id)
+    except keys.LastMasterKeyError as exc:
+        # 409 (conflict) carries the recovery hint so the dashboard /
+        # CLI can show it verbatim without inventing its own copy.
+        raise HTTPException(409, str(exc)) from exc
     if updated is None:
         raise HTTPException(404, "key not found")
     return updated
@@ -409,7 +414,10 @@ def toggle_key(req: Request, key_id: str) -> dict[str, Any]:
 @router.delete("/keys/{key_id}")
 def delete_key(req: Request, key_id: str) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="admin")
-    ok = keys.delete_key(key_id)
+    try:
+        ok = keys.delete_key(key_id)
+    except keys.LastMasterKeyError as exc:
+        raise HTTPException(409, str(exc)) from exc
     if not ok:
         raise HTTPException(404, "key not found")
     return {"deleted": True, "key_id": key_id}

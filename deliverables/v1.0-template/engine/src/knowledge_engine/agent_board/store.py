@@ -187,6 +187,16 @@ def thread_messages(
 # ── FTS5 search ────────────────────────────────────────────────
 
 
+def _fts5_quote(query: str) -> str:
+    """Wrap a raw user query in FTS5 phrase quotes, escaping internal quotes.
+
+    Example: ``foo (bar)`` becomes ``"foo (bar)"`` (a literal phrase with no
+    FTS5 syntax error). Any double-quote inside the query is doubled per the
+    FTS5 phrase-escape rule.
+    """
+    return '"' + query.replace('"', '""') + '"'
+
+
 def search_messages(
     query: str,
     channel: str | None = None,
@@ -194,33 +204,57 @@ def search_messages(
 ) -> list[dict[str, Any]]:
     """Search subject+body via FTS5 with bm25 ranking and snippet highlighting.
 
-    Falls back to a LIKE-based scan if FTS5 isn't available. Snippets are
-    plain-text — no HTML — so MCP / dashboard callers can render directly.
+    Resilient to user input that happens to collide with FTS5 query syntax:
+    a raw query like `foo (bar)` would otherwise raise `sqlite3.OperationalError`
+    on parse. The two-stage retry preserves power-user behaviour:
+
+    1. Try the query as-is. Power users keep operators like `*`, `AND`, `OR`,
+       `NEAR()`, column filters.
+    2. If FTS5 rejects the query, re-run wrapped as a phrase
+       (`"foo (bar)"`) so the dashboard search box can never 500 on a
+       parenthesis or stray punctuation.
+    3. If even the quoted form fails (FTS5 truly unavailable), fall back to
+       a LIKE scan over `subject`/`body`.
+
+    Snippets are plain-text — no HTML — so MCP and dashboard callers can
+    render directly.
     """
     if not query.strip():
         return []
     conn = db.get_connection()
-    try:
-        # FTS5 path: rank with bm25, expose snippet for UI.
-        sql = """
-            SELECT m.*,
-                   snippet(messages_fts, -1, '[', ']', '…', 16) AS snippet,
-                   bm25(messages_fts) AS rank_score
-            FROM messages_fts
-            JOIN messages m ON m.message_id = messages_fts.message_id
-            WHERE messages_fts MATCH ?
-        """
-        params: list[Any] = [query]
+    sql = """
+        SELECT m.*,
+               snippet(messages_fts, -1, '[', ']', '…', 16) AS snippet,
+               bm25(messages_fts) AS rank_score
+        FROM messages_fts
+        JOIN messages m ON m.message_id = messages_fts.message_id
+        WHERE messages_fts MATCH ?
+    """
+    if channel:
+        sql += " AND m.channel = ?"
+    sql += " ORDER BY rank_score LIMIT ?"
+
+    attempts: list[str] = [query]
+    quoted = _fts5_quote(query)
+    if quoted != query:
+        attempts.append(quoted)
+
+    last_error: sqlite3.OperationalError | None = None
+    for attempt in attempts:
+        params: list[Any] = [attempt]
         if channel:
-            sql += " AND m.channel = ?"
             params.append(channel)
-        sql += " ORDER BY rank_score LIMIT ?"
         params.append(limit)
-        rows = conn.execute(sql, params).fetchall()
-        return db.rows_to_dicts(rows)
-    except sqlite3.OperationalError:
-        # FTS5 missing or table corrupt — fall back to LIKE scan.
-        return _like_search(conn, query, channel, limit)
+        try:
+            rows = conn.execute(sql, params).fetchall()
+            return db.rows_to_dicts(rows)
+        except sqlite3.OperationalError as exc:
+            last_error = exc
+            continue
+
+    # FTS5 missing or both attempts failed — fall back to LIKE scan.
+    _ = last_error  # captured for debugging; intentionally unused
+    return _like_search(conn, query, channel, limit)
 
 
 def _like_search(

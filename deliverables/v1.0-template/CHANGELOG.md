@@ -28,6 +28,35 @@ SQLite backbone, same port (9210) by default — opt out via
   `board_digest` (context-saver), `board_status`, `board_channels`,
   `board_message_types`, `board_search`, `board_sweep_now`.
 
+### UX hardening pass (P3 papercuts)
+
+Four items the original review filed as "P3 / cosmetic" turn out to be
+the kind of papercut that costs a busy dev five minutes each — fixed:
+
+- **FastAPI lifespan handler.** `@app.on_event("shutdown")` was
+  deprecation-warning every test run. Replaced with an `asynccontextmanager`
+  `_lifespan` in both `app.py` and `agent_board/service.py`. Test suite
+  is now warning-clean.
+- **FTS5 search auto-sanitize.** A user typing `foo (bar)` into the
+  dashboard search box used to raise `sqlite3.OperationalError` and
+  bubble up as a 500. `store.search_messages` now retries malformed
+  queries as a phrase (`"foo (bar)"`) before falling back to LIKE —
+  power users still get `*` / `AND` / `OR` / `NEAR()`, casual users
+  never see a parse error.
+- **CLI flag symmetry.** `--task` was silently ignored (different dest
+  than `--task-id`); now a true alias. `--product` / `--product-id`
+  the same. `board thread` accepts both a positional `correlation_id`
+  AND a `--thread-id` flag so scripts using the long-lived thread id
+  don't have to invent a fake correlation.
+- **Last-master lockout protection.** `keys.toggle_key` and
+  `keys.delete_key` now raise `LastMasterKeyError` (route → `409` with
+  a recovery hint) if the operation would leave zero enabled master
+  keys. The error message tells the operator exactly how to recover
+  (`create another master first, OR delete this master directly in
+  SQLite and re-run bootstrap-master`). `ensure_master_key` was
+  already self-healing when no enabled master exists — verified with
+  a new test covering the manual-delete recovery path.
+
 ### Hardening pass (post-review)
 
 - **Peer-trust gate.** `/board/*` now accepts loopback (`127.0.0.1`,

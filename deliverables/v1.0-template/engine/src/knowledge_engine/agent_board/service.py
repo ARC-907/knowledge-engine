@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +30,27 @@ from .. import __version__
 from . import sweeper as kb_sweeper
 
 _logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _lifespan(app: "FastAPI") -> AsyncIterator[None]:
+    """Lifespan context: start the sweeper on boot, stop it on drain.
+
+    The sweeper coordinates with any embedded sweeper running in the
+    main engine via the `board.sweeper_lease` row in `kv_store` so the
+    two never both run a pass.
+    """
+    try:
+        kb_sweeper.start()
+    except Exception:  # noqa: BLE001
+        _logger.exception("standalone sweeper failed to start")
+    try:
+        yield
+    finally:
+        try:
+            kb_sweeper.stop()
+        except Exception:  # noqa: BLE001
+            _logger.exception("standalone sweeper failed to stop cleanly")
 
 
 def _resolve_cors_origins() -> list[str]:
@@ -60,6 +82,7 @@ def create_standalone_app() -> FastAPI:
     app = FastAPI(
         title="Knowledge Engine — Agent Board (standalone)",
         version=__version__,
+        lifespan=_lifespan,
     )
     # CORS is locked to loopback by default. Operators on a private mesh
     # who want browser access from a non-loopback origin set
@@ -77,21 +100,6 @@ def create_standalone_app() -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {"ok": True, "service": "ke-agent-board-standalone", "version": __version__}
-
-    @app.on_event("shutdown")
-    def _on_shutdown() -> None:
-        try:
-            kb_sweeper.stop()
-        except Exception:  # noqa: BLE001
-            _logger.exception("standalone sweeper failed to stop cleanly")
-
-    # Start the sweeper alongside the standalone process. It coordinates
-    # with any embedded sweeper via the `board.sweeper_lease` row in
-    # kv_store so the two never both run a pass.
-    try:
-        kb_sweeper.start()
-    except Exception:  # noqa: BLE001
-        _logger.exception("standalone sweeper failed to start")
 
     return app
 
