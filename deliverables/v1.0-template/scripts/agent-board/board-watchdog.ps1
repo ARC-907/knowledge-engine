@@ -5,8 +5,7 @@
 .DESCRIPTION
   Polls the board's /health endpoint every CheckInterval seconds. If the
   service is dead, kills any stale listener on the port and starts a new
-  one. Mirrors the caprock board-watchdog.ps1 pattern so muscle memory
-  carries over between projects.
+  one. Companion to start-board.bat (which launches this script hidden).
 
 .PARAMETER Port
   Listening port (default 11437; matches BOARD_PORT env var if set).

@@ -100,7 +100,7 @@ Seed content used by first-run demo and tests. Pure synthetic, zero PII.
 ### Tests (`engine/tests/`)
 
 - `test_smoke.py` — 4 tests: registry CRUD roundtrip; indexer rebuild + search; FastAPI factory + `/health` + `/info`; search/reindex/registry routes under the worker threadpool (SQLite cross-thread regression guard).
-- `test_agent_board.py` — 18 tests covering schema validation, store roundtrip, FTS5 search, digest summarization, ack, sweeper, key vault (create/verify/grant/revoke/master), config seed + update, HTTP route smoke (`/board/status`, `/board/messages`, validation rejection, search), and MCP tool discovery + dispatch.
+- `test_agent_board.py` — 36 tests covering schema validation + per-field length caps, store roundtrip, FTS5 search, digest summarization, atomic ack (concurrent + idempotent), sweeper one-pass + lease coordination + threshold-zero clamp + force, key vault CRUD + master uniqueness + concurrent bootstrap, config seed + update, HTTP route smoke (`/board/status`, `/board/messages`, validation rejection, search, body-size cap, untrusted-peer rejection), peer-trust gate (loopback + Tailscale + `KE_BOARD_TRUSTED_CIDRS` override + `KE_TRUST_PROXY`), `prune_by_count` unacked-blocker preservation, and MCP tool discovery + dispatch.
 
 ## Dashboard
 
@@ -126,7 +126,20 @@ Top-level docs:
 - `LICENSE` — MIT (engine + dashboard + demo content)
 - `LICENSE-BUYER.md` — single-buyer commercial-permissive (paid Standard bundle)
 
-Buyer guides (`docs/`):
+### Free-tier documentation (this repo)
+
+Ships with the MIT engine under `docs/`:
+
+- `docs/AGENT-BOARD.md` — agent coordination surface: trust model,
+  channels, message types, HTTP API, MCP tools, CLI, dashboard tabs,
+  sweeper, provider-key vault, standalone deployment, env vars,
+  anti-patterns.
+
+### Standard-bundle documentation (paid Polar download)
+
+The following buyer guides ship with the Standard bundle (single-buyer
+commercial-permissive license) rather than this repo, so the free tier
+can be cloned without the proprietary methodology material:
 
 - `docs/README.md` — guide index
 - `docs/QUICKSTART.md` — install to working dashboard in ~10 minutes
@@ -138,4 +151,3 @@ Buyer guides (`docs/`):
 - `docs/DEPLOYMENT.md` — run beyond localhost; hardening checklist
 - `docs/THEMING.md` — restyle or replace the dashboard
 - `docs/FAQ.md` — common questions
-- `docs/AGENT-BOARD.md` — agent coordination surface: channels, message types, HTTP API, MCP tools, CLI, dashboard tabs, sweeper, provider-key vault, standalone deployment

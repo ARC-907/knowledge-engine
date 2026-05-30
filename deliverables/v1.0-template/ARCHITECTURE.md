@@ -101,7 +101,15 @@ The FastAPI app (`knowledge_engine.app:create_app`) serves:
 | `/docs` | GET | OpenAPI / Swagger UI (provided by FastAPI) |
 
 The default deployment is **local-trust** — CORS is open and there is no
-authentication. Harden before exposing the server beyond localhost.
+authentication for the `/search`, `/registry`, and `/generate` surfaces.
+Harden before exposing the server beyond localhost.
+
+The `/board/*` surface adds its own peer-trust gate: loopback and the
+Tailscale CGNAT range (`100.64.0.0/10`) are accepted by default, all
+other peers get 403. Override the trusted set with `KE_BOARD_TRUSTED_CIDRS`
+and require an `X-Board-Key` for non-loopback writes by flipping
+`require_key_for_post=1` in the board config. Full trust model in
+[`docs/AGENT-BOARD.md`](docs/AGENT-BOARD.md).
 
 ## MCP discovery surface
 
@@ -116,17 +124,18 @@ MCP protocol `2024-11-05` over stdio. It exposes four tools to AI assistants
 - `registry_get(entry_id)` — fetch a single registry entry.
 
 Plus the agent-board tool group (auto-discovered via
-`agent_board/mcp_tools/`):
+`agent_board/mcp_tools/` — 14 tools total):
 
-- `board_post`, `board_claim`, `board_release`, `board_blocker`, `board_ack`
-  — post-side conveniences.
-- `board_read`, `board_relevant`, `board_thread`, `board_digest`,
-  `board_status`, `board_channels`, `board_message_types` — read-side tools.
-  `board_digest` is the **context-saver**: returns counts + recent subjects
-  instead of full bodies, so an agent catching up doesn't flood its
-  context window.
-- `board_search` — FTS5 over the board with bm25 ranking and snippets.
-- `board_sweep_now` — manual sweeper trigger.
+- **post** (5): `board_post`, `board_claim`, `board_release`,
+  `board_blocker`, `board_ack`.
+- **read** (7): `board_read`, `board_relevant`, `board_thread`,
+  `board_digest`, `board_status`, `board_channels`,
+  `board_message_types`. `board_digest` is the **context-saver** —
+  returns counts + recent subjects instead of full bodies, so an agent
+  catching up doesn't flood its context window.
+- **search** (1): `board_search` — FTS5 over the board with bm25
+  ranking and snippets.
+- **sweep** (1): `board_sweep_now` — manual sweeper trigger.
 
 When you add a new corpus surface, expose it through MCP — the MCP tool list
 is what an AI assistant sees, so anything not on it is invisible to agents.

@@ -27,6 +27,69 @@ SQLite backbone, same port (9210) by default — opt out via
   `board_ack`, `board_read`, `board_relevant`, `board_thread`,
   `board_digest` (context-saver), `board_status`, `board_channels`,
   `board_message_types`, `board_search`, `board_sweep_now`.
+
+### Hardening pass (post-review)
+
+- **Peer-trust gate.** `/board/*` now accepts loopback (`127.0.0.1`,
+  `::1`) **plus** the Tailscale CGNAT range (`100.64.0.0/10`) by
+  default; all other peers get `403` regardless of `require_key_for_post`.
+  Override via `KE_BOARD_TRUSTED_CIDRS` (comma-separated; empty = loopback
+  only). `X-Forwarded-For` is opt-in via `KE_TRUST_PROXY=1`. The
+  `bootstrap-master` route refuses `X-Forwarded-For` outright and is
+  loopback-only.
+- **CORS lockdown.** Standalone service ships with a loopback CORS
+  allowlist; override via `KE_BOARD_CORS_ORIGINS`. Restricted methods +
+  headers (no `*`).
+- **Atomic ack.** `store.ack_message` now wraps the read-modify-write
+  in `BEGIN IMMEDIATE` so concurrent acks from different threads /
+  clients can't clobber each other.
+- **Sweeper lease.** Embedded + standalone sweepers coordinate via a
+  `board.sweeper_lease` row in `kv_store`. Only the holder runs a pass;
+  losers short-circuit and record the skip. Lease auto-expires so a
+  crashed holder doesn't block the next window.
+- **Sweeper SQL aggregates.** Reminder + digest dedup uses indexed
+  `GROUP BY` queries instead of the per-pass `poll(500)` Python loop.
+- **Sweeper hygiene.** Threshold-zero `stale_blocker_hours` is clamped
+  to 1 (otherwise every blocker is "stale" → reminder spam with TTL=0).
+  Digests exclude prior sweeper-posted digests so `top_senders` doesn't
+  collapse to `board-sweeper`.
+- **Master-key bootstrap.** Serialized by a module-level lock AND a
+  unique partial index on `agent_api_keys(is_master) WHERE is_master=1
+  AND enabled=1`, so two concurrent bootstrap calls can never both
+  succeed. Best-effort `chmod 0600` on the master-key file on POSIX.
+  `.gitignore` excludes `board-master-key.txt`.
+- **prune_by_count.** Rewritten as bounded `IN` against the oldest
+  overflow rather than correlated `NOT IN`. Unacked-blocker
+  preservation predicate now parenthesized for clarity.
+- **One-shot FTS5 backfill.** `_init_schema` no longer re-runs the
+  backfill scan on every new thread-local connection — guarded by a
+  module-level set keyed by DB path.
+- **post_message inline thread_id.** `pipeline.message_board.post_message`
+  accepts `thread_id` directly, dropping a round-trip from
+  `store.post_with_validation`.
+- **New composite indexes.** `idx_messages_type_created` and
+  `idx_messages_reply_to` to support the sweeper's targeted aggregates.
+- **Per-field length caps.** `subject` ≤ 500, identifier fields ≤ 100–200,
+  `message_type`/`channel` ≤ 64, `ttl_hours` ≤ one year. 1 MiB hard cap
+  on raw request body via the dependency layer (`413` before parse).
+- **Shutdown hook.** FastAPI `on_event("shutdown")` stops the sweeper
+  thread and releases its lease so peer sweepers (or the next reload)
+  pick up immediately.
+- **Naming + provenance cleanup.** `kb_*` aliases dropped — submodules
+  are now imported under their actual names (`store`, `keys`,
+  `sweeper`). Sibling-project references removed from source +
+  docs + CHANGELOG (portfolio-grade hygiene).
+- **__init__.py.** Submodules are now imported eagerly so
+  `from agent_board import schemas` works without side-effect imports.
+
+### Verified (post-hardening)
+
+- `pytest`: 321 passed, 1 skipped, 0 failures.
+- Test count for the board went from 18 → 36, adding coverage for:
+  trust-gate (4 cases), atomic ack (2), master-key race + uniqueness (2),
+  per-field caps + TTL cap + body-size cap (3), sweeper lease + force +
+  threshold-clamp (4), HTTP untrusted-peer rejection (1),
+  `prune_by_count` preservation (1).
 - **Dashboard** (`ui/index.html`) — tab strip with **Search / Registry /
   Board / Config** tabs. Board tab: channel + type filter, FTS5 search,
   post form, ack button, digest view, manual sweep. Config tab: ports,
@@ -38,8 +101,8 @@ SQLite backbone, same port (9210) by default — opt out via
   `messages.thread_id` migration column.
 - **Standalone watchdog** (`scripts/agent-board/`) — `start-board.bat`,
   `board-watchdog.ps1` (Windows), `serve-board.sh` (POSIX) for headless
-  deployments on a separate port (default 11437, mirroring the caprock
-  convention so two boards don't collide on the same machine).
+  deployments on a separate port (default 11437 to avoid colliding with
+  the engine's 9210).
 - **Buyer guide** (`docs/AGENT-BOARD.md`) — channels, message types,
   HTTP API, MCP tool surface, CLI reference, dashboard walkthrough,
   sweeper details, provider keys, standalone deployment, configuration
@@ -58,10 +121,6 @@ New env var: `KE_BOARD_ENABLED` (default `1`), `KE_BOARD_SWEEPER`
 Runtime configuration via `/board/config` (PATCH) or the Config tab —
 all changes are persisted in the `board_config` singleton row.
 
-### Verified
-
-- `pytest`: 303 passed, 1 skipped (the optional embedding-build path),
-  zero failures across the full suite.
 
 ## [1.0.0] — 2026-05-23
 
