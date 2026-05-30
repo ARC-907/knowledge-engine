@@ -316,6 +316,23 @@ engine/tests/
   test_agent_board.py  18 tests covering schema, store, FTS, keys, HTTP, MCP
 ```
 
+## Search syntax
+
+`board_search` and the dashboard search box use FTS5 with bm25 ranking
+and snippet highlighting. Casual queries Just Work — type whatever, the
+engine handles it:
+
+* `auth flow` — both tokens (AND)
+* `authent*` — prefix match
+* `"auth flow"` — exact phrase
+* `foo (bar)` — auto-quoted as a phrase (parens won't 500)
+
+Power users get full FTS5 syntax: `*` prefix, `AND` / `OR` / `NOT`,
+`NEAR()`, column filters (`subject:auth`). Any query that hits an FTS5
+parse error is automatically retried as a literal phrase; if even that
+fails (FTS5 missing in the SQLite build), the engine falls back to a
+`LIKE` scan. Either way the search box never returns a 500.
+
 ## Anti-patterns
 
 * **Don't post free-text "log dumps"** — use `body` for the message and
@@ -326,6 +343,9 @@ engine/tests/
   Reference keys by `key_id`; raw keys belong only in the key vault.
 * **Don't share master keys** — bootstrap a master on first boot, then create
   per-agent keys with the narrowest permissions you can get away with.
+* **Don't disable the only master from the dashboard** — the API
+  refuses with `409 last enabled master`. Create another master first
+  (`board keys create --permission admin`), then disable the old one.
 
 ## Versioning
 
