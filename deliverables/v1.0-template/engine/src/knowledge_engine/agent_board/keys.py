@@ -148,13 +148,59 @@ def list_keys(include_master: bool = True) -> list[dict[str, Any]]:
     return db.rows_to_dicts(rows)
 
 
+class LastMasterKeyError(ValueError):
+    """Raised when an operation would leave zero enabled master keys.
+
+    Carries a recovery hint so callers (and the HTTP layer) can surface
+    actionable guidance instead of a generic 500.
+    """
+
+
+def _would_zero_enabled_masters(conn: Any, key_id: str) -> bool:
+    """True if disabling / deleting `key_id` removes the last enabled master."""
+    target = conn.execute(
+        "SELECT is_master, enabled FROM agent_api_keys WHERE key_id = ?",
+        (key_id,),
+    ).fetchone()
+    if target is None or not target["is_master"] or not target["enabled"]:
+        return False
+    remaining = conn.execute(
+        """SELECT COUNT(*) AS n FROM agent_api_keys
+           WHERE is_master = 1 AND enabled = 1 AND key_id != ?""",
+        (key_id,),
+    ).fetchone()
+    return (remaining["n"] if remaining else 0) == 0
+
+
+_LAST_MASTER_HINT = (
+    "refusing to {action} the last enabled master key — this would lock "
+    "you out of admin endpoints. Create another master key with "
+    "`board keys create ... --permission admin` first, OR delete this "
+    "master directly in SQLite and re-run `board keys bootstrap-master` "
+    "(loopback-only) to self-heal."
+)
+
+
 def toggle_key(key_id: str) -> dict[str, Any] | None:
+    """Flip a key's enabled state.
+
+    Refuses (with `LastMasterKeyError`) to disable the last enabled
+    master so a routine API call can't lock the operator out of admin
+    routes. Disabling a non-master, or disabling a master while another
+    enabled master exists, is always allowed.
+    """
     conn = db.get_connection()
     row = conn.execute(
         "SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)
     ).fetchone()
     if row is None:
         return None
+    # Refuse if this toggle would zero enabled masters. Re-enabling a
+    # disabled master is always fine — the unique partial index only
+    # binds when is_master=1 AND enabled=1, so the operator can have
+    # multiple disabled masters and pick one to revive.
+    if row["enabled"] and _would_zero_enabled_masters(conn, key_id):
+        raise LastMasterKeyError(_LAST_MASTER_HINT.format(action="disable"))
     new_state = 0 if row["enabled"] else 1
     conn.execute(
         "UPDATE agent_api_keys SET enabled = ?, updated_at = ? WHERE key_id = ?",
@@ -168,7 +214,14 @@ def toggle_key(key_id: str) -> dict[str, Any] | None:
 
 
 def delete_key(key_id: str) -> bool:
+    """Delete a key and cascade its permissions.
+
+    Refuses (with `LastMasterKeyError`) to delete the last enabled
+    master for the same reason `toggle_key` refuses to disable it.
+    """
     conn = db.get_connection()
+    if _would_zero_enabled_masters(conn, key_id):
+        raise LastMasterKeyError(_LAST_MASTER_HINT.format(action="delete"))
     conn.execute("DELETE FROM agent_key_permissions WHERE key_id = ?", (key_id,))
     cursor = conn.execute("DELETE FROM agent_api_keys WHERE key_id = ?", (key_id,))
     conn.commit()
@@ -338,6 +391,7 @@ def get_key_summary(key_id: str) -> dict[str, Any] | None:
 
 __all__ = [
     "KEY_PREFIX", "VALID_RESOURCE_TYPES", "VALID_PERMISSIONS",
+    "LastMasterKeyError",
     "generate_key", "create_key", "verify_key", "get_key",
     "list_keys", "toggle_key", "delete_key",
     "grant_permission", "revoke_permission", "list_permissions",
