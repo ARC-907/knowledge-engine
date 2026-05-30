@@ -78,11 +78,30 @@ def main() -> int:
     pd.add_argument("pd_args", nargs=argparse.REMAINDER,
                     help="Subcommand + args (e.g. 'info', 'capabilities')")
 
+    ab = sub.add_parser("board", help="Agent Board (post/read/search/ack/sweep/keys)")
+    ab.add_argument("board_args", nargs=argparse.REMAINDER,
+                    help="Subcommand + args (e.g. 'status', 'post', 'read', 'search')")
+
+    abs_serve = sub.add_parser(
+        "board-serve",
+        help="Run the standalone Agent Board service (separate port).",
+    )
+    abs_serve.add_argument("--host", default="127.0.0.1")
+    abs_serve.add_argument("--port", type=int, default=11437)
+
     args = parser.parse_args()
 
     if args.cmd == "project-docs":
         from .project_docs.cli import main as pd_main
         return pd_main(args.pd_args)
+
+    if args.cmd == "board":
+        from .agent_board.cli import main as board_main
+        return board_main(args.board_args)
+
+    if args.cmd == "board-serve":
+        from .agent_board.service import serve as board_serve
+        return board_serve(host=args.host, port=args.port)
 
     config = Config.from_env()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")

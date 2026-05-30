@@ -55,13 +55,17 @@ engine/                          the engine (code layer)
     sandbox/                     NoopSandbox scaffold + get_sandbox() factory hook
     foundation/                  opt-in pipeline foundation (YAML config loader + SQLite WAL backbone)
     pipeline/                    opt-in multi-worker pipeline (queue + message board + worker registry + task classifier)
+    agent_board/                 first-class agent coordination surface — schemas, store, FTS5 search, keys, sweeper, CLI, MCP tool group
     tools/                       opt-in tool host (script/service/static tool registry over HTTP)
   routing_local/                 opt-in Ollama provider module
   sandbox_adapter/              opt-in sandboxed-agent scaffold (README only)
   tests/                         pytest smoke + regression tests
 
+scripts/
+  agent-board/                  optional standalone Agent Board service (watchdog + launchers)
+
 ui/
-  index.html                    single-file Alpine.js + Tailwind dashboard
+  index.html                    single-file Alpine.js + Tailwind dashboard (Search / Registry / Board / Config tabs)
 ```
 
 ## HTTP API surface
@@ -82,11 +86,30 @@ The FastAPI app (`knowledge_engine.app:create_app`) serves:
 | `/search/reindex` | POST | Rebuild the FTS5 index |
 | `/generate` | POST | Provider-routed text generation |
 | `/generate/providers` | GET | List available generation providers |
+| `/board/status` | GET | Agent board health + counts + last sweep |
+| `/board/messages` | GET / POST | Poll + post messages (schema-validated) |
+| `/board/messages/{id}` | GET | Fetch one |
+| `/board/messages/{id}/ack` | POST | Acknowledge a `requires_ack` message |
+| `/board/threads/{correlation_id}` | GET | Thread view, oldest-first |
+| `/board/search` | GET | FTS5 search over subject+body |
+| `/board/digest` | GET | Context-compressed summary (anti-context-overflow) |
+| `/board/stats/{channels,types}` | GET | Per-channel / per-type counts |
+| `/board/sweep` | POST | Manual sweeper trigger (admin) |
+| `/board/keys`, `/board/keys/{id}`, `/board/keys/{id}/permissions` | * | Provider-key vault (admin) |
+| `/board/config` | GET / PATCH | Singleton runtime config (port, sweeper, channels) |
 | `/ui/` | GET | The single-file dashboard |
 | `/docs` | GET | OpenAPI / Swagger UI (provided by FastAPI) |
 
 The default deployment is **local-trust** — CORS is open and there is no
-authentication. Harden before exposing the server beyond localhost.
+authentication for the `/search`, `/registry`, and `/generate` surfaces.
+Harden before exposing the server beyond localhost.
+
+The `/board/*` surface adds its own peer-trust gate: loopback and the
+Tailscale CGNAT range (`100.64.0.0/10`) are accepted by default, all
+other peers get 403. Override the trusted set with `KE_BOARD_TRUSTED_CIDRS`
+and require an `X-Board-Key` for non-loopback writes by flipping
+`require_key_for_post=1` in the board config. Full trust model in
+[`docs/AGENT-BOARD.md`](docs/AGENT-BOARD.md).
 
 ## MCP discovery surface
 
@@ -99,6 +122,20 @@ MCP protocol `2024-11-05` over stdio. It exposes four tools to AI assistants
 - `registry_list(kind=None, enabled_only=False)` — list registry entries.
 - `registry_toggle(entry_id, enabled)` — enable or disable an entry.
 - `registry_get(entry_id)` — fetch a single registry entry.
+
+Plus the agent-board tool group (auto-discovered via
+`agent_board/mcp_tools/` — 14 tools total):
+
+- **post** (5): `board_post`, `board_claim`, `board_release`,
+  `board_blocker`, `board_ack`.
+- **read** (7): `board_read`, `board_relevant`, `board_thread`,
+  `board_digest`, `board_status`, `board_channels`,
+  `board_message_types`. `board_digest` is the **context-saver** —
+  returns counts + recent subjects instead of full bodies, so an agent
+  catching up doesn't flood its context window.
+- **search** (1): `board_search` — FTS5 over the board with bm25
+  ranking and snippets.
+- **sweep** (1): `board_sweep_now` — manual sweeper trigger.
 
 When you add a new corpus surface, expose it through MCP — the MCP tool list
 is what an AI assistant sees, so anything not on it is invisible to agents.
@@ -132,6 +169,16 @@ Several subsystems are **opt-in** and the lean core works without them:
   of stale claims), `task_classifier` (tiny model that classifies incoming
   tasks by domain/complexity). Buyers running coordinated agent pipelines
   on top of the engine wire this in; the lean-core happy path never touches it.
+- `agent_board/` — first-class agent coordination surface that promotes
+  `pipeline/message_board` into a fully-tooled product: schema-validated
+  channels + types (`schemas.py`), FTS5 search + context-compressed digest
+  (`store.py`), background sweeper for TTL + stale-blocker reminders
+  (`sweeper.py`), provider-key vault (`keys.py`), HTTP routes
+  (`api/board_routes.py`), CLI (`knowledge-engine board ...`), and an
+  auto-discovered MCP tool group (`agent_board/mcp_tools/`). Optional
+  standalone watchdog mode lives in `scripts/agent-board/` for headless
+  deploys. Buyer-facing guide: [`docs/AGENT-BOARD.md`](docs/AGENT-BOARD.md).
+  Opt-out via `KE_BOARD_ENABLED=0`.
 - `tools/` — `host.py` registers addressable tools that agents discover and
   invoke over HTTP. Three tool kinds: `script` (run a command), `service`
   (proxy to an upstream HTTP service), `static` (serve a file or directory).

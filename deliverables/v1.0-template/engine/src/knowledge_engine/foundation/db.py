@@ -17,7 +17,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,17 @@ DB_PATH = Path(
 ).resolve()
 
 _local = threading.local()
+
+# Per-process guard so the one-shot FTS5 backfill runs exactly once per DB
+# path. _init_schema is called on every new thread-local connection; without
+# this set, every worker thread would re-scan messages on first use.
+_FTS_BACKFILLED: set[str] = set()
+_FTS_BACKFILLED_LOCK = threading.Lock()
+
+# Serializes ensure_master_key against concurrent bootstrap calls. The
+# unique partial index in the schema is the authoritative defense; this
+# lock just avoids the duplicate-key error path under normal racing.
+_MASTER_KEY_LOCK = threading.Lock()
 
 # JSON-serialized fields — auto-deserialized by dict_from_row
 _JSON_FIELDS = frozenset({
@@ -141,6 +152,13 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(message_type);
         CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
         CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel);
+        -- Composite index for sweeper / reminder / digest scans that filter
+        -- by message_type and order by created_at.
+        CREATE INDEX IF NOT EXISTS idx_messages_type_created
+            ON messages(message_type, created_at);
+        -- Reply-to scans (reminder dedup, thread traversal).
+        CREATE INDEX IF NOT EXISTS idx_messages_reply_to
+            ON messages(reply_to);
 
         CREATE TABLE IF NOT EXISTS events (
             event_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -301,6 +319,12 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_agentkeys_hash ON agent_api_keys(key_hash);
         CREATE INDEX IF NOT EXISTS idx_agentkeys_enabled ON agent_api_keys(enabled);
+        -- At most one enabled master key may exist. Defends against the
+        -- TOCTOU race in ensure_master_key when two concurrent bootstrap
+        -- requests both see "no master" and try to create one.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_agentkeys_one_master
+            ON agent_api_keys(is_master)
+            WHERE is_master = 1 AND enabled = 1;
 
         CREATE TABLE IF NOT EXISTS agent_key_permissions (
             perm_id TEXT PRIMARY KEY,
@@ -371,7 +395,75 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        -- ── Agent Board ─────────────────────────────────────────────
+        -- Sweeper audit trail. Each row = one pass of the prune+reminder loop.
+        CREATE TABLE IF NOT EXISTS board_sweeps (
+            sweep_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            pruned_expired INTEGER DEFAULT 0,
+            pruned_overflow INTEGER DEFAULT 0,
+            reminders_emitted INTEGER DEFAULT 0,
+            digests_emitted INTEGER DEFAULT 0,
+            error TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_sweeps_started ON board_sweeps(started_at);
+
+        -- Singleton config row holding port, sweeper interval, retention overrides.
+        CREATE TABLE IF NOT EXISTS board_config (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            engine_port INTEGER NOT NULL DEFAULT 9210,
+            standalone_port INTEGER NOT NULL DEFAULT 11437,
+            sweep_interval_s INTEGER NOT NULL DEFAULT 60,
+            stale_blocker_hours INTEGER NOT NULL DEFAULT 2,
+            digest_interval_minutes INTEGER NOT NULL DEFAULT 60,
+            max_messages_before_prune INTEGER NOT NULL DEFAULT 5000,
+            default_ttl_hours INTEGER NOT NULL DEFAULT 168,
+            sweeper_enabled INTEGER NOT NULL DEFAULT 1,
+            require_key_for_post INTEGER NOT NULL DEFAULT 0,
+            channels_json TEXT NOT NULL DEFAULT '[]',
+            updated_at TEXT NOT NULL
+        );
     """)
+    # FTS5 virtual table + triggers — created outside the executescript so we
+    # can swallow the "no fts5 support" error on builds without the extension
+    # and still let the rest of the schema initialize. The board falls back to
+    # LIKE search if FTS5 is unavailable.
+    #
+    # Standard (non-contentless) FTS5 — stores its own copy of subject + body
+    # so snippet() and bm25() work without the messages table being co-located.
+    # Bodies are bounded to ~50KB by the post validator, so the extra storage
+    # is small.
+    try:
+        conn.executescript("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                message_id UNINDEXED,
+                channel,
+                subject,
+                body
+            );
+
+            CREATE TRIGGER IF NOT EXISTS messages_fts_ai
+            AFTER INSERT ON messages BEGIN
+                INSERT INTO messages_fts(message_id, channel, subject, body)
+                VALUES (new.message_id, new.channel, COALESCE(new.subject,''), COALESCE(new.body,''));
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS messages_fts_ad
+            AFTER DELETE ON messages BEGIN
+                DELETE FROM messages_fts WHERE message_id = old.message_id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS messages_fts_au
+            AFTER UPDATE OF subject, body, channel ON messages BEGIN
+                DELETE FROM messages_fts WHERE message_id = old.message_id;
+                INSERT INTO messages_fts(message_id, channel, subject, body)
+                VALUES (new.message_id, new.channel, COALESCE(new.subject,''), COALESCE(new.body,''));
+            END;
+        """)
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     _migrate(conn)
 
@@ -379,6 +471,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
 def _migrate(conn: sqlite3.Connection) -> None:
     """Add columns that may be missing from an older schema. Idempotent."""
     _add_column(conn, "messages", "model_id", "TEXT")
+    _add_column(conn, "messages", "thread_id", "TEXT")
     _add_column(conn, "workers", "safeguard_locked", "INTEGER DEFAULT 0")
     _add_column(conn, "workers", "safeguard_reason", "TEXT")
     _add_column(conn, "workers", "resources_json", "TEXT DEFAULT '{}'")
@@ -391,6 +484,169 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _add_column(conn, "chat_messages", "excluded_from_context", "INTEGER DEFAULT 0")
     _add_column(conn, "chat_messages", "bookmarked", "INTEGER DEFAULT 0")
     conn.commit()
+    seed_board_config(conn)
+    _backfill_messages_fts_once(conn)
+
+
+def seed_board_config(conn: sqlite3.Connection) -> None:
+    """Insert the singleton board_config row on first boot. Idempotent.
+
+    Public so other modules can rebuild the config from defaults without
+    reaching into private names.
+    """
+    row = conn.execute("SELECT id FROM board_config WHERE id = 1").fetchone()
+    if row is not None:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    default_channels = json.dumps([
+        "ops", "research", "project", "worktree", "branch",
+        "library", "planning", "execution", "testing", "chatter",
+    ])
+    conn.execute(
+        """INSERT INTO board_config (
+            id, engine_port, standalone_port, sweep_interval_s,
+            stale_blocker_hours, digest_interval_minutes,
+            max_messages_before_prune, default_ttl_hours,
+            sweeper_enabled, require_key_for_post, channels_json, updated_at
+        ) VALUES (1, 9210, 11437, 60, 2, 60, 5000, 168, 1, 0, ?, ?)""",
+        (default_channels, now),
+    )
+    conn.commit()
+
+
+def _backfill_messages_fts_once(conn: sqlite3.Connection) -> None:
+    """Mirror any pre-FTS messages into messages_fts. Runs exactly once per
+    DB path per process so a many-thread server doesn't pay the LEFT JOIN
+    cost on every new worker-thread connection.
+
+    Silently no-ops if FTS5 isn't compiled in or the FTS table is missing.
+    """
+    path = _conn_path(conn)
+    with _FTS_BACKFILLED_LOCK:
+        if path in _FTS_BACKFILLED:
+            return
+        _FTS_BACKFILLED.add(path)
+    try:
+        rows = conn.execute(
+            """SELECT m.message_id, m.channel,
+                      COALESCE(m.subject,'') AS subject,
+                      COALESCE(m.body,'')    AS body
+               FROM messages m
+               LEFT JOIN messages_fts f ON f.message_id = m.message_id
+               WHERE f.message_id IS NULL"""
+        ).fetchall()
+        if not rows:
+            return
+        conn.executemany(
+            "INSERT INTO messages_fts(message_id, channel, subject, body) VALUES (?, ?, ?, ?)",
+            [(r["message_id"], r["channel"], r["subject"], r["body"]) for r in rows],
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        # FTS5 missing or table corrupt — leave it; search falls back to LIKE.
+        pass
+
+
+def _conn_path(conn: sqlite3.Connection) -> str:
+    """Return the file path backing this connection (for caching keys)."""
+    try:
+        row = conn.execute("PRAGMA database_list").fetchone()
+        if row:
+            d = dict(row) if hasattr(row, "keys") else {}
+            for key in ("file", "name", "seq"):
+                if key in d and d[key]:
+                    return str(d[key])
+    except sqlite3.Error:
+        pass
+    return str(DB_PATH)
+
+
+# ── Sweeper lease (board) ────────────────────────────────────────────
+
+
+def acquire_sweeper_lease(holder: str, ttl_seconds: int = 120) -> bool:
+    """Try to claim the singleton sweeper lease in kv_store.
+
+    Returns True if the caller now owns the lease; False if another holder
+    has a valid lease. Lets the embedded-FastAPI sweeper and a standalone
+    sweeper coexist on the same DB without doubling reminders / digests.
+
+    The lease is a JSON value `{holder, expires_at}` keyed by the literal
+    string "board.sweeper_lease". Steals expired leases.
+    """
+    if ttl_seconds < 5:
+        ttl_seconds = 5
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
+    expires_at = (now_dt + timedelta(seconds=ttl_seconds)).isoformat()
+    payload = json.dumps({"holder": holder, "expires_at": expires_at})
+
+    conn = get_connection()
+    # SQLite needs serialization across writers; busy_timeout already set.
+    cursor = conn.execute(
+        "SELECT value FROM kv_store WHERE key = 'board.sweeper_lease'"
+    )
+    row = cursor.fetchone()
+    if row is None:
+        try:
+            conn.execute(
+                "INSERT INTO kv_store(key, value, updated_at) VALUES (?, ?, ?)",
+                ("board.sweeper_lease", payload, now),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            # Lost the insert race — fall through to UPDATE path.
+            row = conn.execute(
+                "SELECT value FROM kv_store WHERE key = 'board.sweeper_lease'"
+            ).fetchone()
+
+    # Decide whether to steal.
+    if row is not None:
+        try:
+            current = json.loads(row["value"])
+            cur_expires = current.get("expires_at", "")
+        except (json.JSONDecodeError, TypeError, KeyError):
+            cur_expires = ""
+        if current.get("holder") == holder and cur_expires > now:
+            # Already ours; renew.
+            pass
+        elif cur_expires and cur_expires > now:
+            return False  # Someone else holds a live lease.
+
+    # Renew or steal.
+    conn.execute(
+        "UPDATE kv_store SET value = ?, updated_at = ? WHERE key = 'board.sweeper_lease'",
+        (payload, now),
+    )
+    conn.commit()
+    return True
+
+
+def release_sweeper_lease(holder: str) -> None:
+    """Release the lease if this holder owns it. Best-effort."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT value FROM kv_store WHERE key = 'board.sweeper_lease'"
+    ).fetchone()
+    if row is None:
+        return
+    try:
+        current = json.loads(row["value"])
+        if current.get("holder") != holder:
+            return
+    except (json.JSONDecodeError, TypeError):
+        return
+    conn.execute("DELETE FROM kv_store WHERE key = 'board.sweeper_lease'")
+    conn.commit()
+
+
+def master_key_lock() -> threading.Lock:
+    """Module-level lock used by the board's master-key bootstrap to
+    serialize concurrent calls before they touch the DB. The schema's
+    unique partial index on `is_master` is the authoritative defense.
+    """
+    return _MASTER_KEY_LOCK
 
 
 def _add_column(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:

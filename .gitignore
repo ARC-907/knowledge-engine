@@ -47,6 +47,9 @@ internal-planning/
 *.key
 *.pem
 **/secrets/
+# Agent board master-key bootstrap file (raw key shown once on first
+# /board/keys/bootstrap-master call; operator copies + deletes).
+**/board-master-key.txt
 
 # IDE / OS
 .vscode/
