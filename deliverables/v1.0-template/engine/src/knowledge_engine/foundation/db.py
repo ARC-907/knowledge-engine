@@ -371,7 +371,75 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        -- ── Agent Board ─────────────────────────────────────────────
+        -- Sweeper audit trail. Each row = one pass of the prune+reminder loop.
+        CREATE TABLE IF NOT EXISTS board_sweeps (
+            sweep_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            pruned_expired INTEGER DEFAULT 0,
+            pruned_overflow INTEGER DEFAULT 0,
+            reminders_emitted INTEGER DEFAULT 0,
+            digests_emitted INTEGER DEFAULT 0,
+            error TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_sweeps_started ON board_sweeps(started_at);
+
+        -- Singleton config row holding port, sweeper interval, retention overrides.
+        CREATE TABLE IF NOT EXISTS board_config (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            engine_port INTEGER NOT NULL DEFAULT 9210,
+            standalone_port INTEGER NOT NULL DEFAULT 11437,
+            sweep_interval_s INTEGER NOT NULL DEFAULT 60,
+            stale_blocker_hours INTEGER NOT NULL DEFAULT 2,
+            digest_interval_minutes INTEGER NOT NULL DEFAULT 60,
+            max_messages_before_prune INTEGER NOT NULL DEFAULT 5000,
+            default_ttl_hours INTEGER NOT NULL DEFAULT 168,
+            sweeper_enabled INTEGER NOT NULL DEFAULT 1,
+            require_key_for_post INTEGER NOT NULL DEFAULT 0,
+            channels_json TEXT NOT NULL DEFAULT '[]',
+            updated_at TEXT NOT NULL
+        );
     """)
+    # FTS5 virtual table + triggers — created outside the executescript so we
+    # can swallow the "no fts5 support" error on builds without the extension
+    # and still let the rest of the schema initialize. The board falls back to
+    # LIKE search if FTS5 is unavailable.
+    #
+    # Standard (non-contentless) FTS5 — stores its own copy of subject + body
+    # so snippet() and bm25() work without the messages table being co-located.
+    # Bodies are bounded to ~50KB by the post validator, so the extra storage
+    # is small.
+    try:
+        conn.executescript("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                message_id UNINDEXED,
+                channel,
+                subject,
+                body
+            );
+
+            CREATE TRIGGER IF NOT EXISTS messages_fts_ai
+            AFTER INSERT ON messages BEGIN
+                INSERT INTO messages_fts(message_id, channel, subject, body)
+                VALUES (new.message_id, new.channel, COALESCE(new.subject,''), COALESCE(new.body,''));
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS messages_fts_ad
+            AFTER DELETE ON messages BEGIN
+                DELETE FROM messages_fts WHERE message_id = old.message_id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS messages_fts_au
+            AFTER UPDATE OF subject, body, channel ON messages BEGIN
+                DELETE FROM messages_fts WHERE message_id = old.message_id;
+                INSERT INTO messages_fts(message_id, channel, subject, body)
+                VALUES (new.message_id, new.channel, COALESCE(new.subject,''), COALESCE(new.body,''));
+            END;
+        """)
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     _migrate(conn)
 
@@ -379,6 +447,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
 def _migrate(conn: sqlite3.Connection) -> None:
     """Add columns that may be missing from an older schema. Idempotent."""
     _add_column(conn, "messages", "model_id", "TEXT")
+    _add_column(conn, "messages", "thread_id", "TEXT")
     _add_column(conn, "workers", "safeguard_locked", "INTEGER DEFAULT 0")
     _add_column(conn, "workers", "safeguard_reason", "TEXT")
     _add_column(conn, "workers", "resources_json", "TEXT DEFAULT '{}'")
@@ -391,6 +460,57 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _add_column(conn, "chat_messages", "excluded_from_context", "INTEGER DEFAULT 0")
     _add_column(conn, "chat_messages", "bookmarked", "INTEGER DEFAULT 0")
     conn.commit()
+    _seed_board_config(conn)
+    _backfill_messages_fts(conn)
+
+
+def _seed_board_config(conn: sqlite3.Connection) -> None:
+    """Insert the singleton board_config row on first boot. Idempotent."""
+    row = conn.execute("SELECT id FROM board_config WHERE id = 1").fetchone()
+    if row is not None:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    default_channels = json.dumps([
+        "ops", "research", "project", "worktree", "branch",
+        "library", "planning", "execution", "testing", "chatter",
+    ])
+    conn.execute(
+        """INSERT INTO board_config (
+            id, engine_port, standalone_port, sweep_interval_s,
+            stale_blocker_hours, digest_interval_minutes,
+            max_messages_before_prune, default_ttl_hours,
+            sweeper_enabled, require_key_for_post, channels_json, updated_at
+        ) VALUES (1, 9210, 11437, 60, 2, 60, 5000, 168, 1, 0, ?, ?)""",
+        (default_channels, now),
+    )
+    conn.commit()
+
+
+def _backfill_messages_fts(conn: sqlite3.Connection) -> None:
+    """Populate messages_fts from messages for rows that pre-date the FTS table.
+
+    Idempotent: if the FTS row already exists for a message_id, skip.
+    Silently no-ops if FTS5 isn't compiled in.
+    """
+    try:
+        # Anything in messages but not yet mirrored
+        rows = conn.execute(
+            """SELECT m.message_id, m.channel,
+                      COALESCE(m.subject,'') AS subject,
+                      COALESCE(m.body,'')    AS body
+               FROM messages m
+               LEFT JOIN messages_fts f ON f.message_id = m.message_id
+               WHERE f.message_id IS NULL"""
+        ).fetchall()
+        if not rows:
+            return
+        conn.executemany(
+            "INSERT INTO messages_fts(message_id, channel, subject, body) VALUES (?, ?, ?, ?)",
+            [(r["message_id"], r["channel"], r["subject"], r["body"]) for r in rows],
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 
 def _add_column(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
