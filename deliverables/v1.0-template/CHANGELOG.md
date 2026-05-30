@@ -55,7 +55,33 @@ the kind of papercut that costs a busy dev five minutes each — fixed:
   (`create another master first, OR delete this master directly in
   SQLite and re-run bootstrap-master`). `ensure_master_key` was
   already self-healing when no enabled master exists — verified with
-  a new test covering the manual-delete recovery path.
+  a new test covering the manual-delete recovery path. The route-level
+  `409` translation is covered end-to-end (`PATCH` and `DELETE`) — see
+  the dynamic-DB-path fix below for why those tests pass reliably now.
+
+### Root-cause fix — dynamic pipeline DB path
+
+`foundation/db.py` resolved the database path into a module-level
+`DB_PATH` constant **at import time**. Any host that reconfigured
+`KE_PIPELINE_DB` at runtime, ran two engines in one process, or
+re-imported the package would have worker / sweeper threads silently
+keep reading the *stale* database while writes went to the new one.
+That fragility is incompatible with the design goal — a coordination
+backbone you can hoist into any system and power up.
+
+- `resolve_db_path()` now reads the environment on **every**
+  `get_connection()`; connections are cached per-resolved-path in
+  thread-local storage, so the dynamic read is one env lookup and a
+  runtime DB switch routes correctly on every thread.
+- `current_db_path()` exposes the live value; `DB_PATH` remains as the
+  import-time default for back-compat.
+- Regression guard `test_db_path_resolves_dynamically_per_request`
+  flips `KE_PIPELINE_DB` mid-run and asserts the new connection sees the
+  new DB with no row leakage from the old one.
+- This is what let the two HTTP last-master `409` tests be restored
+  rather than waved off — the FastAPI worker thread now reads the same
+  database the request set up. The test harness dropped the 18-module
+  re-import dance it used to need to fake this.
 
 ### Hardening pass (post-review)
 

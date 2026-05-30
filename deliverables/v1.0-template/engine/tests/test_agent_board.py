@@ -7,62 +7,41 @@ from pathlib import Path
 
 
 def _env(corpus: Path, data: Path) -> None:
-    """Point the engine at a tmp corpus + tmp data dir AND a per-test
-    pipeline DB so each test gets an isolated SQLite file. Closes any cached
-    thread-local connections, removes any stale pipeline.db at the target
-    path, and force-reimports the modules so DB_PATH resolves from the
-    freshly-set env vars rather than a prior test's value.
+    """Point the engine at a tmp corpus + tmp data dir + per-test pipeline DB.
+
+    Isolation is achieved entirely through env vars + a unique tmp_path per
+    test, because `foundation.db` resolves the DB path dynamically on every
+    `get_connection()` (see `db.resolve_db_path`). No module surgery is
+    needed: changing `KE_PIPELINE_DB` is enough for the next connection —
+    on any thread — to open the new database. Stopping the sweeper and
+    dropping cached connections keeps a prior test's daemon thread from
+    holding a handle to a tmp file pytest is about to delete.
     """
     corpus.mkdir(parents=True, exist_ok=True)
     data.mkdir(parents=True, exist_ok=True)
     os.environ["KE_CORPUS_ROOT"] = str(corpus)
     os.environ["KE_DATA_DIR"] = str(data)
     os.environ["KE_REGISTRY_PATH"] = str(corpus / "registry.json")
-    pipeline_db = data / "pipeline.db"
-    os.environ["KE_PIPELINE_DB"] = str(pipeline_db)
+    os.environ["KE_PIPELINE_DB"] = str(data / "pipeline.db")
 
-    # Best-effort: close any lingering thread-local connections from a prior
-    # test that imported db with a different DB_PATH, then drop the cache.
     import sys
+    # Stop a sweeper a prior test may have started, so it doesn't keep a
+    # connection open to a tmp DB that's about to be torn down.
+    sweeper_mod = sys.modules.get("knowledge_engine.agent_board.sweeper")
+    if sweeper_mod is not None:
+        try:
+            sweeper_mod.stop(timeout=5.0)
+        except Exception:
+            pass
+    # Drop this thread's cached connections so the next get_connection()
+    # opens fresh against the just-set KE_PIPELINE_DB.
     db_mod = sys.modules.get("knowledge_engine.foundation.db")
     if db_mod is not None:
         try:
             db_mod.close_all()
+            db_mod._FTS_BACKFILLED.clear()  # one-shot backfill guard, per path
         except Exception:
             pass
-
-    # Force a fresh start: delete any pipeline.db SQLite + WAL/SHM artifacts.
-    for suffix in ("", "-wal", "-shm"):
-        p = Path(str(pipeline_db) + suffix)
-        if p.exists():
-            try:
-                p.unlink()
-            except OSError:
-                pass
-
-    # Drop modules that capture DB_PATH at import time, so the next import
-    # sees the freshly-set env vars.
-    for mod in [
-        "knowledge_engine.foundation.db",
-        "knowledge_engine.foundation.config",
-        "knowledge_engine.foundation",
-        "knowledge_engine.pipeline.message_board",
-        "knowledge_engine.pipeline",
-        "knowledge_engine.agent_board.store",
-        "knowledge_engine.agent_board.keys",
-        "knowledge_engine.agent_board.sweeper",
-        "knowledge_engine.agent_board.service",
-        "knowledge_engine.agent_board",
-        "knowledge_engine.agent_board.mcp_tools",
-        "knowledge_engine.agent_board.mcp_tools.base",
-        "knowledge_engine.agent_board.mcp_tools.post_tools",
-        "knowledge_engine.agent_board.mcp_tools.read_tools",
-        "knowledge_engine.agent_board.mcp_tools.search_tools",
-        "knowledge_engine.agent_board.mcp_tools.sweep_tools",
-        "knowledge_engine.api.board_routes",
-        "knowledge_engine.app",
-    ]:
-        sys.modules.pop(mod, None)
 
 
 # ── Schema validation ─────────────────────────────────────────
@@ -858,14 +837,81 @@ def test_toggle_can_reenable_a_disabled_master(tmp_path: Path) -> None:
     assert updated["enabled"] == 1
 
 
-# NOTE: HTTP-level "LastMasterKeyError → 409" translation is covered by
-# code review on the two-line try/except blocks in `api/board_routes.py`
-# (`toggle_key` and `delete_key`). A pytest-level integration test ran
-# into a test-harness state-leak between consecutive TestClient lifespan
-# scopes that wasn't worth chasing — the unit tests above
-# (`test_toggle_refuses_last_enabled_master`,
-# `test_delete_refuses_last_enabled_master`) prove the exception is
-# raised, and the route handlers catch + re-raise as HTTPException(409).
+def test_http_toggle_last_master_returns_409(tmp_path: Path) -> None:
+    """End-to-end: PATCH /board/keys/{id}/toggle on the sole master → 409.
+
+    Exercises the real FastAPI stack (route → keys.toggle_key →
+    LastMasterKeyError → HTTPException(409)). This passes because
+    `foundation.db` resolves the DB path dynamically per request, so the
+    worker thread reads the same database the test thread wrote the
+    master into — even when a prior test's TestClient lifespan left a
+    sweeper thread alive.
+    """
+    _env(tmp_path / "corpus", tmp_path / "data")
+
+    from fastapi.testclient import TestClient
+    from knowledge_engine.app import create_app
+    from knowledge_engine.agent_board import keys
+
+    master = keys.ensure_master_key()
+    assert master is not None
+
+    app = create_app()
+    with TestClient(app) as client:
+        r = client.patch(f"/board/keys/{master['key_id']}/toggle")
+        assert r.status_code == 409, r.text
+        assert "last enabled master" in r.json()["detail"]
+
+
+def test_http_delete_last_master_returns_409(tmp_path: Path) -> None:
+    """End-to-end: DELETE /board/keys/{id} on the sole master → 409."""
+    _env(tmp_path / "corpus", tmp_path / "data")
+
+    from fastapi.testclient import TestClient
+    from knowledge_engine.app import create_app
+    from knowledge_engine.agent_board import keys
+
+    master = keys.ensure_master_key()
+    assert master is not None
+
+    app = create_app()
+    with TestClient(app) as client:
+        r = client.request("DELETE", f"/board/keys/{master['key_id']}")
+        assert r.status_code == 409, r.text
+        assert "last enabled master" in r.json()["detail"]
+
+
+def test_db_path_resolves_dynamically_per_request(tmp_path: Path) -> None:
+    """Regression guard for the frozen-DB_PATH footgun.
+
+    Changing KE_PIPELINE_DB at runtime must route a fresh get_connection()
+    to the new database. A module-level constant resolved once at import
+    would fail this — the worker/sweeper threads would keep writing to the
+    old path while new reads miss the data.
+    """
+    _env(tmp_path / "corpus", tmp_path / "data")
+    import os
+    from knowledge_engine.foundation import db as fdb
+
+    first_path = fdb.resolve_db_path()
+    conn1 = fdb.get_connection()
+    conn1.execute(
+        "INSERT INTO kv_store(key, value, updated_at) VALUES ('probe', 'a', 'now')"
+    )
+    conn1.commit()
+
+    # Point the env var at a second DB file and confirm resolution follows.
+    second_db = tmp_path / "data" / "pipeline2.db"
+    os.environ["KE_PIPELINE_DB"] = str(second_db)
+    try:
+        second_path = fdb.resolve_db_path()
+        assert second_path != first_path, "resolve_db_path ignored the env change"
+        conn2 = fdb.get_connection()
+        # Fresh DB — the probe row from the first DB must NOT be visible.
+        row = conn2.execute("SELECT value FROM kv_store WHERE key = 'probe'").fetchone()
+        assert row is None, "second connection leaked rows from the first DB"
+    finally:
+        os.environ["KE_PIPELINE_DB"] = str(tmp_path / "data" / "pipeline.db")
 
 
 def test_ensure_master_key_self_heals_after_manual_delete(tmp_path: Path) -> None:

@@ -162,7 +162,11 @@ Several subsystems are **opt-in** and the lean core works without them:
 - `foundation/` — YAML config loader (`config.py`) + SQLite WAL backbone
   (`db.py`). The shared base for the pipeline and tools layers. Lives under
   `$KE_PIPELINE_ROOT` (default: `./pipeline`); SQLite at `$KE_PIPELINE_DB`
-  (default: `$KE_DATA_DIR/pipeline.db`).
+  (default: `$KE_DATA_DIR/pipeline.db`). The DB path is resolved
+  **dynamically** on every `get_connection()` (`db.resolve_db_path`), not
+  frozen at import — so the backbone can be re-pointed at a different
+  database at runtime, or host two DBs in one process, without stale-path
+  reads. Connections are cached per-resolved-path in thread-local storage.
 - `pipeline/` — coordinated multi-worker pipeline on top of `foundation/`:
   `queue` (lease-based SQLite task queue), `message_board` (append-only
   coordination channel), `worker_registry` (heartbeat tracking + auto-release
