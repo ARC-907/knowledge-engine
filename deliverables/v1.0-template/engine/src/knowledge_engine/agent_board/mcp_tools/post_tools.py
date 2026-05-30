@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import BoardContext, error_result, kb_store, text_result
+from .base import BoardContext, error_result, store, text_result
 
 GROUP = "board.post"
 
@@ -126,7 +126,7 @@ def tools() -> list[dict[str, Any]]:
 def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[str, Any]:
     try:
         if name == "board_post":
-            msg = kb_store.post_with_validation(args)
+            msg = store.post_with_validation(args)
             return text_result(msg)
         if name == "board_claim":
             return _claim(args)
@@ -152,7 +152,7 @@ def _claim(args: dict[str, Any]) -> dict[str, Any]:
         "body": f"Claim by {args.get('sender_node_id')} on task {args.get('task_id')}.",
         "visibility_scope": "all",
     }
-    return text_result(kb_store.post_with_validation(payload))
+    return text_result(store.post_with_validation(payload))
 
 
 def _release(args: dict[str, Any]) -> dict[str, Any]:
@@ -165,7 +165,7 @@ def _release(args: dict[str, Any]) -> dict[str, Any]:
         "body": str(args.get("reason") or "released"),
         "visibility_scope": "all",
     }
-    return text_result(kb_store.post_with_validation(payload))
+    return text_result(store.post_with_validation(payload))
 
 
 def _blocker(args: dict[str, Any]) -> dict[str, Any]:
@@ -182,7 +182,7 @@ def _blocker(args: dict[str, Any]) -> dict[str, Any]:
         "visibility_scope": "all",
         "requires_ack": True,
     }
-    return text_result(kb_store.post_with_validation(payload))
+    return text_result(store.post_with_validation(payload))
 
 
 def _ack(args: dict[str, Any]) -> dict[str, Any]:
@@ -190,7 +190,7 @@ def _ack(args: dict[str, Any]) -> dict[str, Any]:
     acker = str(args.get("acker") or "").strip()
     if not message_id or not acker:
         return error_result("message_id and acker are required")
-    msg = kb_store.ack_message(message_id, acker)
+    msg = store.ack_message(message_id, acker)
     if msg is None:
         return error_result(f"message not found: {message_id}")
     return text_result(msg)

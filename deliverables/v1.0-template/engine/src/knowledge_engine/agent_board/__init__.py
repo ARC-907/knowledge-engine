@@ -15,10 +15,14 @@ of the `foundation/db.py` SQLite backbone and the existing
 * CLI subcommand (`cli.py`)
 * Optional standalone watchdog mode (`service.py`)
 
-Local trust by default — the engine ships with `require_key_for_post=0`. Set
-to 1 in the config tab (or via `/board/config`) to enforce key-gated posting
-on non-localhost requests.
+Local-trust by default — the engine ships with `require_key_for_post=0`
+and a peer-trust gate that allows loopback and the Tailscale CGNAT range
+(100.64.0.0/10). Set `require_key_for_post=1` in the Config tab to require
+an X-Board-Key on non-localhost writes; restrict or extend the trusted
+network set with the `KE_BOARD_TRUSTED_CIDRS` env var.
 """
+
+from . import schemas, store, keys, sweeper, service, cli  # noqa: F401
 
 __all__ = ["schemas", "store", "keys", "sweeper", "service", "cli"]
 __version__ = "1.0.0"

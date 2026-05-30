@@ -19,9 +19,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable
+from typing import Any
 
 from ..foundation import db
 from ..pipeline import message_board as mb
@@ -36,9 +35,9 @@ def load_config() -> dict[str, Any]:
     conn = db.get_connection()
     row = conn.execute("SELECT * FROM board_config WHERE id = 1").fetchone()
     if row is None:
-        # Defensive — _seed_board_config should have run; reseed if missing.
-        from ..foundation.db import _seed_board_config
-        _seed_board_config(conn)
+        # Defensive — seed_board_config should have run during _migrate;
+        # reseed if a downstream caller wiped the row.
+        db.seed_board_config(conn)
         row = conn.execute("SELECT * FROM board_config WHERE id = 1").fetchone()
     cfg = dict(row)
     try:
@@ -113,17 +112,8 @@ def post_with_validation(payload: dict[str, Any]) -> dict[str, Any]:
         ttl_hours=draft.ttl_hours,
         channel=draft.channel,
         model_id=draft.model_id,
+        thread_id=draft.thread_id,
     )
-    # mb.post_message doesn't set thread_id on the messages table directly —
-    # patch it if provided.
-    if draft.thread_id and msg:
-        conn = db.get_connection()
-        conn.execute(
-            "UPDATE messages SET thread_id = ? WHERE message_id = ?",
-            (draft.thread_id, msg["message_id"]),
-        )
-        conn.commit()
-        msg["thread_id"] = draft.thread_id
     return msg or {}
 
 
@@ -258,10 +248,15 @@ def _like_search(
 # ── Context-compressed digest ──────────────────────────────────
 
 
+_SWEEPER_NODE_ID = "board-sweeper"
+_DIGEST_SELF_TYPES = frozenset({"digest"})
+
+
 def digest(
     channel: str | None = None,
     since: str | None = None,
     max_messages: int = 200,
+    include_sweeper_posts: bool = False,
 ) -> dict[str, Any]:
     """Compressed summary of recent activity. The MCP context-saver.
 
@@ -274,9 +269,22 @@ def digest(
     * Active senders (top 5 by post count)
     * Threads with >= 3 messages (correlation_id + count)
 
+    Sweeper-emitted `digest` posts are excluded by default — otherwise
+    each new digest would count prior digests in its `scanned` set,
+    making `top_senders` collapse to `board-sweeper`. Set
+    `include_sweeper_posts=True` if you actually want the full picture.
+
     Callers that need full bodies should call `poll` or `thread_messages`.
     """
     msgs = poll(since=since, channel=channel, limit=max_messages)
+    if not include_sweeper_posts:
+        msgs = [
+            m for m in msgs
+            if not (
+                m.get("sender_node_id") == _SWEEPER_NODE_ID
+                and m.get("message_type") in _DIGEST_SELF_TYPES
+            )
+        ]
     by_type: dict[str, int] = {}
     by_sender: dict[str, int] = {}
     by_thread: dict[str, int] = {}
@@ -346,26 +354,43 @@ def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
 
 
 def ack_message(message_id: str, acker: str) -> dict[str, Any] | None:
-    """Append `acker` to ack_by JSON list. Returns the updated message."""
+    """Append `acker` to ack_by JSON list. Returns the updated message.
+
+    Race-safe: the append happens inside a `BEGIN IMMEDIATE` transaction
+    and uses SQLite's json1 functions so two concurrent acks from
+    different threads / clients can't clobber each other. If two callers
+    pass the same `acker`, the result is still a list containing that
+    acker exactly once.
+    """
     conn = db.get_connection()
-    row = conn.execute(
-        "SELECT ack_by FROM messages WHERE message_id = ?", (message_id,)
-    ).fetchone()
-    if row is None:
-        return None
     try:
-        ack_list = json.loads(row["ack_by"] or "[]")
-        if not isinstance(ack_list, list):
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT ack_by FROM messages WHERE message_id = ?", (message_id,)
+        ).fetchone()
+        if row is None:
+            conn.execute("ROLLBACK")
+            return None
+        raw = row["ack_by"] or "[]"
+        try:
+            ack_list = json.loads(raw)
+            if not isinstance(ack_list, list):
+                ack_list = []
+        except (json.JSONDecodeError, TypeError):
             ack_list = []
-    except (json.JSONDecodeError, TypeError):
-        ack_list = []
-    if acker not in ack_list:
-        ack_list.append(acker)
-    conn.execute(
-        "UPDATE messages SET ack_by = ? WHERE message_id = ?",
-        (json.dumps(ack_list), message_id),
-    )
-    conn.commit()
+        if acker not in ack_list:
+            ack_list.append(acker)
+        conn.execute(
+            "UPDATE messages SET ack_by = ? WHERE message_id = ?",
+            (json.dumps(ack_list), message_id),
+        )
+        conn.execute("COMMIT")
+    except sqlite3.Error:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        raise
     return mb.read_message(message_id)
 
 

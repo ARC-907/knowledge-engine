@@ -4,9 +4,13 @@ For headless deployments where the operator only needs the coordination
 surface (no /search, no /registry, no dashboard). Reuses the same
 `api/board_routes.py` router on a separate FastAPI app + port.
 
-Default port 11437 mirrors the caprock convention so two boards never
-collide on the same machine. Override with `KE_BOARD_STANDALONE_PORT` or
-`--port`.
+Default port 11437 was picked to avoid colliding with the engine's 9210.
+Override with `KE_BOARD_STANDALONE_PORT` or `--port`.
+
+CORS is restricted by default to the same origins that the peer-trust
+gate allows (localhost + Tailscale CGNAT). Extend or override via the
+`KE_BOARD_CORS_ORIGINS` env var (comma-separated list, or `*` to allow
+any origin — not recommended).
 
 Use `python -m knowledge_engine.agent_board.service` or
 `knowledge-engine board-serve --port N` to start it.
@@ -27,6 +31,28 @@ from . import sweeper as kb_sweeper
 _logger = logging.getLogger(__name__)
 
 
+def _resolve_cors_origins() -> list[str]:
+    """Default to loopback origins. `KE_BOARD_CORS_ORIGINS=*` opts into
+    permissive CORS for users who need it (and accept the implications);
+    a comma-separated list overrides the default explicitly.
+    """
+    import os
+    raw = os.environ.get("KE_BOARD_CORS_ORIGINS", "").strip()
+    if not raw:
+        return [
+            "http://127.0.0.1",
+            "http://localhost",
+            # Cover the common dev/preview ports without committing to *.
+            "http://127.0.0.1:9210",
+            "http://localhost:9210",
+            "http://127.0.0.1:11437",
+            "http://localhost:11437",
+        ]
+    if raw == "*":
+        return ["*"]
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
 def create_standalone_app() -> FastAPI:
     """Build a FastAPI app exposing only the /board/* routes."""
     from ..api import board_routes  # local import — keeps Settings cold-import safe
@@ -35,12 +61,16 @@ def create_standalone_app() -> FastAPI:
         title="Knowledge Engine — Agent Board (standalone)",
         version=__version__,
     )
+    # CORS is locked to loopback by default. Operators on a private mesh
+    # who want browser access from a non-loopback origin set
+    # KE_BOARD_CORS_ORIGINS explicitly; the peer-trust gate still applies
+    # at the route layer.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_resolve_cors_origins(),
         allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "X-Board-Key"],
     )
     app.include_router(board_routes.router, prefix="/board", tags=["board"])
 
@@ -48,7 +78,16 @@ def create_standalone_app() -> FastAPI:
     def health() -> dict[str, Any]:
         return {"ok": True, "service": "ke-agent-board-standalone", "version": __version__}
 
-    # Start the sweeper alongside the standalone process.
+    @app.on_event("shutdown")
+    def _on_shutdown() -> None:
+        try:
+            kb_sweeper.stop()
+        except Exception:  # noqa: BLE001
+            _logger.exception("standalone sweeper failed to stop cleanly")
+
+    # Start the sweeper alongside the standalone process. It coordinates
+    # with any embedded sweeper via the `board.sweeper_lease` row in
+    # kv_store so the two never both run a pass.
     try:
         kb_sweeper.start()
     except Exception:  # noqa: BLE001

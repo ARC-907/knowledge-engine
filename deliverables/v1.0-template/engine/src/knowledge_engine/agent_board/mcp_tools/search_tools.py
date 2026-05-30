@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import BoardContext, error_result, kb_store, text_result
+from .base import BoardContext, error_result, store, text_result
 
 GROUP = "board.search"
 
@@ -36,7 +36,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
         query = str(args.get("query") or "").strip()
         if not query:
             return error_result("query is required")
-        results = kb_store.search_messages(
+        results = store.search_messages(
             query=query,
             channel=args.get("channel"),
             limit=int(args.get("limit", 25)),

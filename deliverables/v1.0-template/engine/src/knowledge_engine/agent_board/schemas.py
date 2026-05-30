@@ -102,6 +102,36 @@ class MessageDraft:
     model_id: str | None = None
 
 
+# Per-field length caps. Body is intentionally generous (markdown bodies,
+# stack traces, etc.) but every other field stays small enough that an
+# attacker can't waste server time on huge payloads even before the
+# request-size middleware fires.
+MAX_LEN_BODY = 50_000
+MAX_LEN_SUBJECT = 500
+MAX_LEN_MESSAGE_TYPE = 64
+MAX_LEN_CHANNEL = 64
+MAX_LEN_SENDER_NODE_ID = 100
+MAX_LEN_ROLE = 100
+MAX_LEN_TASK_ID = 200
+MAX_LEN_PRODUCT_ID = 200
+MAX_LEN_CORRELATION_ID = 200
+MAX_LEN_TARGET_NODE_ID = 200
+MAX_LEN_REPLY_TO = 100
+MAX_LEN_THREAD_ID = 200
+MAX_LEN_MODEL_ID = 200
+
+# Hard cap on TTL — one year. Keeps a misconfigured client from creating
+# rows that effectively never expire.
+MAX_TTL_HOURS = 24 * 365
+
+
+def _check_len(errors: list[str], name: str, value: Any, cap: int) -> None:
+    if value is None:
+        return
+    if len(str(value)) > cap:
+        errors.append(f"{name} too long (max {cap} chars)")
+
+
 def validate(draft: dict[str, Any], known_channels: list[str] | None = None) -> tuple[MessageDraft | None, list[str]]:
     """Validate a raw payload. Returns (draft, errors). On error, draft is None.
 
@@ -117,28 +147,51 @@ def validate(draft: dict[str, Any], known_channels: list[str] | None = None) -> 
             f"channel '{channel}' not in configured set "
             f"(known: {', '.join(channels)})"
         )
+    _check_len(errors, "channel", channel, MAX_LEN_CHANNEL)
 
     message_type = str(draft.get("message_type") or "").strip()
     if not message_type:
         errors.append("message_type is required")
+    _check_len(errors, "message_type", message_type, MAX_LEN_MESSAGE_TYPE)
 
     sender_node_id = str(draft.get("sender_node_id") or "").strip()
     if not sender_node_id:
         errors.append("sender_node_id is required")
-    if len(sender_node_id) > 100:
-        errors.append("sender_node_id too long (max 100 chars)")
+    _check_len(errors, "sender_node_id", sender_node_id, MAX_LEN_SENDER_NODE_ID)
 
     body = str(draft.get("body") or "").strip()
     if not body:
         errors.append("body is required")
-    if len(body) > 50000:
-        errors.append("body too long (max 50000 chars)")
+    _check_len(errors, "body", body, MAX_LEN_BODY)
+
+    subject = _opt_str(draft.get("subject"))
+    _check_len(errors, "subject", subject, MAX_LEN_SUBJECT)
 
     visibility = str(draft.get("visibility_scope") or "all").strip()
     if visibility not in VISIBILITY_SCOPES:
         errors.append(
             f"visibility_scope '{visibility}' not in {VISIBILITY_SCOPES}"
         )
+
+    # Per-field length caps for the remaining identifier fields.
+    sender_role = _opt_str(draft.get("sender_role"))
+    task_id = _opt_str(draft.get("task_id"))
+    product_id = _opt_str(draft.get("product_id"))
+    target_node_id = _opt_str(draft.get("target_node_id"))
+    target_role = _opt_str(draft.get("target_role"))
+    reply_to = _opt_str(draft.get("reply_to"))
+    correlation_id = _opt_str(draft.get("correlation_id"))
+    thread_id = _opt_str(draft.get("thread_id"))
+    model_id = _opt_str(draft.get("model_id"))
+    _check_len(errors, "sender_role", sender_role, MAX_LEN_ROLE)
+    _check_len(errors, "task_id", task_id, MAX_LEN_TASK_ID)
+    _check_len(errors, "product_id", product_id, MAX_LEN_PRODUCT_ID)
+    _check_len(errors, "target_node_id", target_node_id, MAX_LEN_TARGET_NODE_ID)
+    _check_len(errors, "target_role", target_role, MAX_LEN_ROLE)
+    _check_len(errors, "reply_to", reply_to, MAX_LEN_REPLY_TO)
+    _check_len(errors, "correlation_id", correlation_id, MAX_LEN_CORRELATION_ID)
+    _check_len(errors, "thread_id", thread_id, MAX_LEN_THREAD_ID)
+    _check_len(errors, "model_id", model_id, MAX_LEN_MODEL_ID)
 
     ttl_raw = draft.get("ttl_hours", 168)
     try:
@@ -148,6 +201,8 @@ def validate(draft: dict[str, Any], known_channels: list[str] | None = None) -> 
         ttl_hours = 168
     if ttl_hours < 0:
         errors.append("ttl_hours must be >= 0 (0 = no expiry)")
+    if ttl_hours > MAX_TTL_HOURS:
+        errors.append(f"ttl_hours too large (max {MAX_TTL_HOURS} = one year)")
 
     if errors:
         return None, errors
@@ -158,19 +213,19 @@ def validate(draft: dict[str, Any], known_channels: list[str] | None = None) -> 
             message_type=message_type,
             sender_node_id=sender_node_id,
             body=body,
-            sender_role=_opt_str(draft.get("sender_role")),
-            task_id=_opt_str(draft.get("task_id")),
-            product_id=_opt_str(draft.get("product_id")),
-            subject=_opt_str(draft.get("subject")),
+            sender_role=sender_role,
+            task_id=task_id,
+            product_id=product_id,
+            subject=subject,
             visibility_scope=visibility,
-            target_node_id=_opt_str(draft.get("target_node_id")),
-            target_role=_opt_str(draft.get("target_role")),
+            target_node_id=target_node_id,
+            target_role=target_role,
             requires_ack=bool(draft.get("requires_ack", False)),
-            reply_to=_opt_str(draft.get("reply_to")),
-            correlation_id=_opt_str(draft.get("correlation_id")),
-            thread_id=_opt_str(draft.get("thread_id")),
+            reply_to=reply_to,
+            correlation_id=correlation_id,
+            thread_id=thread_id,
             ttl_hours=ttl_hours,
-            model_id=_opt_str(draft.get("model_id")),
+            model_id=model_id,
         ),
         [],
     )

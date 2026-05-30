@@ -67,8 +67,13 @@ def post_message(
     ttl_hours: int = 168,
     channel: str = "ops",
     model_id: str | None = None,
+    thread_id: str | None = None,
 ) -> dict[str, Any]:
-    """Post a message to the board. Returns the created message."""
+    """Post a message to the board. Returns the created message.
+
+    `thread_id` is optional; when supplied it lands in the same INSERT
+    rather than requiring a follow-up UPDATE.
+    """
     message_id = str(uuid.uuid4())
     now = _now_iso()
     expires_at = (
@@ -78,12 +83,12 @@ def post_message(
     conn = db.get_connection()
     conn.execute(
         """INSERT INTO messages (
-            message_id, channel, task_id, product_id, sender_agent_id, sender_node_id,
+            message_id, channel, thread_id, task_id, product_id, sender_agent_id, sender_node_id,
             sender_role, model_id, message_type, subject, body, created_at, expires_at,
             visibility_scope, requires_ack, reply_to, correlation_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            message_id, channel, task_id, product_id, sender_node_id, sender_node_id,
+            message_id, channel, thread_id, task_id, product_id, sender_node_id, sender_node_id,
             sender_role, model_id, message_type, subject, body, now, expires_at,
             visibility_scope, 1 if requires_ack else 0, reply_to, correlation_id,
         ),
@@ -243,16 +248,30 @@ def prune_expired() -> int:
 
 
 def prune_by_count(max_messages: int = 500) -> int:
-    """Keep only the newest max_messages messages. Returns count deleted."""
+    """Keep only the newest max_messages messages. Returns count deleted.
+
+    Preserves unacknowledged blockers (requires_ack=1 AND ack_by empty) so
+    a noisy ops channel can't bury an outstanding blocker by overflow
+    alone. Uses a bounded `IN` against the oldest-overflow set rather
+    than a `NOT IN` correlated subquery — same result, cheaper plan.
+    """
     conn = db.get_connection()
     total = conn.execute("SELECT COUNT(*) as cnt FROM messages").fetchone()["cnt"]
     if total <= max_messages:
         return 0
+    overflow = total - max_messages
     cursor = conn.execute(
-        "DELETE FROM messages WHERE message_id NOT IN "
-        "(SELECT message_id FROM messages ORDER BY created_at DESC LIMIT ?) "
-        "AND (requires_ack = 0 OR ack_by IS NOT NULL AND ack_by != '[]')",
-        (max_messages,),
+        """DELETE FROM messages
+           WHERE message_id IN (
+               SELECT message_id FROM messages
+                WHERE NOT (
+                    requires_ack = 1
+                    AND (ack_by IS NULL OR ack_by IN ('', '[]'))
+                )
+                ORDER BY created_at ASC
+                LIMIT ?
+           )""",
+        (overflow,),
     )
     conn.commit()
     return cursor.rowcount

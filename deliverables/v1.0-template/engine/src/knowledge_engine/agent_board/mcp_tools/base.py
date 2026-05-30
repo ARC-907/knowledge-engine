@@ -11,9 +11,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from .. import keys as kb_keys  # noqa: F401 — re-exported for tool modules
-from .. import store as kb_store
-from .. import sweeper as kb_sweeper  # noqa: F401 — re-exported for tool modules
+from .. import keys, store, sweeper  # noqa: F401 — re-exported for tool modules
 
 
 # ── MCP result envelopes ─────────────────────────────────────────────
@@ -47,11 +45,11 @@ class BoardContext:
 
     @classmethod
     def from_config(cls) -> "BoardContext":
-        cfg = kb_store.load_config()
+        cfg = store.load_config()
         return cls(require_key_for_post=bool(cfg.get("require_key_for_post")))
 
 
 __all__ = [
     "text_result", "status_result", "error_result", "BoardContext",
-    "kb_store", "kb_keys", "kb_sweeper",
+    "store", "keys", "sweeper",
 ]

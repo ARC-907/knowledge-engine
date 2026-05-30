@@ -3,9 +3,10 @@
 `knowledge-engine board ...` subcommand handler. Targets the engine HTTP API
 (default `http://127.0.0.1:9210`) and prints JSON or human output.
 
-Modeled on caprock's `board_cli.py` for muscle-memory consistency — same
-`post / read / status` surface plus board-specific verbs (`search`, `thread`,
-`ack`, `digest`, `sweep`, `keys`).
+Covers the full board surface: `status`, `read`, `post`, `thread`, `search`,
+`digest`, `ack`, `sweep`, plus `keys` and `config` sub-groups. Body input
+accepts a literal string, `@/path/to/file`, or `-` for stdin so agents can
+pipe long check-ins without quoting headaches.
 """
 
 from __future__ import annotations

@@ -11,25 +11,54 @@ Background loop that keeps the board healthy:
 Runs as a daemon thread inside the FastAPI process when
 `board_config.sweeper_enabled=1`. Standalone mode (`service.py`) runs the
 same loop on its own.
+
+Concurrency: multiple sweepers (embedded + standalone, or multi-worker
+uvicorn) coordinate via a singleton lease row in `kv_store`
+(`board.sweeper_lease`). Only the lease holder runs a pass; everyone
+else short-circuits. The lease auto-expires so a crashed holder doesn't
+block the next sweep window.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+import socket
 import threading
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from . import store
+from ..foundation import db
 from ..pipeline import message_board as mb
+from . import store
 
 _logger = logging.getLogger(__name__)
 
 _thread: threading.Thread | None = None
 _stop_event = threading.Event()
 _lock = threading.Lock()
+
+
+def _holder_id() -> str:
+    """Stable per-process identifier for the sweeper lease.
+
+    Hostname + PID + a 4-char random suffix so two processes on the same
+    machine still distinguish themselves. The suffix is generated once
+    per process import; the lease holder string remains stable across
+    sweep passes (necessary for renewal).
+    """
+    host = "unknown"
+    try:
+        host = socket.gethostname()
+    except OSError:
+        pass
+    return f"{host}:{os.getpid()}:{_HOLDER_SUFFIX}"
+
+
+_HOLDER_SUFFIX = uuid.uuid4().hex[:4]
 
 
 # ── Lifecycle ──────────────────────────────────────────────────
@@ -51,7 +80,11 @@ def start() -> bool:
 
 
 def stop(timeout: float = 5.0) -> bool:
-    """Signal the sweeper to stop. Returns True if it exited within timeout."""
+    """Signal the sweeper to stop. Returns True if it exited within timeout.
+
+    Best-effort releases the lease so a peer sweeper can pick up promptly
+    instead of waiting for the TTL to expire.
+    """
     global _thread
     with _lock:
         if _thread is None or not _thread.is_alive():
@@ -61,7 +94,11 @@ def stop(timeout: float = 5.0) -> bool:
         exited = not _thread.is_alive()
         if exited:
             _thread = None
-        return exited
+    try:
+        db.release_sweeper_lease(_holder_id())
+    except Exception:  # noqa: BLE001
+        pass
+    return exited
 
 
 def is_running() -> bool:
@@ -72,9 +109,14 @@ def is_running() -> bool:
 # ── One pass (also exposed for the manual `/board/sweep` endpoint) ─
 
 
-def sweep_once() -> dict[str, Any]:
-    """Run a single sweep pass. Returns a result dict suitable for return to the
-    caller of the manual `/board/sweep` route or `board_sweep_now` MCP tool.
+def sweep_once(force: bool = False) -> dict[str, Any]:
+    """Run a single sweep pass. Returns a result dict suitable for return to
+    the caller of the manual `/board/sweep` route or `board_sweep_now` MCP
+    tool.
+
+    `force=True` bypasses the singleton-lease check — used by the
+    on-demand HTTP / MCP triggers where the operator wants an immediate
+    pass regardless of who's currently holding the lease.
     """
     cfg = store.load_config()
     started_at = _now_iso()
@@ -83,10 +125,38 @@ def sweep_once() -> dict[str, Any]:
     reminders_emitted = 0
     digests_emitted = 0
     error: str | None = None
+    holder = _holder_id()
+    have_lease = True
+    lease_ttl = max(30, int(cfg.get("sweep_interval_s") or 60) * 2)
+
+    if not force:
+        try:
+            have_lease = db.acquire_sweeper_lease(holder, ttl_seconds=lease_ttl)
+        except Exception:  # noqa: BLE001
+            # If the lease layer itself errors, fall through and run —
+            # missing a sweep is worse than a possible double-pass.
+            _logger.exception("acquire_sweeper_lease failed; running anyway")
+            have_lease = True
+
+    if not have_lease:
+        return {
+            "started_at": started_at,
+            "finished_at": _now_iso(),
+            "skipped": True,
+            "reason": "another sweeper holds the lease",
+            "pruned_expired": 0,
+            "pruned_overflow": 0,
+            "reminders_emitted": 0,
+            "digests_emitted": 0,
+            "error": None,
+        }
+
     try:
         pruned_expired = store.prune_expired()
         pruned_overflow = store.prune_by_count(int(cfg["max_messages_before_prune"]))
-        reminders_emitted = _emit_stale_blocker_reminders(int(cfg["stale_blocker_hours"]))
+        reminders_emitted = _emit_stale_blocker_reminders(
+            int(cfg["stale_blocker_hours"])
+        )
         digests_emitted = _maybe_emit_digests(
             int(cfg["digest_interval_minutes"]), cfg.get("channels") or [],
         )
@@ -104,6 +174,7 @@ def sweep_once() -> dict[str, Any]:
     return {
         "started_at": started_at,
         "finished_at": finished_at,
+        "skipped": False,
         "pruned_expired": pruned_expired,
         "pruned_overflow": pruned_overflow,
         "reminders_emitted": reminders_emitted,
@@ -117,6 +188,10 @@ def sweep_once() -> dict[str, Any]:
 
 def _run() -> None:
     """The thread target."""
+    # Default initialization makes the loop robust to a first-iteration
+    # exception in load_config — without it, `interval` would only be
+    # bound inside the try block.
+    interval = 60
     while not _stop_event.is_set():
         try:
             cfg = store.load_config()
@@ -125,7 +200,7 @@ def _run() -> None:
                 sweep_once()
         except Exception:  # noqa: BLE001
             _logger.exception("sweeper loop error; continuing")
-            interval = 60
+            interval = max(interval, 60)
         # Sleep in small slices so stop() responds quickly.
         slept = 0.0
         while slept < interval and not _stop_event.is_set():
@@ -136,27 +211,42 @@ def _run() -> None:
 def _emit_stale_blocker_reminders(threshold_hours: int) -> int:
     """For each stale unacked blocker, post one `reminder` message.
 
-    Idempotency: the reminder's `reply_to` points at the original blocker's
-    message_id, and we look back over recent reminders to avoid re-posting
-    one we just posted. The first reminder is always emitted; subsequent
-    reminders only after another `threshold_hours` window has passed.
+    Idempotency: a reminder's `reply_to` references the original blocker's
+    message_id. We use a single `MAX(created_at) GROUP BY reply_to`
+    aggregation to dedup against the latest reminder per blocker, so the
+    sweeper doesn't re-emit until another `threshold_hours` window has
+    passed.
+
+    `threshold_hours` is clamped to a minimum of 1 — without the floor, a
+    misconfigured `stale_blocker_hours=0` would treat every blocker as
+    "stale," producing reminder spam that never expires (the reminder's
+    own TTL would also collapse to zero, meaning "no expiry").
     """
+    threshold_hours = max(1, threshold_hours)
     blockers = store.get_unacked_blockers(threshold_hours=threshold_hours)
     if not blockers:
         return 0
-    emitted = 0
-    recent_reminders = mb.poll_messages(message_type="reminder", limit=500)
-    reminded_recently: dict[str, str] = {}
-    for r in recent_reminders:
-        reply = r.get("reply_to")
-        ts = r.get("created_at")
-        if reply and ts and reply not in reminded_recently:
-            reminded_recently[reply] = ts
+
+    conn = db.get_connection()
+    # One indexed scan instead of a Python loop over 500 rows.
+    last_per_blocker: dict[str, str] = {}
+    rows = conn.execute(
+        """SELECT reply_to, MAX(created_at) AS last_at
+             FROM messages
+            WHERE message_type = 'reminder'
+              AND reply_to IS NOT NULL
+            GROUP BY reply_to"""
+    ).fetchall()
+    for r in rows:
+        if r["reply_to"]:
+            last_per_blocker[r["reply_to"]] = r["last_at"]
+
     cutoff = (
         datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
     ).isoformat()
+    emitted = 0
     for b in blockers:
-        last_at = reminded_recently.get(b["message_id"])
+        last_at = last_per_blocker.get(b["message_id"])
         if last_at and last_at > cutoff:
             continue
         try:
@@ -177,6 +267,7 @@ def _emit_stale_blocker_reminders(threshold_hours: int) -> int:
                 visibility_scope="all",
                 reply_to=b["message_id"],
                 correlation_id=b.get("correlation_id") or b["message_id"],
+                # threshold floor of 1 guarantees a positive TTL.
                 ttl_hours=threshold_hours * 2,
             )
             emitted += 1
@@ -191,25 +282,34 @@ def _maybe_emit_digests(interval_minutes: int, channels: list[str]) -> int:
     """
     if interval_minutes <= 0 or not channels:
         return 0
+
+    conn = db.get_connection()
+    last_digest_per_channel: dict[str, str] = {}
+    rows = conn.execute(
+        """SELECT channel, MAX(created_at) AS last_at
+             FROM messages
+            WHERE message_type = 'digest'
+              AND sender_node_id = 'board-sweeper'
+            GROUP BY channel"""
+    ).fetchall()
+    for r in rows:
+        if r["channel"]:
+            last_digest_per_channel[r["channel"]] = r["last_at"]
+
     cutoff = (
         datetime.now(timezone.utc) - timedelta(minutes=interval_minutes)
     ).isoformat()
     emitted = 0
-    recent_digests = mb.poll_messages(message_type="digest", limit=500)
-    last_digest_per_channel: dict[str, str] = {}
-    for d in recent_digests:
-        ch = d.get("channel") or "ops"
-        ts = d.get("created_at")
-        if not ts:
-            continue
-        if ch not in last_digest_per_channel or last_digest_per_channel[ch] < ts:
-            last_digest_per_channel[ch] = ts
     for channel in channels:
         last = last_digest_per_channel.get(channel)
         if last and last > cutoff:
             continue
         try:
-            summary = store.digest(channel=channel, since=cutoff, max_messages=200)
+            # `since=last or cutoff` widens the first-after-boot digest
+            # so a freshly-restarted process still summarises pre-restart
+            # activity in that channel.
+            since = last or cutoff
+            summary = store.digest(channel=channel, since=since, max_messages=200)
             # Skip empty windows — no point spamming a quiet channel.
             if summary.get("scanned", 0) == 0:
                 continue

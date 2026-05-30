@@ -1,14 +1,12 @@
 """Agent Board — provider-key vault.
 
-Backs the Config tab's provider-key surface. Adapted from `pipeline_core`'s
-`api_key_manager.py` — calendar / email / Google-Cal resource types stripped,
-prefix renamed to `keb_` (board) to namespace away from any caprock-style
-`rpk_` keys that may live on the same machine.
+SHA-256 hashed key store backing the Config tab. The raw key is shown to
+the operator once on creation and never persisted; only its hash lands
+in the database. The `keb_` prefix namespaces these keys so they cannot
+be confused with keys minted by an unrelated system that happens to
+share the machine.
 
-Schema lives in `foundation/db.py` (`agent_api_keys`, `agent_key_permissions`)
-and is shared with anything else under the foundation. Hashing is SHA-256
-of the raw key — the raw key is shown to the operator exactly once on creation
-and never persisted.
+Schema lives in `foundation/db.py` (`agent_api_keys`, `agent_key_permissions`).
 
 Resource types are deliberately narrow:
 
@@ -27,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -274,41 +273,58 @@ def ensure_master_key() -> dict[str, Any] | None:
     Returns the new key dict (with raw_key shown once) or None if a master
     key already exists. Writes the raw key to `<data_dir>/board-master-key.txt`
     so the operator can grab it after first boot.
+
+    Concurrency-safe: serialized by a module-level lock (`db.master_key_lock`)
+    AND backed by a unique partial index in the schema so two concurrent
+    bootstrap requests can never both succeed. On the unique-index race the
+    second caller sees the freshly-created master and returns None.
     """
-    conn = db.get_connection()
-    existing = conn.execute(
-        "SELECT key_id FROM agent_api_keys WHERE is_master = 1 AND enabled = 1"
-    ).fetchone()
-    if existing:
-        return None
+    with db.master_key_lock():
+        conn = db.get_connection()
+        existing = conn.execute(
+            "SELECT key_id FROM agent_api_keys WHERE is_master = 1 AND enabled = 1"
+        ).fetchone()
+        if existing:
+            return None
 
-    key_data = create_key(
-        display_name="Board Master Key",
-        created_by="system",
-        is_master=True,
-        notes="Auto-created board master key with full admin access.",
-    )
-    grant_permission(key_data["key_id"], "*", "*", "admin")
+        try:
+            key_data = create_key(
+                display_name="Board Master Key",
+                created_by="system",
+                is_master=True,
+                notes="Auto-created board master key with full admin access.",
+            )
+        except sqlite3.IntegrityError:
+            # Lost the unique-index race — another caller created the master
+            # between the SELECT and the INSERT. Surface "already exists".
+            return None
+        grant_permission(key_data["key_id"], "*", "*", "admin")
 
-    # Best-effort file write — never raise from bootstrap.
-    try:
-        from ..config import Config
-        cfg = Config.from_env()
-        key_file = cfg.data_dir / "board-master-key.txt"
-        key_file.write_text(
-            "Knowledge-Engine Agent Board — Master Key\n"
-            f"Created: {key_data['created_at']}\n"
-            f"Key ID:  {key_data['key_id']}\n"
-            f"Raw Key: {key_data['raw_key']}\n"
-            "\n"
-            "Full admin access to all board resources. Store securely and\n"
-            "delete this file after copying the raw key.\n",
-            encoding="utf-8",
-        )
-    except Exception:
-        pass
+        # Best-effort file write — never raise from bootstrap.
+        try:
+            from ..config import Config
+            cfg = Config.from_env()
+            key_file = cfg.data_dir / "board-master-key.txt"
+            key_file.write_text(
+                "Knowledge-Engine Agent Board — Master Key\n"
+                f"Created: {key_data['created_at']}\n"
+                f"Key ID:  {key_data['key_id']}\n"
+                f"Raw Key: {key_data['raw_key']}\n"
+                "\n"
+                "Full admin access to all board resources. Store securely and\n"
+                "delete this file after copying the raw key.\n",
+                encoding="utf-8",
+            )
+            # Tighten file perms on POSIX so the key isn't world-readable.
+            try:
+                import os
+                os.chmod(key_file, 0o600)
+            except OSError:
+                pass
+        except Exception:
+            pass
 
-    return key_data
+        return key_data
 
 
 def get_key_summary(key_id: str) -> dict[str, Any] | None:
