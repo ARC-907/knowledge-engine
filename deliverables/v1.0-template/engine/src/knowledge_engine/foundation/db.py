@@ -23,11 +23,47 @@ from typing import Any
 
 from . import config  # noqa: F401  — ensures .env is loaded before DB path resolves
 
-# ── Resolve DB path from env vars ─────────────────────────────────────
-_default_db_dir = Path(os.environ.get("KE_DATA_DIR", str(Path.cwd() / "engine" / "data")))
-DB_PATH = Path(
-    os.environ.get("KE_PIPELINE_DB", str(_default_db_dir / "pipeline.db"))
-).resolve()
+# ── DB path resolution ────────────────────────────────────────────────
+# Resolved DYNAMICALLY on every connection request, not frozen at import.
+#
+# A coordination backbone that bakes its database path into a module-level
+# constant the moment it is first imported cannot be "hoisted into any
+# system": it breaks the instant the host reconfigures `KE_PIPELINE_DB` at
+# runtime, runs two engines in one process, or re-imports the package. The
+# symptom is a worker thread silently reading a stale database while the
+# main thread writes to the new one — data that looks lost but isn't.
+#
+# `resolve_db_path()` reads the environment on each call; `get_connection`
+# caches the opened connection per-resolved-path in thread-local storage,
+# so the dynamic read costs one `os.environ.get` and changing the target
+# DB at runtime Just Works (each path gets its own cached connection).
+
+
+def resolve_db_path(db_path: Path | str | None = None) -> str:
+    """Resolve the active pipeline DB path. Read on every connection request.
+
+    Precedence: explicit ``db_path`` arg → ``KE_PIPELINE_DB`` env →
+    ``KE_DATA_DIR``/pipeline.db → ``./engine/data/pipeline.db``.
+    """
+    if db_path:
+        return str(Path(db_path).resolve())
+    env_db = os.environ.get("KE_PIPELINE_DB")
+    if env_db:
+        return str(Path(env_db).resolve())
+    data_dir = os.environ.get("KE_DATA_DIR")
+    base = Path(data_dir) if data_dir else (Path.cwd() / "engine" / "data")
+    return str((base / "pipeline.db").resolve())
+
+
+def current_db_path() -> str:
+    """The DB path that a no-arg ``get_connection()`` would use right now."""
+    return resolve_db_path()
+
+
+# Back-compat module attribute. Reflects the import-time default; callers
+# that need the live value must use ``resolve_db_path()`` / ``current_db_path()``
+# (``get_connection`` already does). Kept so existing references don't break.
+DB_PATH = Path(resolve_db_path()).resolve()
 
 _local = threading.local()
 
@@ -53,8 +89,14 @@ _JSON_FIELDS = frozenset({
 
 
 def get_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
-    """Get a thread-local database connection. Creates DB and schema if needed."""
-    path = str(db_path) if db_path else str(DB_PATH)
+    """Get a thread-local database connection. Creates DB and schema if needed.
+
+    The path is resolved dynamically (``resolve_db_path``) so a host that
+    reconfigures ``KE_PIPELINE_DB`` at runtime — or runs more than one DB in
+    a single process — gets the right connection. Connections are cached
+    per-resolved-path in thread-local storage, so the dynamic read is cheap.
+    """
+    path = resolve_db_path(db_path)
 
     if not hasattr(_local, "connections"):
         _local.connections = {}
@@ -558,7 +600,7 @@ def _conn_path(conn: sqlite3.Connection) -> str:
                     return str(d[key])
     except sqlite3.Error:
         pass
-    return str(DB_PATH)
+    return resolve_db_path()
 
 
 # ── Sweeper lease (board) ────────────────────────────────────────────
