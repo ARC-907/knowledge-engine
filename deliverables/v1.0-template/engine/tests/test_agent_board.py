@@ -382,3 +382,328 @@ def test_mcp_board_post_and_read_via_dispatch(tmp_path: Path) -> None:
 
     read_result = dispatch["board_read"]("board_read", {"channel": "ops", "limit": 5}, ctx)
     assert read_result["content"][0]["type"] == "text"
+
+
+# ── Trust gate (Tailscale + localhost + KE_BOARD_TRUSTED_CIDRS) ────
+
+
+def test_trust_gate_loopback_and_tailscale(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    # Default trusted set is loopback + Tailscale CGNAT.
+    os.environ.pop("KE_BOARD_TRUSTED_CIDRS", None)
+    from knowledge_engine.api.board_routes import _trusted_networks
+    nets = _trusted_networks()
+    assert any(str(n) == "127.0.0.1/32" for n in nets)
+    assert any(str(n) == "::1/128" for n in nets)
+    assert any(str(n) == "100.64.0.0/10" for n in nets)
+
+
+def test_trust_gate_env_override(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    os.environ["KE_BOARD_TRUSTED_CIDRS"] = "10.0.0.0/8, 127.0.0.1/32"
+    try:
+        from knowledge_engine.api.board_routes import _trusted_networks
+        nets = _trusted_networks()
+        # Override replaces the default — Tailscale is no longer trusted.
+        assert any(str(n) == "10.0.0.0/8" for n in nets)
+        assert any(str(n) == "127.0.0.1/32" for n in nets)
+        assert not any(str(n) == "100.64.0.0/10" for n in nets)
+    finally:
+        os.environ.pop("KE_BOARD_TRUSTED_CIDRS", None)
+
+
+def test_trust_gate_untrusted_peer_rejected(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    # Restrict to loopback only so a Tailscale-looking peer is *not* trusted.
+    os.environ["KE_BOARD_TRUSTED_CIDRS"] = "127.0.0.1/32,::1/128"
+    try:
+        from knowledge_engine.api.board_routes import (
+            _is_trusted_peer, _trusted_networks,
+        )
+
+        class _MockReq:
+            class _C:
+                host = "100.64.5.10"
+            client = _C()
+            headers: dict[str, str] = {}
+
+        assert _trusted_networks()
+        assert _is_trusted_peer(_MockReq()) is False
+    finally:
+        os.environ.pop("KE_BOARD_TRUSTED_CIDRS", None)
+
+
+def test_trust_proxy_off_by_default(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    os.environ.pop("KE_TRUST_PROXY", None)
+    from knowledge_engine.api.board_routes import _trust_proxy_enabled
+    assert _trust_proxy_enabled() is False
+
+
+def test_trust_proxy_opt_in(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    os.environ["KE_TRUST_PROXY"] = "1"
+    try:
+        from knowledge_engine.api.board_routes import _trust_proxy_enabled
+        assert _trust_proxy_enabled() is True
+    finally:
+        os.environ.pop("KE_TRUST_PROXY", None)
+
+
+# ── Atomic ack (concurrency-safe) ────────────────────────────
+
+
+def test_ack_message_concurrent_appends(tmp_path: Path) -> None:
+    """Two threads acking the same message must both land — no clobber."""
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store
+    import concurrent.futures
+    import json
+
+    msg = store.post_with_validation({
+        "channel": "ops",
+        "message_type": "blocker",
+        "sender_node_id": "branch-x",
+        "body": "stuck",
+        "requires_ack": True,
+    })
+
+    def _ack(name: str) -> None:
+        store.ack_message(msg["message_id"], name)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(_ack, ["a", "b", "c", "d"]))
+
+    fetched = store.read(msg["message_id"])
+    assert fetched is not None
+    ack = fetched.get("ack_by")
+    if isinstance(ack, str):
+        ack = json.loads(ack)
+    assert set(ack) == {"a", "b", "c", "d"}
+
+
+def test_ack_message_idempotent_same_acker(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store
+    import json
+
+    msg = store.post_with_validation({
+        "channel": "ops",
+        "message_type": "blocker",
+        "sender_node_id": "branch-x",
+        "body": "stuck",
+        "requires_ack": True,
+    })
+    store.ack_message(msg["message_id"], "same")
+    store.ack_message(msg["message_id"], "same")
+    final = store.read(msg["message_id"])
+    ack = final["ack_by"]
+    if isinstance(ack, str):
+        ack = json.loads(ack)
+    assert ack == ["same"]
+
+
+# ── Master-key bootstrap race + uniqueness ───────────────────
+
+
+def test_master_key_bootstrap_unique(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import keys
+
+    first = keys.ensure_master_key()
+    assert first is not None
+    second = keys.ensure_master_key()
+    assert second is None
+
+
+def test_master_key_bootstrap_concurrent(tmp_path: Path) -> None:
+    """Concurrent ensure_master_key calls produce at most one master."""
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import keys
+    from knowledge_engine.foundation import db as fdb
+    import concurrent.futures
+
+    results: list[dict | None] = []
+
+    def _bootstrap() -> dict | None:
+        return keys.ensure_master_key()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: _bootstrap(), range(4)))
+
+    masters = [r for r in results if r is not None]
+    assert len(masters) == 1, f"expected exactly 1 master, got {len(masters)}"
+
+    conn = fdb.get_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM agent_api_keys WHERE is_master = 1 AND enabled = 1"
+    ).fetchone()
+    assert row["n"] == 1
+
+
+# ── Body size cap + per-field length caps ────────────────────
+
+
+def test_per_field_length_caps_reject_overlong_subject(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import schemas
+
+    long_subj = "x" * (schemas.MAX_LEN_SUBJECT + 1)
+    draft, errors = schemas.validate({
+        "channel": "ops",
+        "message_type": "claim",
+        "sender_node_id": "branch-x",
+        "subject": long_subj,
+        "body": "body",
+    })
+    assert draft is None
+    assert any("subject too long" in e for e in errors)
+
+
+def test_ttl_hard_cap(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import schemas
+
+    draft, errors = schemas.validate({
+        "channel": "ops",
+        "message_type": "claim",
+        "sender_node_id": "branch-x",
+        "body": "body",
+        "ttl_hours": schemas.MAX_TTL_HOURS + 1,
+    })
+    assert draft is None
+    assert any("ttl_hours too large" in e for e in errors)
+
+
+def test_http_request_body_size_cap(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+
+    from fastapi.testclient import TestClient
+    from knowledge_engine.app import create_app
+
+    app = create_app()
+    with TestClient(app) as client:
+        oversized_body = "x" * 10
+        # Forge a content-length header far above the cap; the middleware
+        # rejects before parsing the body.
+        r = client.post(
+            "/board/messages",
+            json={"channel": "ops", "message_type": "claim",
+                  "sender_node_id": "t", "body": oversized_body},
+            headers={"Content-Length": str(2_000_000)},
+        )
+        assert r.status_code == 413, r.text
+
+
+# ── Sweeper lease coordination ───────────────────────────────
+
+
+def test_sweeper_lease_excludes_second_holder(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.foundation import db
+
+    assert db.acquire_sweeper_lease("holder-a", ttl_seconds=60) is True
+    # Different holder, lease still valid — must be refused.
+    assert db.acquire_sweeper_lease("holder-b", ttl_seconds=60) is False
+    # Same holder can renew.
+    assert db.acquire_sweeper_lease("holder-a", ttl_seconds=60) is True
+
+
+def test_sweep_once_skips_when_lease_held_elsewhere(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import sweeper
+    from knowledge_engine.foundation import db
+
+    # Someone else holds the lease.
+    assert db.acquire_sweeper_lease("other-process", ttl_seconds=600) is True
+
+    result = sweeper.sweep_once(force=False)
+    assert result["skipped"] is True
+    assert result["pruned_expired"] == 0
+    assert result["reminders_emitted"] == 0
+
+
+def test_sweep_once_force_bypasses_lease(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import sweeper
+    from knowledge_engine.foundation import db
+
+    assert db.acquire_sweeper_lease("other-process", ttl_seconds=600) is True
+    result = sweeper.sweep_once(force=True)
+    # Force bypass — actually ran the sweep.
+    assert result.get("skipped") is False
+    assert result.get("error") is None
+
+
+# ── Threshold=0 clamp prevents reminder spam ────────────────
+
+
+def test_stale_blocker_threshold_clamped(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store, sweeper
+    # Set the threshold to 0 — sweeper should still clamp to >= 1.
+    store.update_config({"stale_blocker_hours": 0})
+    # Post a blocker, then sweep; should NOT immediately emit a reminder
+    # because clamp(1) means blocker must be at least 1h old.
+    store.post_with_validation({
+        "channel": "ops",
+        "message_type": "blocker",
+        "sender_node_id": "branch-x",
+        "body": "stuck",
+        "requires_ack": True,
+    })
+    result = sweeper.sweep_once(force=True)
+    assert result["reminders_emitted"] == 0
+
+
+# ── HTTP trust-gate rejection of an untrusted peer ────────────
+
+
+def test_http_status_route_rejects_untrusted(tmp_path: Path) -> None:
+    """When KE_BOARD_TRUSTED_CIDRS is set to something testclient is NOT
+    in, the gate must return 403 even for read routes."""
+    _env(tmp_path / "corpus", tmp_path / "data")
+    # Force trusted set to a network the TestClient peer (127.0.0.1) is NOT in.
+    os.environ["KE_BOARD_TRUSTED_CIDRS"] = "10.0.0.0/8"
+    try:
+        from fastapi.testclient import TestClient
+        from knowledge_engine.app import create_app
+
+        app = create_app()
+        with TestClient(app) as client:
+            r = client.get("/board/status")
+            assert r.status_code == 403
+    finally:
+        os.environ.pop("KE_BOARD_TRUSTED_CIDRS", None)
+
+
+# ── prune_by_count preserves unacked blockers ────────────────
+
+
+def test_prune_by_count_preserves_unacked_blockers(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store
+    from knowledge_engine.pipeline import message_board as mb
+
+    # Post 1 unacked blocker first (oldest).
+    blocker = store.post_with_validation({
+        "channel": "ops",
+        "message_type": "blocker",
+        "sender_node_id": "branch-x",
+        "body": "stuck",
+        "requires_ack": True,
+    })
+    # Then many normal posts — total exceeds cap.
+    for i in range(20):
+        store.post_with_validation({
+            "channel": "ops",
+            "message_type": "status_update",
+            "sender_node_id": "branch-y",
+            "body": f"u{i}",
+        })
+
+    # Prune down hard. The unacked blocker must survive.
+    mb.prune_by_count(max_messages=5)
+
+    survived = store.read(blocker["message_id"])
+    assert survived is not None, "unacked blocker was pruned"
