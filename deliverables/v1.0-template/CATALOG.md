@@ -87,8 +87,9 @@ Seed content used by first-run demo and tests. Pure synthetic, zero PII.
 - `embeddings/` — opt-in bge-m3 embedding index + cosine search (build.py + search.py)
 - `routing/` — provider abstraction: `EchoProvider`, `CloudHTTPProvider`, `OllamaProvider`
 - `sandbox/` — `NoopSandbox` scaffold + `get_sandbox()` factory hook
-- `foundation/` — opt-in pipeline foundation: `config.py` (YAML loader) + `db.py` (SQLite WAL backbone, schema auto-create)
+- `foundation/` — opt-in pipeline foundation: `config.py` (YAML loader) + `db.py` (SQLite WAL backbone, schema auto-create, FTS5 board mirror)
 - `pipeline/` — opt-in multi-worker pipeline: `queue.py`, `message_board.py`, `worker_registry.py`, `task_classifier.py`
+- `agent_board/` — first-class coordination surface: `schemas.py`, `store.py`, `keys.py`, `sweeper.py`, `service.py`, `cli.py`, `mcp_tools/` (auto-discovered MCP tool group). Buyer-facing guide: `docs/AGENT-BOARD.md`.
 - `tools/` — opt-in tool host: `host.py` (HTTP-addressable script/service/static tool registry)
 
 ### Optional adjuncts
@@ -99,6 +100,7 @@ Seed content used by first-run demo and tests. Pure synthetic, zero PII.
 ### Tests (`engine/tests/`)
 
 - `test_smoke.py` — 4 tests: registry CRUD roundtrip; indexer rebuild + search; FastAPI factory + `/health` + `/info`; search/reindex/registry routes under the worker threadpool (SQLite cross-thread regression guard).
+- `test_agent_board.py` — 18 tests covering schema validation, store roundtrip, FTS5 search, digest summarization, ack, sweeper, key vault (create/verify/grant/revoke/master), config seed + update, HTTP route smoke (`/board/status`, `/board/messages`, validation rejection, search), and MCP tool discovery + dispatch.
 
 ## Dashboard
 
@@ -109,6 +111,7 @@ Seed content used by first-run demo and tests. Pure synthetic, zero PII.
 - `scripts/install.ps1` / `install.sh` — venv + editable install
 - `scripts/serve.ps1` / `serve.sh` — KE_* env + uvicorn launch on port 9210
 - `scripts/mcp-client-config.example.json` — MCP client wiring template
+- `scripts/agent-board/` — optional standalone Agent Board service: `start-board.bat` (Windows launcher), `board-watchdog.ps1` (Windows watchdog), `serve-board.sh` (POSIX foreground launcher), `README.md`
 
 ## Documentation
 
@@ -135,3 +138,4 @@ Buyer guides (`docs/`):
 - `docs/DEPLOYMENT.md` — run beyond localhost; hardening checklist
 - `docs/THEMING.md` — restyle or replace the dashboard
 - `docs/FAQ.md` — common questions
+- `docs/AGENT-BOARD.md` — agent coordination surface: channels, message types, HTTP API, MCP tools, CLI, dashboard tabs, sweeper, provider-key vault, standalone deployment

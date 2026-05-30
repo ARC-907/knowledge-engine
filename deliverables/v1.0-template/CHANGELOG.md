@@ -2,6 +2,67 @@
 
 All notable changes to the Knowledge-Engine.
 
+## [Unreleased]
+
+### Added — Agent Board
+
+A first-class agent coordination surface that promotes the existing
+opt-in `pipeline/message_board.py` into a fully-tooled subsystem. Same
+SQLite backbone, same port (9210) by default — opt out via
+`KE_BOARD_ENABLED=0`.
+
+- **Engine package** (`knowledge_engine.agent_board`) — schema-validated
+  channels and message types (`schemas.py`), store facade with FTS5 search
+  and context-compressed digest (`store.py`), provider-key vault
+  (`keys.py`), background sweeper for TTL prune + stale-blocker reminders
+  + per-channel digests (`sweeper.py`), optional standalone FastAPI
+  service (`service.py`), and a CLI subcommand (`cli.py`).
+- **HTTP API** (`api/board_routes.py`) — 22 routes covering status,
+  channels, message types, post/poll, ack, threads, search, digest,
+  stats, sweep, key vault, and singleton config. Local-trust by default;
+  flip `require_key_for_post` to gate non-localhost writes with
+  `X-Board-Key`.
+- **MCP tool group** (`agent_board/mcp_tools/`) — 14 auto-discovered
+  tools: `board_post`, `board_claim`, `board_release`, `board_blocker`,
+  `board_ack`, `board_read`, `board_relevant`, `board_thread`,
+  `board_digest` (context-saver), `board_status`, `board_channels`,
+  `board_message_types`, `board_search`, `board_sweep_now`.
+- **Dashboard** (`ui/index.html`) — tab strip with **Search / Registry /
+  Board / Config** tabs. Board tab: channel + type filter, FTS5 search,
+  post form, ack button, digest view, manual sweep. Config tab: ports,
+  sweeper interval, retention, channels, require-key toggle, provider-
+  key vault (create / list / revoke; raw key shown once).
+- **Schema additions** (`foundation/db.py`) — `messages_fts` FTS5 virtual
+  table mirroring `subject + body` with insert/update/delete triggers,
+  `board_sweeps` audit log, `board_config` singleton, plus
+  `messages.thread_id` migration column.
+- **Standalone watchdog** (`scripts/agent-board/`) — `start-board.bat`,
+  `board-watchdog.ps1` (Windows), `serve-board.sh` (POSIX) for headless
+  deployments on a separate port (default 11437, mirroring the caprock
+  convention so two boards don't collide on the same machine).
+- **Buyer guide** (`docs/AGENT-BOARD.md`) — channels, message types,
+  HTTP API, MCP tool surface, CLI reference, dashboard walkthrough,
+  sweeper details, provider keys, standalone deployment, configuration
+  knobs.
+- **Tests** (`engine/tests/test_agent_board.py`) — 18 tests covering
+  schema validation, store roundtrip, FTS5 search, digest summary, ack,
+  sweeper, key vault, config, HTTP route smoke, and MCP tool discovery
+  + dispatch.
+
+### Configuration
+
+New env var: `KE_BOARD_ENABLED` (default `1`), `KE_BOARD_SWEEPER`
+(default follows board_config), `KE_BOARD_URL` / `KE_BOARD_PORT` /
+`KE_BOARD_KEY` for the CLI.
+
+Runtime configuration via `/board/config` (PATCH) or the Config tab —
+all changes are persisted in the `board_config` singleton row.
+
+### Verified
+
+- `pytest`: 303 passed, 1 skipped (the optional embedding-build path),
+  zero failures across the full suite.
+
 ## [1.0.0] — 2026-05-23
 
 ### Highlights
