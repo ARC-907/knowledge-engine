@@ -17,6 +17,10 @@ from . import __version__
 from .config import Config
 from .registry import Registry
 from .indexer import Indexer
+from .project_docs.config import load_config as load_pd_config
+from .project_docs.mcp_tools import collect_tools as collect_pd_tools
+from .project_docs.mcp_tools.base import ToolContext
+from .project_docs.paths import resolve_project_root
 
 
 PROTOCOL_VERSION = "2024-11-05"
@@ -77,6 +81,17 @@ class Server:
         self.config = Config.from_env()
         self.registry = Registry(self.config.registry_path, self.config.data_dir / "registry.db")
         self.indexer = Indexer(self.config, self.registry)
+        # ── Project-docs subsystem (optional, off unless configured) ──
+        self.pd_tools: list[dict[str, Any]] = []
+        self.pd_dispatch: dict[str, Any] = {}
+        self.pd_ctx: ToolContext | None = None
+        try:
+            pd_cfg = load_pd_config()
+            if pd_cfg.mcp.enabled:
+                self.pd_ctx = ToolContext(cfg=pd_cfg, root=resolve_project_root())
+                self.pd_tools, self.pd_dispatch = collect_pd_tools(pd_cfg)
+        except Exception:  # noqa: BLE001 — project-docs must never break the base server
+            self.pd_tools, self.pd_dispatch, self.pd_ctx = [], {}, None
 
     def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if name == "search":
@@ -93,6 +108,8 @@ class Server:
         if name == "registry_get":
             entry = self.registry.get(args["entry_id"])
             return {"content": [{"type": "text", "text": json.dumps(entry, indent=2)}]}
+        if name in self.pd_dispatch:
+            return self.pd_dispatch[name](name, args, self.pd_ctx)
         raise ValueError(f"unknown tool: {name}")
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
@@ -111,7 +128,7 @@ class Server:
         if method == "notifications/initialized":
             return None
         if method == "tools/list":
-            return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS}}
+            return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS + self.pd_tools}}
         if method == "tools/call":
             params = msg.get("params", {})
             try:

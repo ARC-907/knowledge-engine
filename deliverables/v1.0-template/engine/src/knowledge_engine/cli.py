@@ -74,7 +74,16 @@ def main() -> int:
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--port", type=int, default=9210)
 
+    pd = sub.add_parser("project-docs", help="Project-specific documentation subsystem")
+    pd.add_argument("pd_args", nargs=argparse.REMAINDER,
+                    help="Subcommand + args (e.g. 'info', 'capabilities')")
+
     args = parser.parse_args()
+
+    if args.cmd == "project-docs":
+        from .project_docs.cli import main as pd_main
+        return pd_main(args.pd_args)
+
     config = Config.from_env()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")
 
