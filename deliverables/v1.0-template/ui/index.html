@@ -16,11 +16,25 @@
       <span x-text="counts.libraries"></span> libraries ·
       <span x-text="counts.skills"></span> skills ·
       <span x-text="counts.tools"></span> tools
+      <span x-show="board.available" class="ml-3">
+        · <span x-text="board.totalMessages"></span> board messages
+      </span>
     </div>
   </header>
 
+  <!-- Tab strip -->
+  <nav class="flex gap-1 mb-6 border-b border-slate-800">
+    <template x-for="t in tabs" :key="t">
+      <button
+        @click="tab = t"
+        :class="tab === t ? 'border-sky-500 text-sky-300' : 'border-transparent text-slate-400 hover:text-slate-200'"
+        class="px-4 py-2 border-b-2 text-sm font-medium capitalize transition-colors"
+        x-text="t"></button>
+    </template>
+  </nav>
+
   <!-- First-run onboarding banner. Dismissed state persists in localStorage. -->
-  <div x-show="showWelcome" x-cloak
+  <div x-show="showWelcome && tab === 'search'" x-cloak
     class="mb-6 bg-sky-950 border border-sky-800 rounded-lg p-4 text-sm">
     <div class="flex items-start justify-between gap-4">
       <div>
@@ -37,7 +51,8 @@
         </ol>
         <p class="text-slate-400 mt-2">
           Full walkthrough: <code class="text-slate-300">docs/BRING-YOUR-OWN-CORPUS.md</code> ·
-          Wire up Claude / Cursor / Continue: <code class="text-slate-300">docs/MCP-WIRING.md</code>
+          Wire up Claude / Cursor / Continue: <code class="text-slate-300">docs/MCP-WIRING.md</code> ·
+          Agent Board: <code class="text-slate-300">docs/AGENT-BOARD.md</code>
         </p>
       </div>
       <button @click="dismissWelcome()"
@@ -47,95 +62,607 @@
     </div>
   </div>
 
-  <div class="flex gap-2 mb-4">
-    <input x-model="query" @keydown.enter="search()"
-      placeholder="Search the corpus..."
-      class="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-sky-500">
-    <button @click="search()" class="bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded">Search</button>
-  </div>
+  <!-- ════════════════════════ Search tab ════════════════════════ -->
+  <section x-show="tab === 'search'" x-cloak>
+    <div class="flex gap-2 mb-4">
+      <input x-model="query" @keydown.enter="search()"
+        placeholder="Search the corpus..."
+        class="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-sky-500">
+      <button @click="search()" class="bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded">Search</button>
+    </div>
 
-  <template x-if="results.length">
-    <div class="mb-8 space-y-2">
-      <template x-for="r in results" :key="r.path">
-        <div class="bg-slate-900 border border-slate-800 rounded p-3">
-          <div class="text-xs text-slate-500 mb-1">
-            <span x-text="r.entry_kind"></span> · <span x-text="r.entry_id"></span>
+    <template x-if="results.length">
+      <div class="mb-8 space-y-2">
+        <template x-for="r in results" :key="r.path">
+          <div class="bg-slate-900 border border-slate-800 rounded p-3">
+            <div class="text-xs text-slate-500 mb-1">
+              <span x-text="r.entry_kind"></span> · <span x-text="r.entry_id"></span>
+            </div>
+            <!-- x-text (not x-html): FTS5 snippet text comes from indexed corpus
+                 markdown, which may contain user-authored HTML. x-html would
+                 execute embedded script tags from any hostile indexed source. -->
+            <div class="text-sm" x-text="r.snippet"></div>
+            <div class="text-xs text-slate-600 mt-1" x-text="r.path"></div>
           </div>
-          <!-- x-text (not x-html): FTS5 snippet text comes from indexed corpus
-               markdown, which may contain user-authored HTML. x-html would
-               execute embedded script tags from any hostile indexed source. -->
-          <div class="text-sm" x-text="r.snippet"></div>
-          <div class="text-xs text-slate-600 mt-1" x-text="r.path"></div>
+        </template>
+      </div>
+    </template>
+  </section>
+
+  <!-- ════════════════════════ Registry tab ════════════════════════ -->
+  <section x-show="tab === 'registry'" x-cloak>
+    <div class="flex gap-2 mb-3 text-sm">
+      <button @click="filter='all'" :class="filter==='all' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">All</button>
+      <button @click="filter='library'" :class="filter==='library' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Libraries</button>
+      <button @click="filter='skill'" :class="filter==='skill' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Skills</button>
+      <button @click="filter='tool'" :class="filter==='tool' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Tools</button>
+      <button @click="reindex()" class="ml-auto bg-emerald-700 hover:bg-emerald-600 px-3 py-1 rounded">Reindex</button>
+    </div>
+
+    <table class="w-full text-sm">
+      <thead class="text-left text-slate-500 border-b border-slate-800">
+        <tr><th class="py-2">Enabled</th><th>Kind</th><th>Name</th><th>Path</th></tr>
+      </thead>
+      <tbody>
+        <template x-for="e in filteredEntries()" :key="e.id">
+          <tr class="border-b border-slate-900">
+            <td class="py-2">
+              <input type="checkbox" :checked="e.enabled" @change="toggle(e.id, $event.target.checked)">
+            </td>
+            <td class="text-slate-400" x-text="e.kind"></td>
+            <td x-text="e.name"></td>
+            <td class="text-slate-500" x-text="e.path"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ════════════════════════ Board tab ════════════════════════ -->
+  <section x-show="tab === 'board'" x-cloak>
+    <!-- Toolbar -->
+    <div class="flex flex-wrap gap-2 mb-4 text-sm">
+      <select x-model="board.channelFilter" @change="reloadBoard()"
+        class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+        <option value="">(all channels)</option>
+        <template x-for="c in board.channels" :key="c">
+          <option :value="c" x-text="c"></option>
+        </template>
+      </select>
+      <select x-model="board.typeFilter" @change="reloadBoard()"
+        class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+        <option value="">(all types)</option>
+        <template x-for="t in board.messageTypes" :key="t">
+          <option :value="t" x-text="t"></option>
+        </template>
+      </select>
+      <input x-model="board.searchQuery" @keydown.enter="searchBoard()"
+        placeholder="FTS5 search the board..."
+        class="flex-1 min-w-[200px] bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      <button @click="searchBoard()" class="bg-sky-600 hover:bg-sky-500 px-3 py-1 rounded">Search</button>
+      <button @click="loadDigest()" class="bg-violet-700 hover:bg-violet-600 px-3 py-1 rounded">Digest</button>
+      <button @click="reloadBoard()" class="bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded">Refresh</button>
+      <button @click="sweepNow()" class="bg-emerald-700 hover:bg-emerald-600 px-3 py-1 rounded">Sweep</button>
+    </div>
+
+    <!-- Post form -->
+    <details class="mb-4 bg-slate-900 border border-slate-800 rounded">
+      <summary class="px-3 py-2 cursor-pointer text-sky-300 select-none">+ Post a message</summary>
+      <div class="grid grid-cols-2 gap-2 p-3 text-sm">
+        <input x-model="board.draft.sender_node_id" placeholder="from (sender_node_id)*"
+          class="bg-slate-950 border border-slate-700 rounded px-2 py-1">
+        <select x-model="board.draft.channel"
+          class="bg-slate-950 border border-slate-700 rounded px-2 py-1">
+          <template x-for="c in board.channels" :key="c">
+            <option :value="c" x-text="c"></option>
+          </template>
+        </select>
+        <select x-model="board.draft.message_type"
+          class="bg-slate-950 border border-slate-700 rounded px-2 py-1">
+          <option value="">(message type)*</option>
+          <template x-for="t in board.messageTypes" :key="t">
+            <option :value="t" x-text="t"></option>
+          </template>
+        </select>
+        <select x-model="board.draft.visibility_scope"
+          class="bg-slate-950 border border-slate-700 rounded px-2 py-1">
+          <template x-for="s in ['all','task','product','role','node']" :key="s">
+            <option :value="s" x-text="s"></option>
+          </template>
+        </select>
+        <input x-model="board.draft.subject" placeholder="subject (optional)"
+          class="col-span-2 bg-slate-950 border border-slate-700 rounded px-2 py-1">
+        <textarea x-model="board.draft.body" placeholder="body*" rows="3"
+          class="col-span-2 bg-slate-950 border border-slate-700 rounded px-2 py-1"></textarea>
+        <input x-model="board.draft.task_id" placeholder="task_id (optional)"
+          class="bg-slate-950 border border-slate-700 rounded px-2 py-1">
+        <input x-model="board.draft.correlation_id" placeholder="correlation_id (optional)"
+          class="bg-slate-950 border border-slate-700 rounded px-2 py-1">
+        <label class="flex items-center gap-2 text-slate-300">
+          <input type="checkbox" x-model="board.draft.requires_ack"> requires_ack
+        </label>
+        <button @click="postMessage()"
+          class="bg-sky-600 hover:bg-sky-500 px-3 py-1 rounded text-white">Post</button>
+        <div x-show="board.postError" class="col-span-2 text-rose-400 text-xs" x-text="board.postError"></div>
+      </div>
+    </details>
+
+    <!-- Digest view -->
+    <div x-show="board.digestData" x-cloak
+      class="mb-4 bg-violet-950 border border-violet-800 rounded p-3 text-sm">
+      <div class="flex justify-between items-center mb-2">
+        <span class="font-semibold text-violet-200">Digest — <span x-text="board.digestData?.channel"></span></span>
+        <button @click="board.digestData = null" class="text-violet-300 hover:text-violet-100 text-xs">close</button>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <div class="text-slate-400 mb-1">Counts by type</div>
+          <template x-for="(cnt, ty) in board.digestData?.counts_by_type || {}" :key="ty">
+            <div><span class="text-violet-300" x-text="ty"></span>: <span x-text="cnt"></span></div>
+          </template>
+        </div>
+        <div>
+          <div class="text-slate-400 mb-1">Top senders</div>
+          <template x-for="s in board.digestData?.top_senders || []" :key="s.from">
+            <div><span class="text-violet-300" x-text="s.from"></span>: <span x-text="s.count"></span></div>
+          </template>
+        </div>
+        <div class="col-span-2" x-show="(board.digestData?.open_blockers || []).length">
+          <div class="text-rose-300 mb-1">Open blockers</div>
+          <template x-for="b in board.digestData?.open_blockers || []" :key="b.message_id">
+            <div><span x-text="b.from"></span>: <span x-text="b.subject"></span></div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Message list -->
+    <div class="space-y-2">
+      <template x-for="m in board.messages" :key="m.message_id">
+        <div class="bg-slate-900 border border-slate-800 rounded p-3 text-sm">
+          <div class="flex flex-wrap items-center gap-2 text-xs mb-1">
+            <span class="bg-sky-900 text-sky-200 px-2 py-0.5 rounded" x-text="m.channel"></span>
+            <span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded" x-text="m.message_type"></span>
+            <span class="text-slate-400" x-text="m.sender_node_id"></span>
+            <span class="text-slate-500" x-text="m.created_at"></span>
+            <span x-show="m.requires_ack" class="text-amber-300">requires_ack</span>
+            <span x-show="m.task_id" class="text-slate-500">task: <span x-text="(m.task_id||'').slice(0,8)"></span></span>
+            <button x-show="m.requires_ack && !hasAck(m)"
+              @click="ackMessage(m)"
+              class="ml-auto bg-emerald-700 hover:bg-emerald-600 px-2 py-0.5 rounded text-white">Ack</button>
+          </div>
+          <div x-show="m.subject" class="font-medium text-slate-100" x-text="m.subject"></div>
+          <div class="text-slate-300 whitespace-pre-wrap break-words" x-text="m.body"></div>
+          <div x-show="m.snippet" class="mt-1 text-xs text-slate-400" x-text="m.snippet"></div>
+          <div x-show="m.correlation_id" class="mt-1 text-xs text-slate-500">
+            corr: <span x-text="m.correlation_id"></span>
+          </div>
         </div>
       </template>
+      <div x-show="!board.messages.length" class="text-slate-500 text-sm">(no messages)</div>
     </div>
-  </template>
+  </section>
 
-  <h2 class="text-lg font-semibold mb-2">Registry</h2>
-  <div class="flex gap-2 mb-3 text-sm">
-    <button @click="filter='all'" :class="filter==='all' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">All</button>
-    <button @click="filter='library'" :class="filter==='library' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Libraries</button>
-    <button @click="filter='skill'" :class="filter==='skill' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Skills</button>
-    <button @click="filter='tool'" :class="filter==='tool' ? 'bg-slate-700' : 'bg-slate-900'" class="px-3 py-1 rounded">Tools</button>
-    <button @click="reindex()" class="ml-auto bg-emerald-700 hover:bg-emerald-600 px-3 py-1 rounded">Reindex</button>
-  </div>
+  <!-- ════════════════════════ Config tab ════════════════════════ -->
+  <section x-show="tab === 'config'" x-cloak>
+    <h2 class="text-lg font-semibold mb-3">Engine + Board</h2>
+    <div class="grid grid-cols-2 gap-3 mb-6 text-sm">
+      <label class="block">
+        <div class="text-slate-400 mb-1">Engine port (FastAPI)</div>
+        <input type="number" x-model.number="config.engine_port"
+          class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      </label>
+      <label class="block">
+        <div class="text-slate-400 mb-1">Standalone board port</div>
+        <input type="number" x-model.number="config.standalone_port"
+          class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      </label>
+      <label class="block">
+        <div class="text-slate-400 mb-1">Sweep interval (s)</div>
+        <input type="number" x-model.number="config.sweep_interval_s"
+          class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      </label>
+      <label class="block">
+        <div class="text-slate-400 mb-1">Stale-blocker hours</div>
+        <input type="number" x-model.number="config.stale_blocker_hours"
+          class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      </label>
+      <label class="block">
+        <div class="text-slate-400 mb-1">Digest interval (minutes)</div>
+        <input type="number" x-model.number="config.digest_interval_minutes"
+          class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      </label>
+      <label class="block">
+        <div class="text-slate-400 mb-1">Default TTL (hours)</div>
+        <input type="number" x-model.number="config.default_ttl_hours"
+          class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      </label>
+      <label class="block">
+        <div class="text-slate-400 mb-1">Max messages before prune</div>
+        <input type="number" x-model.number="config.max_messages_before_prune"
+          class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      </label>
+      <label class="flex items-center gap-2 mt-5">
+        <input type="checkbox" :checked="!!config.sweeper_enabled"
+          @change="config.sweeper_enabled = $event.target.checked ? 1 : 0">
+        <span>Sweeper enabled</span>
+      </label>
+      <label class="flex items-center gap-2 mt-5">
+        <input type="checkbox" :checked="!!config.require_key_for_post"
+          @change="config.require_key_for_post = $event.target.checked ? 1 : 0">
+        <span>Require key for non-localhost posts</span>
+      </label>
+    </div>
+    <div class="mb-6">
+      <div class="text-slate-400 mb-1 text-sm">Channels (comma-separated)</div>
+      <input x-model="config.channelsInput"
+        class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm">
+    </div>
+    <div class="flex gap-2 mb-8">
+      <button @click="saveConfig()" class="bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded text-sm">
+        Save configuration
+      </button>
+      <div x-show="config.saveStatus" class="self-center text-emerald-300 text-sm" x-text="config.saveStatus"></div>
+    </div>
 
-  <table class="w-full text-sm">
-    <thead class="text-left text-slate-500 border-b border-slate-800">
-      <tr><th class="py-2">Enabled</th><th>Kind</th><th>Name</th><th>Path</th></tr>
-    </thead>
-    <tbody>
-      <template x-for="e in filteredEntries()" :key="e.id">
-        <tr class="border-b border-slate-900">
-          <td class="py-2">
-            <input type="checkbox" :checked="e.enabled" @change="toggle(e.id, $event.target.checked)">
-          </td>
-          <td class="text-slate-400" x-text="e.kind"></td>
-          <td x-text="e.name"></td>
-          <td class="text-slate-500" x-text="e.path"></td>
-        </tr>
-      </template>
-    </tbody>
-  </table>
+    <h2 class="text-lg font-semibold mb-3">Provider keys</h2>
+    <p class="text-slate-400 text-sm mb-3">
+      Provider-abstracted keys for upstream LLMs (Anthropic, OpenAI, Ollama,
+      anything else) and for gating board access. The raw key is shown once on
+      creation — copy it before leaving the dialog. Master-key bootstrap (via
+      <code>knowledge-engine board keys bootstrap-master</code>) creates the
+      first admin key on localhost.
+    </p>
+    <div class="grid grid-cols-3 gap-2 mb-3 text-sm">
+      <input x-model="keys.draft.display_name" placeholder="Key display name"
+        class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      <select x-model="keys.draft.resource_type"
+        class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+        <option value="provider">provider</option>
+        <option value="board">board</option>
+        <option value="tool">tool</option>
+        <option value="model">model</option>
+        <option value="endpoint">endpoint</option>
+      </select>
+      <select x-model="keys.draft.permission"
+        class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+        <option value="read">read</option>
+        <option value="write">write</option>
+        <option value="invoke">invoke</option>
+        <option value="admin">admin</option>
+      </select>
+      <input x-model="keys.draft.resource_id" placeholder="resource id (default *)"
+        class="col-span-2 bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      <button @click="createKey()" class="bg-sky-600 hover:bg-sky-500 px-3 py-1 rounded">
+        Create key
+      </button>
+    </div>
+    <div x-show="keys.lastRaw" x-cloak
+      class="mb-4 bg-amber-950 border border-amber-800 rounded p-3 text-sm">
+      <div class="font-semibold text-amber-200 mb-1">Raw key (shown once):</div>
+      <code class="break-all text-amber-100" x-text="keys.lastRaw"></code>
+      <button @click="keys.lastRaw = null" class="block mt-2 text-amber-300 hover:text-amber-100 text-xs">
+        I copied it — dismiss
+      </button>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="text-left text-slate-500 border-b border-slate-800">
+        <tr><th class="py-2">Display</th><th>Created</th><th>Last used</th><th>Enabled</th><th></th></tr>
+      </thead>
+      <tbody>
+        <template x-for="k in keys.list" :key="k.key_id">
+          <tr class="border-b border-slate-900">
+            <td class="py-2" x-text="k.display_name"></td>
+            <td class="text-slate-500" x-text="k.created_at"></td>
+            <td class="text-slate-500" x-text="k.last_used_at || '—'"></td>
+            <td><span x-text="k.enabled ? 'yes' : 'no'"></span></td>
+            <td>
+              <button @click="revokeKey(k.key_id)"
+                class="text-rose-400 hover:text-rose-300 text-xs">revoke</button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+
 </div>
 
 <script>
 function dashboard() {
   return {
+    // ── existing search + registry state ──
+    tabs: ['search', 'registry', 'board', 'config'],
+    tab: 'search',
     query: "", results: [], entries: [], filter: "all",
     counts: {libraries: 0, skills: 0, tools: 0},
     showWelcome: false,
-    async load() {
-      // Show the onboarding banner until the user dismisses it once.
-      this.showWelcome = localStorage.getItem('ke-welcome-dismissed') !== '1';
-      const info = await fetch('/info').then(r => r.json()).catch(() => null);
-      if (info) this.counts = info.counts;
-      const r = await fetch('/registry').then(r => r.json());
-      this.entries = (Array.isArray(r) ? r : (r.entries || [])).sort((a, b) => a.name.localeCompare(b.name));
+
+    // ── board state ──
+    board: {
+      available: false,
+      totalMessages: 0,
+      channels: [],
+      messageTypes: [],
+      channelFilter: "",
+      typeFilter: "",
+      searchQuery: "",
+      messages: [],
+      digestData: null,
+      postError: "",
+      draft: {
+        sender_node_id: "",
+        channel: "ops",
+        message_type: "",
+        visibility_scope: "all",
+        subject: "",
+        body: "",
+        task_id: "",
+        correlation_id: "",
+        requires_ack: false,
+      },
     },
+
+    // ── config state ──
+    config: {
+      engine_port: 9210,
+      standalone_port: 11437,
+      sweep_interval_s: 60,
+      stale_blocker_hours: 2,
+      digest_interval_minutes: 60,
+      default_ttl_hours: 168,
+      max_messages_before_prune: 5000,
+      sweeper_enabled: 1,
+      require_key_for_post: 0,
+      channelsInput: "",
+      saveStatus: "",
+    },
+    keys: {
+      list: [],
+      draft: {display_name: "", resource_type: "board", resource_id: "*", permission: "write"},
+      lastRaw: null,
+    },
+
+    async load() {
+      this.showWelcome = localStorage.getItem('ke-welcome-dismissed') !== '1';
+      try {
+        const info = await fetch('/info').then(r => r.json()).catch(() => null);
+        if (info) this.counts = info.counts;
+      } catch (e) {}
+      try {
+        const r = await fetch('/registry').then(r => r.json());
+        this.entries = (Array.isArray(r) ? r : (r.entries || []))
+          .sort((a, b) => a.name.localeCompare(b.name));
+      } catch (e) {}
+      await this.loadBoardMetadata();
+    },
+
     dismissWelcome() {
       this.showWelcome = false;
       localStorage.setItem('ke-welcome-dismissed', '1');
     },
+
     filteredEntries() {
       return this.filter === "all" ? this.entries : this.entries.filter(e => e.kind === this.filter);
     },
+
     async search() {
       if (!this.query.trim()) return;
       const r = await fetch(`/search?q=${encodeURIComponent(this.query)}&limit=15`).then(r => r.json());
       this.results = r.results || [];
     },
+
     async toggle(id, enabled) {
       await fetch(`/registry/${id}/toggle`, {method: 'PATCH', headers: {'content-type': 'application/json'}, body: JSON.stringify({enabled})});
       const e = this.entries.find(x => x.id === id);
       if (e) e.enabled = enabled;
     },
+
     async reindex() {
       await fetch('/search/reindex', {method: 'POST'});
       alert('Reindex triggered.');
-    }
-  }
+    },
+
+    // ── Board ──
+    async loadBoardMetadata() {
+      try {
+        const st = await fetch('/board/status').then(r => r.json());
+        this.board.available = true;
+        this.board.totalMessages = st.messages_total || 0;
+        this.board.channels = (st.config && st.config.channels) || [];
+        if (!this.board.draft.channel && this.board.channels.length) {
+          this.board.draft.channel = this.board.channels[0];
+        }
+        const types = await fetch('/board/message_types').then(r => r.json());
+        this.board.messageTypes = types.message_types || [];
+        // Hydrate config
+        const cfg = await fetch('/board/config').then(r => r.json());
+        Object.assign(this.config, {
+          engine_port: cfg.engine_port,
+          standalone_port: cfg.standalone_port,
+          sweep_interval_s: cfg.sweep_interval_s,
+          stale_blocker_hours: cfg.stale_blocker_hours,
+          digest_interval_minutes: cfg.digest_interval_minutes,
+          default_ttl_hours: cfg.default_ttl_hours,
+          max_messages_before_prune: cfg.max_messages_before_prune,
+          sweeper_enabled: cfg.sweeper_enabled,
+          require_key_for_post: cfg.require_key_for_post,
+        });
+        this.config.channelsInput = (cfg.channels || []).join(", ");
+        await this.reloadBoard();
+      } catch (e) {
+        this.board.available = false;
+      }
+    },
+
+    async reloadBoard() {
+      const params = new URLSearchParams();
+      if (this.board.channelFilter) params.set('channel', this.board.channelFilter);
+      if (this.board.typeFilter) params.set('message_type', this.board.typeFilter);
+      params.set('limit', '50');
+      try {
+        const msgs = await fetch(`/board/messages?${params}`).then(r => r.json());
+        this.board.messages = msgs || [];
+      } catch (e) {
+        this.board.messages = [];
+      }
+    },
+
+    async searchBoard() {
+      const q = this.board.searchQuery.trim();
+      if (!q) return this.reloadBoard();
+      const params = new URLSearchParams({q, limit: '50'});
+      if (this.board.channelFilter) params.set('channel', this.board.channelFilter);
+      const hits = await fetch(`/board/search?${params}`).then(r => r.json());
+      this.board.messages = hits || [];
+    },
+
+    async loadDigest() {
+      const params = new URLSearchParams();
+      if (this.board.channelFilter) params.set('channel', this.board.channelFilter);
+      this.board.digestData = await fetch(`/board/digest?${params}`).then(r => r.json());
+    },
+
+    async sweepNow() {
+      try {
+        await fetch('/board/sweep', {method: 'POST'});
+        await this.reloadBoard();
+      } catch (e) {
+        alert('Sweep failed (may require admin key).');
+      }
+    },
+
+    async postMessage() {
+      this.board.postError = "";
+      try {
+        const headers = {'Content-Type': 'application/json'};
+        const r = await fetch('/board/messages', {
+          method: 'POST', headers,
+          body: JSON.stringify(this.board.draft),
+        });
+        if (!r.ok) {
+          this.board.postError = `HTTP ${r.status}: ${await r.text()}`;
+          return;
+        }
+        this.board.draft.subject = "";
+        this.board.draft.body = "";
+        await this.reloadBoard();
+      } catch (e) {
+        this.board.postError = String(e);
+      }
+    },
+
+    hasAck(m) {
+      const a = m.ack_by;
+      if (Array.isArray(a)) return a.length > 0;
+      if (typeof a === 'string') return a !== "" && a !== "[]";
+      return false;
+    },
+
+    async ackMessage(m) {
+      const acker = prompt('Ack as (sender identity):', this.board.draft.sender_node_id || '');
+      if (!acker) return;
+      await fetch(`/board/messages/${encodeURIComponent(m.message_id)}/ack`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({from: acker}),
+      });
+      await this.reloadBoard();
+    },
+
+    // ── Config / Keys ──
+    async saveConfig() {
+      const patch = {
+        engine_port: Number(this.config.engine_port),
+        standalone_port: Number(this.config.standalone_port),
+        sweep_interval_s: Number(this.config.sweep_interval_s),
+        stale_blocker_hours: Number(this.config.stale_blocker_hours),
+        digest_interval_minutes: Number(this.config.digest_interval_minutes),
+        default_ttl_hours: Number(this.config.default_ttl_hours),
+        max_messages_before_prune: Number(this.config.max_messages_before_prune),
+        sweeper_enabled: this.config.sweeper_enabled ? 1 : 0,
+        require_key_for_post: this.config.require_key_for_post ? 1 : 0,
+        channels: this.config.channelsInput.split(',')
+          .map(s => s.trim()).filter(Boolean),
+      };
+      const r = await fetch('/board/config', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(patch),
+      });
+      if (r.ok) {
+        this.config.saveStatus = "saved";
+        setTimeout(() => this.config.saveStatus = "", 2500);
+        await this.loadBoardMetadata();
+      } else {
+        this.config.saveStatus = `HTTP ${r.status}`;
+      }
+    },
+
+    async loadKeys() {
+      try {
+        const r = await fetch('/board/keys');
+        if (r.ok) this.keys.list = await r.json();
+        else this.keys.list = [];
+      } catch (e) {
+        this.keys.list = [];
+      }
+    },
+
+    async createKey() {
+      if (!this.keys.draft.display_name) return;
+      const payload = {
+        display_name: this.keys.draft.display_name,
+        permissions: [{
+          resource_type: this.keys.draft.resource_type,
+          resource_id: this.keys.draft.resource_id || "*",
+          permission: this.keys.draft.permission,
+        }],
+      };
+      const r = await fetch('/board/keys', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      if (r.ok) {
+        const k = await r.json();
+        this.keys.lastRaw = k.raw_key;
+        this.keys.draft.display_name = "";
+        await this.loadKeys();
+      } else {
+        alert(`Create failed: HTTP ${r.status} ${await r.text()}`);
+      }
+    },
+
+    async revokeKey(key_id) {
+      if (!confirm(`Revoke key ${key_id}?`)) return;
+      await fetch(`/board/keys/${encodeURIComponent(key_id)}`, {method: 'DELETE'});
+      await this.loadKeys();
+    },
+  };
 }
+</script>
+
+<!-- Lazy-load keys when the config tab is first opened. -->
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.directive('config-watch', () => {});
+});
+// Use Alpine's effect() via $watch when the component initializes; simpler:
+document.addEventListener('DOMContentLoaded', () => {
+  // Two-way: the keys panel needs reloading on tab change. We attach via the
+  // global Alpine instance once the dashboard is wired.
+  setTimeout(() => {
+    const root = document.querySelector('[x-data]');
+    if (!root || !window.Alpine) return;
+    const data = Alpine.$data(root);
+    Alpine.effect(() => {
+      if (data.tab === 'config') {
+        data.loadKeys();
+      }
+    });
+  }, 200);
+});
 </script>
 </body>
 </html>
