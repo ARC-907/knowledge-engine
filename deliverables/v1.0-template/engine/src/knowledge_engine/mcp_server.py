@@ -22,6 +22,14 @@ from .project_docs.mcp_tools import collect_tools as collect_pd_tools
 from .project_docs.mcp_tools.base import ToolContext
 from .project_docs.paths import resolve_project_root
 
+# Agent board MCP tool group — discovered via the parallel auto-collect pattern.
+try:
+    from .agent_board.mcp_tools import collect_tools as collect_board_tools
+    from .agent_board.mcp_tools.base import BoardContext
+except ImportError:  # noqa: PERF203 — first-boot defensive
+    collect_board_tools = None  # type: ignore[assignment]
+    BoardContext = None  # type: ignore[assignment]
+
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "knowledge-engine", "version": __version__}
@@ -93,6 +101,18 @@ class Server:
         except Exception:  # noqa: BLE001 — project-docs must never break the base server
             self.pd_tools, self.pd_dispatch, self.pd_ctx = [], {}, None
 
+        # ── Agent board subsystem (optional, off unless module imports) ──
+        self.board_tools: list[dict[str, Any]] = []
+        self.board_dispatch: dict[str, Any] = {}
+        self.board_ctx: "BoardContext | None" = None
+        if collect_board_tools is not None:
+            try:
+                self.board_tools, self.board_dispatch = collect_board_tools()
+                if BoardContext is not None:
+                    self.board_ctx = BoardContext.from_config()
+            except Exception:  # noqa: BLE001 — board must never break the base server
+                self.board_tools, self.board_dispatch, self.board_ctx = [], {}, None
+
     def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if name == "search":
             results = self.indexer.search(args["query"], limit=int(args.get("limit", 10)))
@@ -110,6 +130,8 @@ class Server:
             return {"content": [{"type": "text", "text": json.dumps(entry, indent=2)}]}
         if name in self.pd_dispatch:
             return self.pd_dispatch[name](name, args, self.pd_ctx)
+        if name in self.board_dispatch:
+            return self.board_dispatch[name](name, args, self.board_ctx)
         raise ValueError(f"unknown tool: {name}")
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
@@ -128,7 +150,10 @@ class Server:
         if method == "notifications/initialized":
             return None
         if method == "tools/list":
-            return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS + self.pd_tools}}
+            return {
+                "jsonrpc": "2.0", "id": msg_id,
+                "result": {"tools": TOOLS + self.pd_tools + self.board_tools},
+            }
         if method == "tools/call":
             params = msg.get("params", {})
             try:
