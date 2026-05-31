@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org)
-[![Status: v1.1](https://img.shields.io/badge/status-v1.1-blue.svg)](CHANGELOG.md)
+[![Status: v1.2](https://img.shields.io/badge/status-v1.2-blue.svg)](CHANGELOG.md)
 [![MCP protocol](https://img.shields.io/badge/MCP-2024--11--05-7C3AED.svg)](https://modelcontextprotocol.io)
 [![FTS5 + bge-m3](https://img.shields.io/badge/search-FTS5%20%2B%20bge--m3-003B57.svg?logo=sqlite&logoColor=white)]()
 
