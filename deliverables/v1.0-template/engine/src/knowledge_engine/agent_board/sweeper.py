@@ -109,14 +109,13 @@ def is_running() -> bool:
 # ── One pass (also exposed for the manual `/board/sweep` endpoint) ─
 
 
-def sweep_once(force: bool = False) -> dict[str, Any]:
-    """Run a single sweep pass. Returns a result dict suitable for return to
-    the caller of the manual `/board/sweep` route or `board_sweep_now` MCP
-    tool.
+def _sweep_active_db() -> dict[str, Any]:
+    """Run the maintenance pass against whatever DB is currently active.
 
-    `force=True` bypasses the singleton-lease check — used by the
-    on-demand HTTP / MCP triggers where the operator wants an immediate
-    pass regardless of who's currently holding the lease.
+    "Active" = the default board DB, or a scope DB if called inside
+    ``db.using_db(...)``. Reads that DB's own ``board_config`` so each scope
+    keeps independent retention / reminder / digest cadence, and records the
+    pass into that DB's ``board_sweeps`` for per-scope observability.
     """
     cfg = store.load_config()
     started_at = _now_iso()
@@ -125,32 +124,6 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
     reminders_emitted = 0
     digests_emitted = 0
     error: str | None = None
-    holder = _holder_id()
-    have_lease = True
-    lease_ttl = max(30, int(cfg.get("sweep_interval_s") or 60) * 2)
-
-    if not force:
-        try:
-            have_lease = db.acquire_sweeper_lease(holder, ttl_seconds=lease_ttl)
-        except Exception:  # noqa: BLE001
-            # If the lease layer itself errors, fall through and run —
-            # missing a sweep is worse than a possible double-pass.
-            _logger.exception("acquire_sweeper_lease failed; running anyway")
-            have_lease = True
-
-    if not have_lease:
-        return {
-            "started_at": started_at,
-            "finished_at": _now_iso(),
-            "skipped": True,
-            "reason": "another sweeper holds the lease",
-            "pruned_expired": 0,
-            "pruned_overflow": 0,
-            "reminders_emitted": 0,
-            "digests_emitted": 0,
-            "error": None,
-        }
-
     try:
         pruned_expired = store.prune_expired()
         pruned_overflow = store.prune_by_count(int(cfg["max_messages_before_prune"]))
@@ -174,13 +147,96 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
     return {
         "started_at": started_at,
         "finished_at": finished_at,
-        "skipped": False,
         "pruned_expired": pruned_expired,
         "pruned_overflow": pruned_overflow,
         "reminders_emitted": reminders_emitted,
         "digests_emitted": digests_emitted,
         "error": error,
     }
+
+
+def sweep_once(force: bool = False) -> dict[str, Any]:
+    """Run a single sweep pass across the default DB **and every scope DB**.
+
+    One process-wide lease (on the default DB's `kv_store`) guards the whole
+    pass, so multiple sweepers (embedded + standalone, or multi-worker
+    uvicorn) never double-sweep. The lease holder then sweeps the default
+    board and each known per-scope database in turn, each under its own
+    `using_db` context so it reads that scope's config and records into that
+    scope's `board_sweeps`.
+
+    `force=True` bypasses the lease — used by the on-demand HTTP / MCP
+    triggers where the operator wants an immediate pass regardless of who
+    holds the lease.
+
+    Returns an aggregate with a per-target breakdown.
+    """
+    cfg = store.load_config()  # default DB config governs the lease TTL
+    started_at = _now_iso()
+    holder = _holder_id()
+    have_lease = True
+    lease_ttl = max(30, int(cfg.get("sweep_interval_s") or 60) * 2)
+
+    if not force:
+        try:
+            have_lease = db.acquire_sweeper_lease(holder, ttl_seconds=lease_ttl)
+        except Exception:  # noqa: BLE001
+            # If the lease layer itself errors, fall through and run —
+            # missing a sweep is worse than a possible double-pass.
+            _logger.exception("acquire_sweeper_lease failed; running anyway")
+            have_lease = True
+
+    if not have_lease:
+        return {
+            "started_at": started_at,
+            "finished_at": _now_iso(),
+            "skipped": True,
+            "reason": "another sweeper holds the lease",
+            "targets_swept": 0,
+            "pruned_expired": 0,
+            "pruned_overflow": 0,
+            "reminders_emitted": 0,
+            "digests_emitted": 0,
+            "error": None,
+        }
+
+    # Sweep the default board first, then every scope DB.
+    targets: list[dict[str, Any]] = []
+    default_result = _sweep_active_db()
+    default_result["target"] = "(default)"
+    targets.append(default_result)
+
+    try:
+        from . import scopes
+        scope_entries = scopes.list_scopes()
+    except Exception:  # noqa: BLE001
+        _logger.exception("listing scopes failed; swept default only")
+        scope_entries = []
+
+    for entry in scope_entries:
+        path = str(entry["db_path"])
+        try:
+            with db.using_db(path):
+                r = _sweep_active_db()
+            r["target"] = f"scope:{entry['scope']}"
+            targets.append(r)
+        except Exception:  # noqa: BLE001
+            _logger.exception("sweep of scope %s failed; continuing", entry.get("scope"))
+            targets.append({"target": f"scope:{entry.get('scope')}", "error": "sweep failed"})
+
+    agg = {
+        "started_at": started_at,
+        "finished_at": _now_iso(),
+        "skipped": False,
+        "targets_swept": len(targets),
+        "pruned_expired": sum(int(t.get("pruned_expired", 0)) for t in targets),
+        "pruned_overflow": sum(int(t.get("pruned_overflow", 0)) for t in targets),
+        "reminders_emitted": sum(int(t.get("reminders_emitted", 0)) for t in targets),
+        "digests_emitted": sum(int(t.get("digests_emitted", 0)) for t in targets),
+        "error": next((t["error"] for t in targets if t.get("error")), None),
+        "targets": targets,
+    }
+    return agg
 
 
 # ── Loop body ──────────────────────────────────────────────────

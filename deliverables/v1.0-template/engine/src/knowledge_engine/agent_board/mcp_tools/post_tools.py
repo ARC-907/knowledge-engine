@@ -48,6 +48,14 @@ def tools() -> list[dict[str, Any]]:
             "thread_id": {"type": "string", "description": "Persistent thread id."},
             "ttl_hours": {"type": "integer", "default": 168, "minimum": 0},
             "model_id": {"type": "string"},
+            "scope": {
+                "type": "string",
+                "description": (
+                    "Optional isolation key (project / branch / agent / loop). "
+                    "Routes the post to that scope's own database; omit for the "
+                    "shared board."
+                ),
+            },
         },
         "required": ["message_type", "sender_node_id", "body"],
     }
@@ -126,7 +134,10 @@ def tools() -> list[dict[str, Any]]:
 def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[str, Any]:
     try:
         if name == "board_post":
-            msg = store.post_with_validation(args)
+            # `scope` routes the write to a per-scope DB; it isn't a message
+            # field, so strip it before validation.
+            payload = {k: v for k, v in args.items() if k != "scope"}
+            msg = store.post_with_validation(payload, scope=args.get("scope") or None)
             return text_result(msg)
         if name == "board_claim":
             return _claim(args)
@@ -152,7 +163,7 @@ def _claim(args: dict[str, Any]) -> dict[str, Any]:
         "body": f"Claim by {args.get('sender_node_id')} on task {args.get('task_id')}.",
         "visibility_scope": "all",
     }
-    return text_result(store.post_with_validation(payload))
+    return text_result(store.post_with_validation(payload, scope=args.get("scope") or None))
 
 
 def _release(args: dict[str, Any]) -> dict[str, Any]:
@@ -165,7 +176,7 @@ def _release(args: dict[str, Any]) -> dict[str, Any]:
         "body": str(args.get("reason") or "released"),
         "visibility_scope": "all",
     }
-    return text_result(store.post_with_validation(payload))
+    return text_result(store.post_with_validation(payload, scope=args.get("scope") or None))
 
 
 def _blocker(args: dict[str, Any]) -> dict[str, Any]:
@@ -182,7 +193,7 @@ def _blocker(args: dict[str, Any]) -> dict[str, Any]:
         "visibility_scope": "all",
         "requires_ack": True,
     }
-    return text_result(store.post_with_validation(payload))
+    return text_result(store.post_with_validation(payload, scope=args.get("scope") or None))
 
 
 def _ack(args: dict[str, Any]) -> dict[str, Any]:
@@ -190,7 +201,7 @@ def _ack(args: dict[str, Any]) -> dict[str, Any]:
     acker = str(args.get("acker") or "").strip()
     if not message_id or not acker:
         return error_result("message_id and acker are required")
-    msg = store.ack_message(message_id, acker)
+    msg = store.ack_message(message_id, acker, scope=args.get("scope") or None)
     if msg is None:
         return error_result(f"message not found: {message_id}")
     return text_result(msg)

@@ -111,6 +111,12 @@ def _print_messages(msgs: list[dict[str, Any]]) -> None:
 # ── Subcommand handlers ────────────────────────────────────────
 
 
+def _scope_of(args) -> str | None:
+    """The --scope value, normalized to None when absent/blank."""
+    s = (getattr(args, "scope", None) or "").strip()
+    return s or None
+
+
 def cmd_status(args, base: str) -> int:
     try:
         st = _get(f"{base}/board/status")
@@ -145,6 +151,8 @@ def cmd_read(args, base: str) -> int:
         params["product_id"] = args.product_id
     if args.sender:
         params["sender_node_id"] = args.sender
+    if _scope_of(args):
+        params["scope"] = _scope_of(args)
     params["limit"] = str(args.limit)
     qs = urllib.parse.urlencode(params)
     url = f"{base}/board/messages?{qs}"
@@ -190,6 +198,8 @@ def cmd_post(args, base: str) -> int:
         payload["correlation_id"] = args.correlation_id
     if args.ttl_hours is not None:
         payload["ttl_hours"] = args.ttl_hours
+    if _scope_of(args):
+        payload["scope"] = _scope_of(args)
     try:
         msg = _post(f"{base}/board/messages", payload, key=args.key)
     except urllib.error.HTTPError as e:
@@ -216,9 +226,14 @@ def cmd_thread(args, base: str) -> int:
     # thread_id — when the caller passes --thread-id we route through the
     # threads endpoint as a correlation_id; the store layer falls back to
     # thread_id when correlation_id misses.
-    url = f"{base}/board/threads/{quoted}"
+    params: dict[str, str] = {}
     if args.limit:
-        url += f"?limit={args.limit}"
+        params["limit"] = str(args.limit)
+    if _scope_of(args):
+        params["scope"] = _scope_of(args)
+    url = f"{base}/board/threads/{quoted}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
     msgs = _get(url)
     if args.json:
         print(json.dumps(msgs, indent=2))
@@ -231,6 +246,8 @@ def cmd_search(args, base: str) -> int:
     params = {"q": args.query, "limit": str(args.limit)}
     if args.channel:
         params["channel"] = args.channel
+    if _scope_of(args):
+        params["scope"] = _scope_of(args)
     qs = urllib.parse.urlencode(params)
     hits = _get(f"{base}/board/search?{qs}")
     print(json.dumps(hits, indent=2))
@@ -245,14 +262,23 @@ def cmd_digest(args, base: str) -> int:
         params["since"] = args.since
     if args.max_messages:
         params["max_messages"] = str(args.max_messages)
+    if _scope_of(args):
+        params["scope"] = _scope_of(args)
     qs = urllib.parse.urlencode(params)
     url = f"{base}/board/digest" + (f"?{qs}" if qs else "")
     print(json.dumps(_get(url), indent=2))
     return 0
 
 
+def cmd_scopes(args, base: str) -> int:
+    print(json.dumps(_get(f"{base}/board/scopes"), indent=2))
+    return 0
+
+
 def cmd_ack(args, base: str) -> int:
     payload = {"from": args.sender}
+    if _scope_of(args):
+        payload["scope"] = _scope_of(args)
     try:
         msg = _post(
             f"{base}/board/messages/{urllib.parse.quote(args.message_id, safe='')}/ack",
@@ -358,13 +384,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--url", help="Board base URL (default $KE_BOARD_URL or http://127.0.0.1:9210).")
     p.add_argument("--key", help="X-Board-Key for gated endpoints (or $KE_BOARD_KEY).")
+
+    # Shared --scope flag for the data subcommands. A scope routes the
+    # request to a per-project / per-branch / per-agent physical database;
+    # omit it to use the shared board. Added as a parent parser so it can
+    # appear after the verb (`board read --scope proj-a`).
+    scope_parent = argparse.ArgumentParser(add_help=False)
+    scope_parent.add_argument(
+        "--scope",
+        help="Isolation key (project/branch/agent/loop) — routes to that scope's DB.",
+    )
+
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("status", help="Service health + counts + last-sweep.").set_defaults(func=cmd_status)
     sub.add_parser("channels", help="List configured channels.").set_defaults(func=cmd_channels)
     sub.add_parser("types", help="List canonical message types + scopes.").set_defaults(func=cmd_types)
+    sub.add_parser("scopes", help="List per-scope databases.").set_defaults(func=cmd_scopes)
 
-    pr = sub.add_parser("read", help="Read messages.")
+    pr = sub.add_parser("read", help="Read messages.", parents=[scope_parent])
     pr.add_argument("--since")
     pr.add_argument("--channel")
     pr.add_argument("--type", dest="message_type")
@@ -378,7 +416,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--json", action="store_true")
     pr.set_defaults(func=cmd_read)
 
-    pp = sub.add_parser("post", help="Post a message.")
+    pp = sub.add_parser("post", help="Post a message.", parents=[scope_parent])
     pp.add_argument("--from", dest="sender", required=True)
     pp.add_argument("--channel", default="ops")
     pp.add_argument("--type", dest="message_type", required=True)
@@ -397,6 +435,7 @@ def build_parser() -> argparse.ArgumentParser:
     pt = sub.add_parser(
         "thread",
         help="Fetch a thread by correlation_id (positional) or --thread-id.",
+        parents=[scope_parent],
     )
     # Both surfaces work — the route accepts either. `correlation_id` stays
     # positional for muscle memory; `--thread-id` is here so scripts using
@@ -407,19 +446,19 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("--json", action="store_true")
     pt.set_defaults(func=cmd_thread)
 
-    ps = sub.add_parser("search", help="FTS5 search.")
+    ps = sub.add_parser("search", help="FTS5 search.", parents=[scope_parent])
     ps.add_argument("query")
     ps.add_argument("--channel")
     ps.add_argument("--limit", type=int, default=25)
     ps.set_defaults(func=cmd_search)
 
-    pd = sub.add_parser("digest", help="Context-compressed summary.")
+    pd = sub.add_parser("digest", help="Context-compressed summary.", parents=[scope_parent])
     pd.add_argument("--channel")
     pd.add_argument("--since")
     pd.add_argument("--max-messages", type=int)
     pd.set_defaults(func=cmd_digest)
 
-    pa = sub.add_parser("ack", help="Acknowledge a message.")
+    pa = sub.add_parser("ack", help="Acknowledge a message.", parents=[scope_parent])
     pa.add_argument("message_id")
     pa.add_argument("--from", dest="sender", required=True)
     pa.set_defaults(func=cmd_ack)

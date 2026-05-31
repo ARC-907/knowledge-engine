@@ -13,13 +13,15 @@ records, and handoff bundles remain on the filesystem for inspectability.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import os
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from . import config  # noqa: F401  — ensures .env is loaded before DB path resolves
 
@@ -37,16 +39,33 @@ from . import config  # noqa: F401  — ensures .env is loaded before DB path re
 # caches the opened connection per-resolved-path in thread-local storage,
 # so the dynamic read costs one `os.environ.get` and changing the target
 # DB at runtime Just Works (each path gets its own cached connection).
+#
+# A `contextvars.ContextVar` ("scope DB") lets a caller route a whole block
+# of work — every nested get_connection, on the same thread or an awaited
+# task — to a *different* physical database without threading a `db_path`
+# argument through every function. This is what powers per-project /
+# per-branch / per-agent database segregation: set the scope, and the
+# board, queue, key vault, and sweeper underneath all follow it. Precedence
+# is explicit-arg → scope-context → env → default, so an explicit path
+# always wins and the context only fills the "no arg" case.
+
+_scope_db_path: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "ke_scope_db_path", default=None
+)
 
 
 def resolve_db_path(db_path: Path | str | None = None) -> str:
     """Resolve the active pipeline DB path. Read on every connection request.
 
-    Precedence: explicit ``db_path`` arg → ``KE_PIPELINE_DB`` env →
-    ``KE_DATA_DIR``/pipeline.db → ``./engine/data/pipeline.db``.
+    Precedence: explicit ``db_path`` arg → active scope context
+    (``using_db``) → ``KE_PIPELINE_DB`` env → ``KE_DATA_DIR``/pipeline.db →
+    ``./engine/data/pipeline.db``.
     """
     if db_path:
         return str(Path(db_path).resolve())
+    scoped = _scope_db_path.get()
+    if scoped:
+        return scoped
     env_db = os.environ.get("KE_PIPELINE_DB")
     if env_db:
         return str(Path(env_db).resolve())
@@ -55,9 +74,36 @@ def resolve_db_path(db_path: Path | str | None = None) -> str:
     return str((base / "pipeline.db").resolve())
 
 
+@contextlib.contextmanager
+def using_db(db_path: Path | str) -> Iterator[str]:
+    """Route every no-arg ``get_connection()`` in this block to ``db_path``.
+
+    Resolves + creates the target DB (schema-initialized on first connect),
+    binds it to the scope ContextVar for the duration of the block, and
+    restores the prior scope on exit. Nestable. Yields the resolved path.
+
+    Used by the agent board to give each project / branch / agent / loop
+    its own physical SQLite engine-block while sharing one process::
+
+        with using_db(scope_db_path("branch-feat-auth")):
+            store.post_with_validation(...)   # lands in the scoped DB
+    """
+    resolved = str(Path(db_path).resolve())
+    token = _scope_db_path.set(resolved)
+    try:
+        yield resolved
+    finally:
+        _scope_db_path.reset(token)
+
+
 def current_db_path() -> str:
     """The DB path that a no-arg ``get_connection()`` would use right now."""
     return resolve_db_path()
+
+
+def active_scope_db_path() -> str | None:
+    """The scope-context DB path in effect, or None if unscoped."""
+    return _scope_db_path.get()
 
 
 # Back-compat module attribute. Reflects the import-time default; callers

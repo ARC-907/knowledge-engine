@@ -2,6 +2,70 @@
 
 All notable changes to the Knowledge-Engine.
 
+## [Unreleased]
+
+### Added — Provider-credential registry (Agent Board)
+
+A Config-tab surface for the *provider-abstracted keys* the engine uses to
+reach upstream models — distinct from the board-ACCESS key vault that
+authenticates callers *to* the board.
+
+- **`agent_board/providers.py`** — CRUD over the (previously unused,
+  always-empty) `api_keys` table. Each entry binds a provider
+  (`anthropic` / `openai` / `cloud-http` / `ollama` / `custom`) to the
+  **environment variable** that holds its secret. The DB stores the binding
+  only — **never the credential** — honoring "no secrets in any committed
+  file." `resolve_secret(provider)` returns the live value from the env for
+  in-process engine use; it is never exposed by any list/HTTP read.
+  `list_providers()` reports `env_set` (is the var populated?) without
+  echoing the value.
+- **Routes** — `GET/POST /board/providers`, `PATCH .../toggle`,
+  `POST .../verify`, `DELETE .../{id}` (admin-gated).
+- **Dashboard** — Config tab now has a **Provider credentials** section
+  (provider, env-var name, status dot, verify/remove) above the renamed
+  **Board access keys** section. The two systems were previously conflated
+  under one mislabeled "Provider keys" heading; they're now clearly split.
+- **Empty by default** — nothing seeds either table. Regression tests
+  assert `GET /board/keys == []` and `GET /board/providers == []` on a
+  fresh install, and that the provider list never leaks a secret value.
+- **Engine integration point** — `routing/` and the classifier already read
+  the same env vars the registry binds, so the registry is the single
+  source of truth; wiring routing to consult it explicitly is the documented
+  next hook.
+
+### Added — Per-scope database segregation (Agent Board)
+
+The board can now give each **project / branch / agent / agentic loop** its
+own physical SQLite database — a self-contained engine-block of board state
+(messages, FTS index, key vault, config, sweeper lease) — while sharing one
+process. This is the *physical* counterpart to the board's existing
+*logical* segregation (channel / task_id / product_id / visibility_scope):
+logical keeps everything co-queryable in one DB; a scope gives hard
+separation for when an agent or tenant must not see another's traffic at all.
+
+- **Foundation** (`foundation/db.py`) — a `contextvars.ContextVar` + the
+  `using_db(path)` context manager let a block of work route every nested
+  `get_connection()` (board, queue, key vault, sweeper) to a different
+  database with no per-call argument threading. Resolution precedence is
+  explicit-arg → scope-context → `KE_PIPELINE_DB` env → default.
+- **Scope resolver** (`agent_board/scopes.py`) — maps a scope key to
+  `<KE_DATA_DIR>/board-scopes/{slug}.db`. Keys are slugified (path-traversal,
+  absolute paths, and reserved characters are neutralized). `list_scopes()`
+  discovers existing scope DBs by directory scan.
+- **Store** — every public read/write/config function takes an optional
+  keyword-only `scope=`; supplying it runs the call (and its internal
+  cross-calls) under `using_db`. `scope=None` (the default) uses the shared
+  board — fully backward compatible.
+- **HTTP** — `?scope=` query param on every data route (also accepted in the
+  POST/ack/config body, body wins); new `GET /board/scopes` lists scope DBs.
+- **MCP** — every read/post/search tool takes an optional `scope`; new
+  `board_scopes` tool lists them.
+- **CLI** — `--scope` flag on `read | post | search | digest | thread | ack`;
+  new `board scopes` subcommand.
+- **Sweeper** — one leased pass now sweeps the default board **and every
+  scope DB** in turn, each under its own config + `board_sweeps` log. The
+  process-wide lease (default DB) still prevents double-sweeps.
+
 ## [1.1.0] — 2026-05-30
 
 Adds the **Agent Board** — a first-class, SQLite-backed coordination

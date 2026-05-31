@@ -305,24 +305,80 @@
       <div x-show="config.saveStatus" class="self-center text-emerald-300 text-sm" x-text="config.saveStatus"></div>
     </div>
 
-    <h2 class="text-lg font-semibold mb-3">Provider keys</h2>
+    <h2 class="text-lg font-semibold mb-1">Provider credentials</h2>
     <p class="text-slate-400 text-sm mb-3">
-      Provider-abstracted keys for upstream LLMs (Anthropic, OpenAI, Ollama,
-      anything else) and for gating board access. The raw key is shown once on
-      creation — copy it before leaving the dialog. Master-key bootstrap (via
+      Provider-abstracted keys for upstream models (Anthropic, OpenAI,
+      Ollama, or any custom endpoint). You bind a provider to the
+      <em>environment variable</em> that holds its secret — the actual key
+      stays in your environment and is <strong>never stored in the
+      database</strong>. The dot shows whether that variable is currently
+      set. Nothing ships pre-filled; the registry starts empty.
+    </p>
+    <div class="grid grid-cols-4 gap-2 mb-3 text-sm">
+      <select x-model="providers.draft.provider" @change="prefillEnvVar()"
+        class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+        <option value="anthropic">anthropic</option>
+        <option value="openai">openai</option>
+        <option value="cloud-http">cloud-http</option>
+        <option value="ollama">ollama</option>
+        <option value="custom">custom</option>
+      </select>
+      <input x-model="providers.draft.env_var" placeholder="ENV_VAR name"
+        class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      <input x-model="providers.draft.display_name" placeholder="label (optional)"
+        class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+      <button @click="registerProvider()" class="bg-sky-600 hover:bg-sky-500 px-3 py-1 rounded">
+        Add provider key
+      </button>
+    </div>
+    <table class="w-full text-sm mb-8">
+      <thead class="text-left text-slate-500 border-b border-slate-800">
+        <tr><th class="py-2">Status</th><th>Provider</th><th>Env var</th><th>Label</th><th>Enabled</th><th></th></tr>
+      </thead>
+      <tbody>
+        <template x-for="p in providers.list" :key="p.key_id">
+          <tr class="border-b border-slate-900">
+            <td class="py-2">
+              <span :class="p.env_set ? 'text-emerald-400' : 'text-slate-600'"
+                :title="p.env_set ? 'env var is set' : 'env var not set'">●</span>
+            </td>
+            <td x-text="p.provider"></td>
+            <td class="text-slate-400" x-text="p.env_var || '—'"></td>
+            <td class="text-slate-400" x-text="p.display_name"></td>
+            <td><span x-text="p.enabled ? 'yes' : 'no'"></span></td>
+            <td>
+              <button @click="verifyProvider(p.key_id)"
+                class="text-sky-400 hover:text-sky-300 text-xs mr-2">verify</button>
+              <button @click="deleteProvider(p.key_id)"
+                class="text-rose-400 hover:text-rose-300 text-xs">remove</button>
+            </td>
+          </tr>
+        </template>
+        <template x-if="!providers.list.length">
+          <tr><td colspan="6" class="py-2 text-slate-600">(no provider keys — registry is empty)</td></tr>
+        </template>
+      </tbody>
+    </table>
+
+    <h2 class="text-lg font-semibold mb-1">Board access keys</h2>
+    <p class="text-slate-400 text-sm mb-3">
+      <code>X-Board-Key</code> tokens that authenticate callers <em>to</em>
+      this board (only enforced when "Require key for non-localhost posts"
+      is on). Hashed with SHA-256 — the raw key is shown once on creation,
+      copy it before dismissing. Master-key bootstrap (via
       <code>knowledge-engine board keys bootstrap-master</code>) creates the
-      first admin key on localhost.
+      first admin token on localhost. Starts empty.
     </p>
     <div class="grid grid-cols-3 gap-2 mb-3 text-sm">
       <input x-model="keys.draft.display_name" placeholder="Key display name"
         class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
       <select x-model="keys.draft.resource_type"
         class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
-        <option value="provider">provider</option>
         <option value="board">board</option>
         <option value="tool">tool</option>
         <option value="model">model</option>
         <option value="endpoint">endpoint</option>
+        <option value="provider">provider</option>
       </select>
       <select x-model="keys.draft.permission"
         class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
@@ -361,6 +417,9 @@
                 class="text-rose-400 hover:text-rose-300 text-xs">revoke</button>
             </td>
           </tr>
+        </template>
+        <template x-if="!keys.list.length">
+          <tr><td colspan="5" class="py-2 text-slate-600">(no board access keys — vault is empty)</td></tr>
         </template>
       </tbody>
     </table>
@@ -421,6 +480,11 @@ function dashboard() {
       list: [],
       draft: {display_name: "", resource_type: "board", resource_id: "*", permission: "write"},
       lastRaw: null,
+    },
+    providers: {
+      list: [],
+      defaultEnvVars: {},
+      draft: {provider: "anthropic", env_var: "", display_name: ""},
     },
 
     async load() {
@@ -639,6 +703,59 @@ function dashboard() {
       await fetch(`/board/keys/${encodeURIComponent(key_id)}`, {method: 'DELETE'});
       await this.loadKeys();
     },
+
+    // ── Provider credentials (env-var bindings; never store the secret) ──
+    async loadProviders() {
+      try {
+        const r = await fetch('/board/providers');
+        if (r.ok) {
+          const data = await r.json();
+          this.providers.list = data.providers || [];
+          this.providers.defaultEnvVars = data.default_env_vars || {};
+        } else {
+          this.providers.list = [];
+        }
+      } catch (e) {
+        this.providers.list = [];
+      }
+    },
+
+    prefillEnvVar() {
+      // Suggest the env var the engine already reads for this provider.
+      const def = this.providers.defaultEnvVars[this.providers.draft.provider];
+      if (def !== undefined) this.providers.draft.env_var = def;
+    },
+
+    async registerProvider() {
+      const d = this.providers.draft;
+      if (!d.provider) return;
+      const r = await fetch('/board/providers', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          provider: d.provider,
+          env_var: d.env_var,
+          display_name: d.display_name,
+        }),
+      });
+      if (r.ok) {
+        this.providers.draft.display_name = "";
+        await this.loadProviders();
+      } else {
+        alert(`Add failed: HTTP ${r.status} ${await r.text()}`);
+      }
+    },
+
+    async verifyProvider(key_id) {
+      await fetch(`/board/providers/${encodeURIComponent(key_id)}/verify`, {method: 'POST'});
+      await this.loadProviders();
+    },
+
+    async deleteProvider(key_id) {
+      if (!confirm(`Remove this provider key binding?`)) return;
+      await fetch(`/board/providers/${encodeURIComponent(key_id)}`, {method: 'DELETE'});
+      await this.loadProviders();
+    },
   };
 }
 </script>
@@ -659,6 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Alpine.effect(() => {
       if (data.tab === 'config') {
         data.loadKeys();
+        data.loadProviders();
       }
     });
   }, 200);
