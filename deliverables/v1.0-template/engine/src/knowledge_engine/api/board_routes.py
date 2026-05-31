@@ -25,10 +25,21 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
-from ..agent_board import keys, schemas, store, sweeper
+from ..agent_board import keys, schemas, scopes, store, sweeper
 
 
 router = APIRouter()
+
+
+def _pop_scope(payload: dict[str, Any]) -> str | None:
+    """Pull an optional ``scope`` out of a POST body so it routes the write
+    to a per-scope DB without leaking into the message payload itself.
+    """
+    val = payload.pop("scope", None)
+    if val is None:
+        return None
+    s = str(val).strip()
+    return s or None
 
 
 # ── Trust gate ─────────────────────────────────────────────────
@@ -239,6 +250,12 @@ def list_message_types(req: Request) -> dict[str, Any]:
 # ── Messages ───────────────────────────────────────────────────
 
 
+# `scope` (query or body field) routes a request to a per-project /
+# per-branch / per-agent physical database. Omit it (the default) and the
+# request hits the shared board DB — fully backward compatible. See
+# `agent_board/scopes.py` and `docs/AGENT-BOARD.md` (Scoped databases).
+
+
 @router.get("/messages")
 def list_messages(
     req: Request,
@@ -249,29 +266,39 @@ def list_messages(
     product_id: str | None = Query(None),
     sender_node_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
+    scope: str | None = Query(None),
 ) -> list[dict[str, Any]]:
     _require_trust(req)
     return store.poll(
         since=since, channel=channel, message_type=message_type,
         task_id=task_id, product_id=product_id, sender_node_id=sender_node_id,
-        limit=limit,
+        limit=limit, scope=scope,
     )
 
 
 @router.get("/messages/{message_id}")
-def get_message(req: Request, message_id: str) -> dict[str, Any]:
+def get_message(
+    req: Request, message_id: str, scope: str | None = Query(None)
+) -> dict[str, Any]:
     _require_trust(req)
-    msg = store.read(message_id)
+    msg = store.read(message_id, scope=scope)
     if not msg:
         raise HTTPException(404, "message not found")
     return msg
 
 
 @router.post("/messages", status_code=201)
-def post_message(req: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+def post_message(
+    req: Request,
+    payload: dict[str, Any] = Body(...),
+    scope: str | None = Query(None),
+) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="write")
+    # Accept scope from the body OR the query string — body wins if both
+    # are present. A dev shouldn't have to remember which one the route wants.
+    scope = _pop_scope(payload) or scope
     try:
-        msg = store.post_with_validation(payload)
+        msg = store.post_with_validation(payload, scope=scope)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return msg
@@ -282,12 +309,14 @@ def ack_message(
     req: Request,
     message_id: str,
     payload: dict[str, Any] = Body(...),
+    scope: str | None = Query(None),
 ) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="write")
+    scope = _pop_scope(payload) or scope
     acker = str(payload.get("from") or payload.get("acker") or "").strip()
     if not acker:
         raise HTTPException(400, "'from' (acker identity) is required")
-    msg = store.ack_message(message_id, acker)
+    msg = store.ack_message(message_id, acker, scope=scope)
     if msg is None:
         raise HTTPException(404, "message not found")
     return msg
@@ -301,9 +330,10 @@ def get_thread(
     req: Request,
     correlation_id: str,
     limit: int = Query(100, ge=1, le=500),
+    scope: str | None = Query(None),
 ) -> list[dict[str, Any]]:
     _require_trust(req)
-    return store.thread_messages(correlation_id=correlation_id, limit=limit)
+    return store.thread_messages(correlation_id=correlation_id, limit=limit, scope=scope)
 
 
 @router.get("/search")
@@ -312,9 +342,10 @@ def search(
     q: str = Query(..., min_length=1),
     channel: str | None = Query(None),
     limit: int = Query(25, ge=1, le=200),
+    scope: str | None = Query(None),
 ) -> list[dict[str, Any]]:
     _require_trust(req)
-    return store.search_messages(query=q, channel=channel, limit=limit)
+    return store.search_messages(query=q, channel=channel, limit=limit, scope=scope)
 
 
 @router.get("/digest")
@@ -323,24 +354,41 @@ def digest(
     channel: str | None = Query(None),
     since: str | None = Query(None),
     max_messages: int = Query(200, ge=10, le=2000),
+    scope: str | None = Query(None),
 ) -> dict[str, Any]:
     _require_trust(req)
-    return store.digest(channel=channel, since=since, max_messages=max_messages)
+    return store.digest(
+        channel=channel, since=since, max_messages=max_messages, scope=scope
+    )
 
 
 # ── Stats ──────────────────────────────────────────────────────
 
 
 @router.get("/stats/channels")
-def stats_channels(req: Request) -> list[dict[str, Any]]:
+def stats_channels(req: Request, scope: str | None = Query(None)) -> list[dict[str, Any]]:
     _require_trust(req)
-    return store.channel_stats()
+    return store.channel_stats(scope=scope)
 
 
 @router.get("/stats/types")
-def stats_types(req: Request, channel: str | None = Query(None)) -> list[dict[str, Any]]:
+def stats_types(
+    req: Request,
+    channel: str | None = Query(None),
+    scope: str | None = Query(None),
+) -> list[dict[str, Any]]:
     _require_trust(req)
-    return store.type_stats(channel=channel)
+    return store.type_stats(channel=channel, scope=scope)
+
+
+# ── Scopes ─────────────────────────────────────────────────────
+
+
+@router.get("/scopes")
+def list_scopes(req: Request) -> dict[str, Any]:
+    """List known per-scope databases (project/branch/agent/loop)."""
+    _require_trust(req)
+    return {"scopes": scopes.list_scopes(), "root": str(scopes.scopes_root())}
 
 
 # ── Sweeper ────────────────────────────────────────────────────
@@ -454,16 +502,25 @@ def revoke_permission(req: Request, perm_id: str) -> dict[str, Any]:
 
 
 @router.get("/config")
-def get_config(req: Request) -> dict[str, Any]:
+def get_config(req: Request, scope: str | None = Query(None)) -> dict[str, Any]:
     _require_trust(req)
-    return store.load_config()
+    return store.load_config(scope=scope)
 
 
 @router.patch("/config")
-def patch_config(req: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+def patch_config(
+    req: Request,
+    payload: dict[str, Any] = Body(...),
+    scope: str | None = Query(None),
+) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="admin")
-    cfg = store.update_config(payload)
-    if "sweeper_enabled" in payload:
+    scope = _pop_scope(payload) or scope
+    cfg = store.update_config(payload, scope=scope)
+    # The sweeper is process-wide (it sweeps the default DB + every scope),
+    # so its lifecycle is governed by the default board's config only. A
+    # per-scope toggle changes that scope's stored flag without starting or
+    # stopping the shared sweeper thread.
+    if "sweeper_enabled" in payload and scope is None:
         if cfg.get("sweeper_enabled"):
             sweeper.start()
         else:

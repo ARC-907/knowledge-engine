@@ -17,14 +17,43 @@ All functions return plain dicts — no ORM, no models. Cheap to serialize.
 
 from __future__ import annotations
 
+import functools
 import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from ..foundation import db
 from ..pipeline import message_board as mb
 from . import schemas
+
+_F = TypeVar("_F", bound=Callable[..., Any])
+
+
+def _scoped(fn: _F) -> _F:
+    """Give a store function an optional keyword-only ``scope=`` argument.
+
+    When ``scope`` is supplied, the call runs inside
+    ``foundation.db.using_db(scope_db_path(scope))`` so every nested
+    ``get_connection()`` — including the ones inside ``pipeline.message_board``
+    and the key vault — routes to that scope's physical database. When
+    ``scope`` is omitted the call is a straight passthrough that inherits
+    whatever scope context is already active (so a wrapped function calling
+    another wrapped function does the right thing without re-routing).
+
+    The wrapping is applied once at module load (see the loop near the
+    bottom of this file) so each function body stays scope-agnostic.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, scope: str | None = None, **kwargs: Any) -> Any:
+        if scope:
+            from .scopes import scope_db_path
+            with db.using_db(scope_db_path(scope)):
+                return fn(*args, **kwargs)
+        return fn(*args, **kwargs)
+
+    return wrapper  # type: ignore[return-value]
 
 
 # ── Config (singleton row) ─────────────────────────────────────
@@ -528,6 +557,26 @@ def _has_ack(msg: dict[str, Any]) -> bool:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ── Scope wrapping ─────────────────────────────────────────────
+# Apply @_scoped to every public read/write/config function so each gains
+# an optional keyword-only `scope=`. Done in one place so the bodies above
+# stay scope-agnostic and internal cross-calls (digest→poll, post→load_config)
+# inherit the active scope context instead of re-routing. Pure-maintenance
+# helpers used only by the sweeper (`record_sweep`, `last_sweep`) are left
+# unwrapped — the sweeper sets the scope context itself.
+_SCOPED_FUNCTIONS = (
+    "load_config", "update_config",
+    "post_with_validation", "read", "poll", "relevant_for",
+    "thread_messages", "search_messages",
+    "digest", "get_unacked_blockers", "ack_message",
+    "channel_stats", "type_stats", "total_count",
+    "prune_expired", "prune_by_count",
+)
+for _name in _SCOPED_FUNCTIONS:
+    globals()[_name] = _scoped(globals()[_name])
+del _name
 
 
 # Convenience re-exports for callers that want flat imports.

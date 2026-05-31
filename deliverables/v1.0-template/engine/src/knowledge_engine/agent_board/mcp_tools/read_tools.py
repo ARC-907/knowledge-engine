@@ -9,6 +9,10 @@ subjects rather than full bodies.
 
 `board_relevant` honors the existing visibility-scope rules and is the tool an
 agent should call when it just woke up and wants "what's relevant to me?"
+
+Every read tool accepts an optional `scope` — a project / branch / agent /
+loop key that routes the read to that scope's own physical database. Omit
+it to read the shared board. `board_scopes` lists the known scopes.
 """
 
 from __future__ import annotations
@@ -18,6 +22,17 @@ from typing import Any
 from .base import BoardContext, error_result, store, text_result
 
 GROUP = "board.read"
+
+# Reusable schema fragment so every tool advertises `scope` identically.
+_SCOPE_PROP = {
+    "scope": {
+        "type": "string",
+        "description": (
+            "Optional isolation key (project / branch / agent / loop). "
+            "Routes to that scope's own database; omit for the shared board."
+        ),
+    }
+}
 
 
 def tools() -> list[dict[str, Any]]:
@@ -42,6 +57,7 @@ def tools() -> list[dict[str, Any]]:
                     "product_id": {"type": "string"},
                     "sender_node_id": {"type": "string"},
                     "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 500},
+                    **_SCOPE_PROP,
                 },
             },
         },
@@ -63,6 +79,7 @@ def tools() -> list[dict[str, Any]]:
                     },
                     "since": {"type": "string"},
                     "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 200},
+                    **_SCOPE_PROP,
                 },
                 "required": ["node_id"],
             },
@@ -76,6 +93,7 @@ def tools() -> list[dict[str, Any]]:
                     "correlation_id": {"type": "string"},
                     "thread_id": {"type": "string"},
                     "limit": {"type": "integer", "default": 100, "minimum": 1, "maximum": 500},
+                    **_SCOPE_PROP,
                 },
             },
         },
@@ -96,6 +114,7 @@ def tools() -> list[dict[str, Any]]:
                         "type": "integer", "default": 200, "minimum": 10, "maximum": 2000,
                         "description": "Cap on messages scanned for the summary.",
                     },
+                    **_SCOPE_PROP,
                 },
             },
         },
@@ -114,10 +133,19 @@ def tools() -> list[dict[str, Any]]:
             "description": "List canonical message types + visibility scopes.",
             "inputSchema": {"type": "object", "properties": {}},
         },
+        {
+            "name": "board_scopes",
+            "description": (
+                "List the per-scope databases (project / branch / agent / "
+                "loop) that currently exist, with their sizes."
+            ),
+            "inputSchema": {"type": "object", "properties": {}},
+        },
     ]
 
 
 def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[str, Any]:
+    scope = args.get("scope") or None
     if name == "board_read":
         msgs = store.poll(
             since=args.get("since"),
@@ -127,6 +155,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
             product_id=args.get("product_id"),
             sender_node_id=args.get("sender_node_id"),
             limit=int(args.get("limit", 20)),
+            scope=scope,
         )
         return text_result(msgs)
     if name == "board_relevant":
@@ -139,6 +168,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
             current_task_ids=list(args.get("current_task_ids") or []),
             since=args.get("since"),
             limit=int(args.get("limit", 20)),
+            scope=scope,
         )
         return text_result(msgs)
     if name == "board_thread":
@@ -149,6 +179,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
         msgs = store.thread_messages(
             correlation_id=corr, thread_id=thr,
             limit=int(args.get("limit", 100)),
+            scope=scope,
         )
         return text_result(msgs)
     if name == "board_digest":
@@ -156,8 +187,15 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
             channel=args.get("channel"),
             since=args.get("since"),
             max_messages=int(args.get("max_messages", 200)),
+            scope=scope,
         )
         return text_result(summary)
+    if name == "board_scopes":
+        from .. import scopes as scopes_mod
+        return text_result({
+            "scopes": scopes_mod.list_scopes(),
+            "root": str(scopes_mod.scopes_root()),
+        })
     if name == "board_status":
         cfg = store.load_config()
         return text_result({

@@ -24,6 +24,13 @@ def tools() -> list[dict[str, Any]]:
                     "query": {"type": "string", "description": "FTS5 query expression."},
                     "channel": {"type": "string"},
                     "limit": {"type": "integer", "default": 25, "minimum": 1, "maximum": 200},
+                    "scope": {
+                        "type": "string",
+                        "description": (
+                            "Optional isolation key (project / branch / agent / loop). "
+                            "Searches that scope's own database; omit for the shared board."
+                        ),
+                    },
                 },
                 "required": ["query"],
             },
@@ -40,6 +47,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
             query=query,
             channel=args.get("channel"),
             limit=int(args.get("limit", 25)),
+            scope=args.get("scope") or None,
         )
         return text_result(results)
     return error_result(f"unknown tool: {name}")
