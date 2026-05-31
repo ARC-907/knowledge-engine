@@ -204,14 +204,49 @@ Open `http://127.0.0.1:9210/ui/` and click the **Board** or **Config** tab.
   interval, retention caps, require-key-for-post toggle, provider-key vault
   (create / list / revoke; raw key shown once on creation).
 
-## Provider keys
+## Keys — two distinct systems
 
-The Config tab holds the provider-abstracted key vault. Each key has:
+The Config tab manages **two** separate key surfaces. They are not the same
+thing, and conflating them is the most common point of confusion:
 
-* SHA-256 hashed storage (raw key shown once)
-* Permission entries — each entry is `(resource_type, resource_id, permission)`
-* Resource types: `provider`, `board`, `tool`, `model`, `endpoint`
-* Permissions: `read`, `write`, `invoke`, `admin`
+| System | What it is | Where the secret lives | Ships |
+|---|---|---|---|
+| **Provider credentials** | Keys the engine uses to reach upstream models (Anthropic / OpenAI / Ollama / custom) | The **environment** — the registry stores only a `provider → ENV_VAR` binding | empty |
+| **Board access keys** | `X-Board-Key` tokens that authenticate callers *to* this board | SHA-256 **hash** in the DB; raw shown once | empty |
+
+Both vaults ship **empty** — nothing is seeded, no secret is ever written
+to a committed file. There are regression tests asserting
+`GET /board/keys == []` and `GET /board/providers == []` on a fresh engine.
+
+### Provider credentials (the provider-abstracted keys)
+
+You "place" a provider key through the Config tab by binding a provider to
+the environment variable that holds its secret — e.g.
+`anthropic → KE_ANTHROPIC_API_KEY`. The actual key stays in your process
+environment; the database holds the binding metadata only. The status dot
+shows whether that variable is currently set, and **Verify** re-checks it
+without ever revealing the value.
+
+This matches how the engine already reads credentials (`routing/cloud.py`,
+the classifier), so the registry is the single source of truth the engine
+resolves against — `agent_board.providers.resolve_secret("anthropic")`
+returns the live value for in-process use only. A local-only operator who
+prefers to paste a value just sets the env var in their shell / `.env`; the
+registry then reports it live.
+
+Routes: `GET/POST /board/providers`, `PATCH /board/providers/{id}/toggle`,
+`POST /board/providers/{id}/verify`, `DELETE /board/providers/{id}`.
+CLI / dashboard pre-fill the recommended env-var name per provider
+(`KE_ANTHROPIC_API_KEY`, `KE_OPENAI_API_KEY`, `KE_CLOUD_API_KEY`; Ollama is
+keyless).
+
+### Board access keys
+
+`X-Board-Key` tokens, only enforced when `require_key_for_post=1`. Each key
+carries permission entries `(resource_type, resource_id, permission)` —
+resource types `board` / `tool` / `model` / `endpoint` / `provider`,
+permissions `read` / `write` / `invoke` / `admin`. The raw token is shown
+once on creation.
 
 The master key gets wildcard admin on everything. Create it on first boot:
 
@@ -220,7 +255,9 @@ knowledge-engine board keys bootstrap-master
 ```
 
 The raw master key is written to `<KE_DATA_DIR>/board-master-key.txt`
-(default `engine/data/`). Copy it, then delete the file.
+(default `engine/data/`, `chmod 600` on POSIX). Copy it, then delete the
+file. The board refuses to disable or delete the last enabled master so a
+routine GUI action can't lock you out (409 with a recovery hint).
 
 ## Sweeper
 

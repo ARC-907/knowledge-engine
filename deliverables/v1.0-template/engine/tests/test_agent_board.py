@@ -1184,3 +1184,144 @@ def test_sweeper_sweeps_default_and_scopes(tmp_path: Path) -> None:
     assert "scope:proj-a" in targets
     assert "scope:proj-b" in targets
     assert result["targets_swept"] >= 3
+
+
+# ── Provider-credential registry + empty-by-default guarantees ──
+
+
+def test_board_keys_empty_by_default(tmp_path: Path) -> None:
+    """The board-access key vault ships with zero keys."""
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import keys
+
+    assert keys.list_keys() == []
+    assert keys.list_keys(include_master=False) == []
+
+
+def test_provider_registry_empty_by_default(tmp_path: Path) -> None:
+    """The provider-credential registry ships with zero bindings."""
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import providers
+
+    assert providers.list_providers() == []
+
+
+def test_http_both_vaults_empty_on_fresh_install(tmp_path: Path) -> None:
+    """GET /board/keys and /board/providers both empty on a fresh engine."""
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from fastapi.testclient import TestClient
+    from knowledge_engine.app import create_app
+
+    app = create_app()
+    with TestClient(app) as client:
+        rk = client.get("/board/keys")
+        assert rk.status_code == 200, rk.text
+        assert rk.json() == []
+
+        rp = client.get("/board/providers")
+        assert rp.status_code == 200, rp.text
+        body = rp.json()
+        assert body["providers"] == []
+        assert "anthropic" in body["known"]
+
+
+def test_provider_register_reports_env_set_without_leaking_secret(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import providers
+
+    secret = "sk-test-DO-NOT-LEAK-12345"
+    os.environ.pop("KE_TEST_PROVIDER_VAR", None)
+
+    binding = providers.register_provider(
+        provider="anthropic", env_var="KE_TEST_PROVIDER_VAR", display_name="test",
+    )
+    assert binding["provider"] == "anthropic"
+    assert binding["env_var"] == "KE_TEST_PROVIDER_VAR"
+    assert binding["env_set"] is False  # var not set yet
+    assert secret not in str(binding)  # nothing secret is stored
+
+    os.environ["KE_TEST_PROVIDER_VAR"] = secret
+    try:
+        listed = providers.list_providers()
+        assert len(listed) == 1
+        assert listed[0]["env_set"] is True
+        # The list must never echo the secret value itself.
+        assert secret not in str(listed)
+    finally:
+        os.environ.pop("KE_TEST_PROVIDER_VAR", None)
+
+
+def test_provider_resolve_secret_reads_env(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import providers
+
+    os.environ.pop("KE_TEST_PROVIDER_VAR", None)
+    providers.register_provider(provider="openai", env_var="KE_TEST_PROVIDER_VAR")
+
+    assert providers.resolve_secret("openai") is None  # unset → None
+
+    os.environ["KE_TEST_PROVIDER_VAR"] = "live-secret-value"
+    try:
+        assert providers.resolve_secret("openai") == "live-secret-value"
+        # Disabled binding → None even when env is set.
+        binding = providers.list_providers()[0]
+        providers.toggle_provider(binding["key_id"])
+        assert providers.resolve_secret("openai") is None
+    finally:
+        os.environ.pop("KE_TEST_PROVIDER_VAR", None)
+
+
+def test_provider_toggle_and_delete(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import providers
+
+    b = providers.register_provider(provider="ollama", env_var="")
+    assert b["enabled"] is True
+    toggled = providers.toggle_provider(b["key_id"])
+    assert toggled["enabled"] is False
+    assert providers.delete_provider(b["key_id"]) is True
+    assert providers.list_providers() == []
+
+
+def test_provider_default_env_var_hints(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import providers
+
+    assert providers.default_env_var("anthropic") == "KE_ANTHROPIC_API_KEY"
+    assert providers.default_env_var("openai") == "KE_OPENAI_API_KEY"
+    assert providers.default_env_var("ollama") == ""  # keyless
+    assert providers.default_env_var("unknown-provider") == ""
+
+
+def test_provider_register_rejects_bad_input(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    import pytest
+    from knowledge_engine.agent_board import providers
+
+    with pytest.raises(ValueError):
+        providers.register_provider(provider="")
+    with pytest.raises(ValueError):
+        providers.register_provider(provider="x" * 61)
+
+
+def test_http_provider_register_and_remove(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from fastapi.testclient import TestClient
+    from knowledge_engine.app import create_app
+
+    app = create_app()
+    with TestClient(app) as client:
+        r = client.post("/board/providers", json={
+            "provider": "anthropic", "env_var": "KE_ANTHROPIC_API_KEY",
+            "display_name": "primary",
+        })
+        assert r.status_code == 201, r.text
+        binding = r.json()
+        assert binding["provider"] == "anthropic"
+
+        lst = client.get("/board/providers").json()["providers"]
+        assert len(lst) == 1
+
+        d = client.request("DELETE", f"/board/providers/{binding['key_id']}")
+        assert d.status_code == 200, d.text
+        assert client.get("/board/providers").json()["providers"] == []

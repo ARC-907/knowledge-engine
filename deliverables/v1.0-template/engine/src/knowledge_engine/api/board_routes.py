@@ -25,7 +25,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
-from ..agent_board import keys, schemas, scopes, store, sweeper
+from ..agent_board import keys, providers, schemas, scopes, store, sweeper
 
 
 router = APIRouter()
@@ -496,6 +496,66 @@ def revoke_permission(req: Request, perm_id: str) -> dict[str, Any]:
     if not ok:
         raise HTTPException(404, "permission not found")
     return {"deleted": True, "perm_id": perm_id}
+
+
+# ── Provider credentials (env-var bindings; no secrets stored) ──
+# Distinct from /board/keys (board-ACCESS tokens). These bind a provider
+# to the env var that holds its secret; the engine resolves the live value
+# from the environment at call time. The DB never holds a credential.
+
+
+@router.get("/providers")
+def list_providers(req: Request) -> dict[str, Any]:
+    _require_key(req, resource_id="*", permission="admin")
+    return {
+        "providers": providers.list_providers(),
+        "known": list(providers.KNOWN_PROVIDERS),
+        "default_env_vars": providers.DEFAULT_ENV_VARS,
+    }
+
+
+@router.post("/providers", status_code=201)
+def register_provider(req: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _require_key(req, resource_id="*", permission="admin")
+    provider = str(payload.get("provider") or "").strip()
+    if not provider:
+        raise HTTPException(400, "provider is required")
+    try:
+        return providers.register_provider(
+            provider=provider,
+            env_var=payload.get("env_var"),
+            display_name=payload.get("display_name"),
+            notes=payload.get("notes"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.patch("/providers/{key_id}/toggle")
+def toggle_provider(req: Request, key_id: str) -> dict[str, Any]:
+    _require_key(req, resource_id="*", permission="admin")
+    updated = providers.toggle_provider(key_id)
+    if updated is None:
+        raise HTTPException(404, "provider binding not found")
+    return updated
+
+
+@router.post("/providers/{key_id}/verify")
+def verify_provider(req: Request, key_id: str) -> dict[str, Any]:
+    _require_key(req, resource_id="*", permission="admin")
+    checked = providers.verify_provider(key_id)
+    if checked is None:
+        raise HTTPException(404, "provider binding not found")
+    return checked
+
+
+@router.delete("/providers/{key_id}")
+def delete_provider(req: Request, key_id: str) -> dict[str, Any]:
+    _require_key(req, resource_id="*", permission="admin")
+    ok = providers.delete_provider(key_id)
+    if not ok:
+        raise HTTPException(404, "provider binding not found")
+    return {"deleted": True, "key_id": key_id}
 
 
 # ── Config ─────────────────────────────────────────────────────

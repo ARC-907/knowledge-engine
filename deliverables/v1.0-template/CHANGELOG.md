@@ -4,6 +4,35 @@ All notable changes to the Knowledge-Engine.
 
 ## [Unreleased]
 
+### Added — Provider-credential registry (Agent Board)
+
+A Config-tab surface for the *provider-abstracted keys* the engine uses to
+reach upstream models — distinct from the board-ACCESS key vault that
+authenticates callers *to* the board.
+
+- **`agent_board/providers.py`** — CRUD over the (previously unused,
+  always-empty) `api_keys` table. Each entry binds a provider
+  (`anthropic` / `openai` / `cloud-http` / `ollama` / `custom`) to the
+  **environment variable** that holds its secret. The DB stores the binding
+  only — **never the credential** — honoring "no secrets in any committed
+  file." `resolve_secret(provider)` returns the live value from the env for
+  in-process engine use; it is never exposed by any list/HTTP read.
+  `list_providers()` reports `env_set` (is the var populated?) without
+  echoing the value.
+- **Routes** — `GET/POST /board/providers`, `PATCH .../toggle`,
+  `POST .../verify`, `DELETE .../{id}` (admin-gated).
+- **Dashboard** — Config tab now has a **Provider credentials** section
+  (provider, env-var name, status dot, verify/remove) above the renamed
+  **Board access keys** section. The two systems were previously conflated
+  under one mislabeled "Provider keys" heading; they're now clearly split.
+- **Empty by default** — nothing seeds either table. Regression tests
+  assert `GET /board/keys == []` and `GET /board/providers == []` on a
+  fresh install, and that the provider list never leaks a secret value.
+- **Engine integration point** — `routing/` and the classifier already read
+  the same env vars the registry binds, so the registry is the single
+  source of truth; wiring routing to consult it explicitly is the documented
+  next hook.
+
 ### Added — Per-scope database segregation (Agent Board)
 
 The board can now give each **project / branch / agent / agentic loop** its

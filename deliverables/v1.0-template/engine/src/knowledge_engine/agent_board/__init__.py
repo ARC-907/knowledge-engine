@@ -22,7 +22,9 @@ an X-Board-Key on non-localhost writes; restrict or extend the trusted
 network set with the `KE_BOARD_TRUSTED_CIDRS` env var.
 """
 
-from . import schemas, scopes, store, keys, sweeper, service, cli  # noqa: F401
+from . import schemas, scopes, store, keys, providers, sweeper, service, cli  # noqa: F401
 
-__all__ = ["schemas", "scopes", "store", "keys", "sweeper", "service", "cli"]
+__all__ = [
+    "schemas", "scopes", "store", "keys", "providers", "sweeper", "service", "cli",
+]
 __version__ = "1.1.0"
