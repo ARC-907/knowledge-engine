@@ -2,6 +2,41 @@
 
 All notable changes to the Knowledge-Engine.
 
+## [Unreleased]
+
+### Added — Per-scope database segregation (Agent Board)
+
+The board can now give each **project / branch / agent / agentic loop** its
+own physical SQLite database — a self-contained engine-block of board state
+(messages, FTS index, key vault, config, sweeper lease) — while sharing one
+process. This is the *physical* counterpart to the board's existing
+*logical* segregation (channel / task_id / product_id / visibility_scope):
+logical keeps everything co-queryable in one DB; a scope gives hard
+separation for when an agent or tenant must not see another's traffic at all.
+
+- **Foundation** (`foundation/db.py`) — a `contextvars.ContextVar` + the
+  `using_db(path)` context manager let a block of work route every nested
+  `get_connection()` (board, queue, key vault, sweeper) to a different
+  database with no per-call argument threading. Resolution precedence is
+  explicit-arg → scope-context → `KE_PIPELINE_DB` env → default.
+- **Scope resolver** (`agent_board/scopes.py`) — maps a scope key to
+  `<KE_DATA_DIR>/board-scopes/{slug}.db`. Keys are slugified (path-traversal,
+  absolute paths, and reserved characters are neutralized). `list_scopes()`
+  discovers existing scope DBs by directory scan.
+- **Store** — every public read/write/config function takes an optional
+  keyword-only `scope=`; supplying it runs the call (and its internal
+  cross-calls) under `using_db`. `scope=None` (the default) uses the shared
+  board — fully backward compatible.
+- **HTTP** — `?scope=` query param on every data route (also accepted in the
+  POST/ack/config body, body wins); new `GET /board/scopes` lists scope DBs.
+- **MCP** — every read/post/search tool takes an optional `scope`; new
+  `board_scopes` tool lists them.
+- **CLI** — `--scope` flag on `read | post | search | digest | thread | ack`;
+  new `board scopes` subcommand.
+- **Sweeper** — one leased pass now sweeps the default board **and every
+  scope DB** in turn, each under its own config + `board_sweeps` log. The
+  process-wide lease (default DB) still prevents double-sweeps.
+
 ## [1.1.0] — 2026-05-30
 
 Adds the **Agent Board** — a first-class, SQLite-backed coordination

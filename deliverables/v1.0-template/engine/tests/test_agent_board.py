@@ -961,3 +961,226 @@ def test_lifespan_starts_and_stops_cleanly(tmp_path: Path) -> None:
     # call stop() (idempotent) and verify the lease was released cleanly.
     sweeper.stop()
     assert not sweeper.is_running()
+
+
+# ── Per-scope database segregation ────────────────────────────
+
+
+def test_slugify_scope_rejects_traversal(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import scopes
+    import pytest
+
+    assert scopes.slugify_scope("Branch/Feat-Auth") == "branch-feat-auth"
+    assert scopes.slugify_scope("../../etc/passwd") == "etc-passwd"
+    assert scopes.slugify_scope("proj a  b") == "proj-a-b"
+    with pytest.raises(ValueError):
+        scopes.slugify_scope("")
+    with pytest.raises(ValueError):
+        scopes.slugify_scope("...")
+
+
+def test_scope_db_path_under_scopes_root(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import scopes
+
+    p = Path(scopes.scope_db_path("proj-a"))
+    assert p.name == "proj-a.db"
+    assert p.parent == scopes.scopes_root()
+    assert p.parent.name == "board-scopes"
+
+
+def test_store_scope_isolation(tmp_path: Path) -> None:
+    """Posts to different scopes land in different physical DBs; the shared
+    (default) board stays empty.
+    """
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store
+
+    store.post_with_validation(
+        {"channel": "ops", "message_type": "claim", "sender_node_id": "n1", "body": "in A"},
+        scope="proj-a",
+    )
+    store.post_with_validation(
+        {"channel": "ops", "message_type": "claim", "sender_node_id": "n2", "body": "in B"},
+        scope="proj-b",
+    )
+
+    a = [m["body"] for m in store.poll(channel="ops", scope="proj-a")]
+    b = [m["body"] for m in store.poll(channel="ops", scope="proj-b")]
+    default = store.poll(channel="ops")
+
+    assert a == ["in A"]
+    assert b == ["in B"]
+    assert default == []
+
+
+def test_store_scope_search_isolation(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store
+
+    store.post_with_validation(
+        {"channel": "research", "message_type": "research_finding",
+         "sender_node_id": "n", "body": "the quick brown fox in A"},
+        scope="proj-a",
+    )
+    a_hits = store.search_messages("fox", scope="proj-a")
+    b_hits = store.search_messages("fox", scope="proj-b")
+    default_hits = store.search_messages("fox")
+    assert a_hits and any("fox" in (h.get("body") or "") for h in a_hits)
+    assert b_hits == []
+    assert default_hits == []
+
+
+def test_store_scope_config_independent(tmp_path: Path) -> None:
+    """Each scope DB carries its own board_config (channels etc.)."""
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store
+
+    store.update_config({"channels": ["ops", "alpha"]}, scope="proj-a")
+    a_cfg = store.load_config(scope="proj-a")
+    b_cfg = store.load_config(scope="proj-b")
+    assert "alpha" in a_cfg["channels"]
+    assert "alpha" not in b_cfg["channels"]
+
+
+def test_list_scopes_discovers_created(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store, scopes
+
+    store.post_with_validation(
+        {"channel": "ops", "message_type": "claim", "sender_node_id": "n", "body": "x"},
+        scope="proj-a",
+    )
+    store.post_with_validation(
+        {"channel": "ops", "message_type": "claim", "sender_node_id": "n", "body": "y"},
+        scope="branch-feat",
+    )
+    names = {s["scope"] for s in scopes.list_scopes()}
+    assert {"proj-a", "branch-feat"} <= names
+
+
+def test_using_db_context_manager_routes_and_restores(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.foundation import db as fdb
+    from knowledge_engine.agent_board import scopes
+
+    assert fdb.active_scope_db_path() is None
+    target = scopes.scope_db_path("proj-a")
+    with fdb.using_db(target):
+        assert fdb.active_scope_db_path() == target
+        assert fdb.resolve_db_path() == target
+    assert fdb.active_scope_db_path() is None
+
+
+def test_http_scope_isolation(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from fastapi.testclient import TestClient
+    from knowledge_engine.app import create_app
+
+    app = create_app()
+    with TestClient(app) as client:
+        r = client.post("/board/messages?scope=proj-a", json={
+            "channel": "ops", "message_type": "claim",
+            "sender_node_id": "n", "body": "scoped A",
+        })
+        assert r.status_code == 201, r.text
+
+        a = client.get("/board/messages", params={"channel": "ops", "scope": "proj-a"}).json()
+        b = client.get("/board/messages", params={"channel": "ops", "scope": "proj-b"}).json()
+        default = client.get("/board/messages", params={"channel": "ops"}).json()
+        assert [m["body"] for m in a] == ["scoped A"]
+        assert b == []
+        assert default == []
+
+        listed = client.get("/board/scopes").json()
+        assert any(s["scope"] == "proj-a" for s in listed["scopes"])
+
+
+def test_http_post_scope_in_body(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from fastapi.testclient import TestClient
+    from knowledge_engine.app import create_app
+
+    app = create_app()
+    with TestClient(app) as client:
+        r = client.post("/board/messages", json={
+            "channel": "ops", "message_type": "claim",
+            "sender_node_id": "n", "body": "body-scoped", "scope": "proj-x",
+        })
+        assert r.status_code == 201, r.text
+        # `scope` must not have leaked into the stored message fields.
+        assert "scope" not in r.json()
+        x = client.get("/board/messages", params={"scope": "proj-x"}).json()
+        assert [m["body"] for m in x] == ["body-scoped"]
+
+
+def test_mcp_scope_isolation_and_board_scopes_tool(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board.mcp_tools import collect_tools
+    from knowledge_engine.agent_board.mcp_tools.base import BoardContext
+    import json as _json
+
+    defs, dispatch = collect_tools()
+    names = {d["name"] for d in defs}
+    assert "board_scopes" in names
+    ctx = BoardContext.from_config()
+
+    dispatch["board_post"]("board_post", {
+        "channel": "ops", "message_type": "claim",
+        "sender_node_id": "n", "body": "mcp A", "scope": "proj-a",
+    }, ctx)
+
+    a_env = dispatch["board_read"]("board_read", {"channel": "ops", "scope": "proj-a"}, ctx)
+    b_env = dispatch["board_read"]("board_read", {"channel": "ops", "scope": "proj-b"}, ctx)
+    a_msgs = _json.loads(a_env["content"][0]["text"])
+    b_msgs = _json.loads(b_env["content"][0]["text"])
+    assert [m["body"] for m in a_msgs] == ["mcp A"]
+    assert b_msgs == []
+
+    scopes_env = dispatch["board_scopes"]("board_scopes", {}, ctx)
+    payload = _json.loads(scopes_env["content"][0]["text"])
+    assert any(s["scope"] == "proj-a" for s in payload["scopes"])
+
+
+def test_cli_scope_flag_parses_on_data_commands(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board.cli import build_parser
+
+    parser = build_parser()
+    for argv in (
+        ["read", "--scope", "proj-a"],
+        ["post", "--from", "n", "--type", "claim", "--body", "x", "--scope", "proj-a"],
+        ["search", "fox", "--scope", "proj-a"],
+        ["digest", "--scope", "proj-a"],
+        ["thread", "corr", "--scope", "proj-a"],
+        ["ack", "mid", "--from", "n", "--scope", "proj-a"],
+    ):
+        parsed = parser.parse_args(argv)
+        assert parsed.scope == "proj-a", argv
+    assert parser.parse_args(["scopes"]).cmd == "scopes"
+
+
+def test_sweeper_sweeps_default_and_scopes(tmp_path: Path) -> None:
+    _env(tmp_path / "corpus", tmp_path / "data")
+    from knowledge_engine.agent_board import store, sweeper
+
+    store.post_with_validation(
+        {"channel": "ops", "message_type": "status_update", "sender_node_id": "n", "body": "d"},
+    )
+    store.post_with_validation(
+        {"channel": "ops", "message_type": "status_update", "sender_node_id": "n", "body": "a"},
+        scope="proj-a",
+    )
+    store.post_with_validation(
+        {"channel": "ops", "message_type": "status_update", "sender_node_id": "n", "body": "b"},
+        scope="proj-b",
+    )
+
+    result = sweeper.sweep_once(force=True)
+    assert result["skipped"] is False
+    targets = {t["target"] for t in result["targets"]}
+    assert "(default)" in targets
+    assert "scope:proj-a" in targets
+    assert "scope:proj-b" in targets
+    assert result["targets_swept"] >= 3

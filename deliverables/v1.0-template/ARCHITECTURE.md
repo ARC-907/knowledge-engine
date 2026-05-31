@@ -55,7 +55,7 @@ engine/                          the engine (code layer)
     sandbox/                     NoopSandbox scaffold + get_sandbox() factory hook
     foundation/                  opt-in pipeline foundation (YAML config loader + SQLite WAL backbone)
     pipeline/                    opt-in multi-worker pipeline (queue + message board + worker registry + task classifier)
-    agent_board/                 first-class agent coordination surface — schemas, store, FTS5 search, keys, sweeper, CLI, MCP tool group
+    agent_board/                 first-class agent coordination surface — schemas, scopes (per-project/branch/agent DB routing), store, FTS5 search, keys, sweeper, CLI, MCP tool group
     tools/                       opt-in tool host (script/service/static tool registry over HTTP)
   routing_local/                 opt-in Ollama provider module
   sandbox_adapter/              opt-in sandboxed-agent scaffold (README only)
@@ -182,7 +182,12 @@ Several subsystems are **opt-in** and the lean core works without them:
   auto-discovered MCP tool group (`agent_board/mcp_tools/`). Optional
   standalone watchdog mode lives in `scripts/agent-board/` for headless
   deploys. Buyer-facing guide: [`docs/AGENT-BOARD.md`](docs/AGENT-BOARD.md).
-  Opt-out via `KE_BOARD_ENABLED=0`.
+  Opt-out via `KE_BOARD_ENABLED=0`. Supports **per-scope physical database
+  segregation** — pass a `scope` (project / branch / agent / loop) and the
+  board routes that request to `<KE_DATA_DIR>/board-scopes/{slug}.db`, a
+  self-contained engine-block of state, via the `foundation.db.using_db`
+  ContextVar. Omit it for the shared board; the sweeper sweeps the default
+  DB plus every scope in one leased pass.
 - `tools/` — `host.py` registers addressable tools that agents discover and
   invoke over HTTP. Three tool kinds: `script` (run a command), `service`
   (proxy to an upstream HTTP service), `static` (serve a file or directory).
