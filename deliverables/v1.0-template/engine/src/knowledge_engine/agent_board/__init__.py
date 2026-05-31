@@ -27,4 +27,4 @@ from . import schemas, scopes, store, keys, providers, sweeper, service, cli  # 
 __all__ = [
     "schemas", "scopes", "store", "keys", "providers", "sweeper", "service", "cli",
 ]
-__version__ = "1.1.0"
+__version__ = "1.2.0"

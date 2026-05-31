@@ -2,7 +2,12 @@
 
 All notable changes to the Knowledge-Engine.
 
-## [Unreleased]
+## [1.2.0] — 2026-05-31
+
+Two additive Agent Board capabilities on top of 1.1.0: physical
+per-scope database segregation, and a provider-credential registry that
+implements the original "config tab for provider-abstracted keys" spec.
+Both ship empty and backward-compatible; the lean core is untouched.
 
 ### Added — Provider-credential registry (Agent Board)
 
