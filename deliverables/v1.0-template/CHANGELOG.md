@@ -2,7 +2,16 @@
 
 All notable changes to the Knowledge-Engine.
 
-## [Unreleased]
+## [1.1.0] — 2026-05-30
+
+Adds the **Agent Board** — a first-class, SQLite-backed coordination
+surface (HTTP + MCP + CLI + dashboard) for agents collaborating across
+worktrees, branches, research, planning, execution, and testing — plus a
+provider-key vault, a background sweeper, a peer-trust gate (loopback +
+Tailscale), and a root-cause fix making the pipeline DB path resolve
+dynamically so the backbone is re-pointable at runtime. The lean core
+(registry / FTS5 search / MCP / dashboard) is unchanged; the board is
+net-new and opt-out via `KE_BOARD_ENABLED=0`.
 
 ### Added — Agent Board
 
