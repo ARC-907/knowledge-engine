@@ -19,6 +19,7 @@ This is the **free MIT-licensed engine + dashboard + demo content**. The paid St
 .\scripts\install.ps1
 .\engine\.venv\Scripts\Activate.ps1
 knowledge-engine bootstrap
+knowledge-engine capabilities
 knowledge-engine reindex
 .\scripts\serve.ps1
 # open http://127.0.0.1:9210/ui/
@@ -29,6 +30,7 @@ knowledge-engine reindex
 ./scripts/install.sh
 source engine/.venv/bin/activate
 knowledge-engine bootstrap
+knowledge-engine capabilities
 knowledge-engine reindex
 ./scripts/serve.sh
 # open http://127.0.0.1:9210/ui/
@@ -44,10 +46,11 @@ If `corpus/registry.json` references a library that isn't present in `corpus/` (
 
 ## What ships in this free MIT repo
 
-- FastAPI app with search, registry, and generation routes; single-file Alpine.js + Tailwind dashboard at `/ui/`
+- FastAPI app with search, registry, generation, and board routes; single-file Alpine.js + Tailwind dashboard at `/ui/`
 - MCP stdio server (JSON-RPC 2.0, protocol `2024-11-05`) — compatible with Claude Desktop, Cursor, Continue, any MCP client
 - SQLite FTS5 indexer with `bm25` ranking + snippet highlighting; optional bge-m3 embedding index for semantic search
 - Pluggable provider abstraction (echo / Ollama / cloud HTTP stub) for generation routing
+- Project-docs, board, hosted-tool, and sandbox substrates that can be populated by your projects and agents
 - Demo corpus under `corpus/samples/`, registry definitions at `corpus/registry.json` + `corpus/registry.schema.json`
 
 ## What the paid Standard bundle adds
@@ -67,7 +70,12 @@ Delivered as a ZIP via Polar at purchase:
 knowledge-engine mcp   # JSON-RPC 2.0 over stdio, protocol 2024-11-05
 ```
 
-Four tools exposed to AI assistants: `search`, `registry_list`, `registry_toggle`, `registry_get`. See [scripts/mcp-client-config.example.json](scripts/mcp-client-config.example.json) for a ready-to-edit config.
+The base tools are `search`, `registry_list`, `registry_toggle`, and
+`registry_get`. Optional tool groups add project-docs and board tools when the
+runtime can import them. Run `knowledge-engine capabilities` to see the current
+retrieval and capability surfaces, including empty-but-available substrates.
+See [scripts/mcp-client-config.example.json](scripts/mcp-client-config.example.json)
+for a ready-to-edit config.
 
 ## Documentation
 
@@ -77,7 +85,9 @@ Four tools exposed to AI assistants: `search`, `registry_list`, `registry_toggle
 
 - A pre-built knowledge base — you supply the libraries (or buy the Standard bundle for 3 curated ones)
 - Authentication / multi-user separation out of the box — the default app is local-trust; harden before exposing
-- A multi-worker agent runtime — the engine is a knowledge surface (corpus + FTS + MCP + dashboard)
+- A preconfigured multi-worker agent runtime — the engine ships the knowledge,
+  board, tool-hosting, and sandbox-adapter substrates, but you provide the
+  project-specific agents, tools, skills, and execution adapter.
 
 ## License
 

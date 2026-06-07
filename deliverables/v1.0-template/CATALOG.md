@@ -77,7 +77,7 @@ Seed content used by first-run demo and tests. Pure synthetic, zero PII.
 ### Core package (`engine/src/knowledge_engine/`)
 
 - `app.py` — FastAPI factory
-- `cli.py` — `knowledge-engine` console script (`info | reindex | search | serve | bootstrap | watch | mcp`)
+- `cli.py` — `knowledge-engine` console script (`info | capabilities | reindex | search | serve | bootstrap | watch | mcp`)
 - `config.py` — env-driven path/URL config (`KE_*`, `OLLAMA_BASE_URL`)
 - `indexer.py` — SQLite FTS5 indexer with `bm25` ranking + snippet highlighting
 - `mcp_server.py` — JSON-RPC 2.0 MCP stdio server (protocol `2024-11-05`)
@@ -89,7 +89,7 @@ Seed content used by first-run demo and tests. Pure synthetic, zero PII.
 - `sandbox/` — `NoopSandbox` scaffold + `get_sandbox()` factory hook
 - `foundation/` — opt-in pipeline foundation: `config.py` (YAML loader) + `db.py` (SQLite WAL backbone, schema auto-create, FTS5 board mirror)
 - `pipeline/` — opt-in multi-worker pipeline: `queue.py`, `message_board.py`, `worker_registry.py`, `task_classifier.py`
-- `agent_board/` — first-class coordination surface: `schemas.py`, `store.py`, `keys.py`, `sweeper.py`, `service.py`, `cli.py`, `mcp_tools/` (auto-discovered MCP tool group). Buyer-facing guide: `docs/AGENT-BOARD.md`.
+- `agent_board/` — first-class coordination surface: `schemas.py`, `store.py`, `keys.py`, `sweeper.py`, `service.py`, `cli.py`, `mcp_tools/` (auto-discovered MCP tool group). Buyer-facing guide: `docs/Reference/AGENT-BOARD.md`.
 - `tools/` — opt-in tool host: `host.py` (HTTP-addressable script/service/static tool registry)
 
 ### Optional adjuncts
@@ -99,7 +99,7 @@ Seed content used by first-run demo and tests. Pure synthetic, zero PII.
 
 ### Tests (`engine/tests/`)
 
-- `test_smoke.py` — 4 tests: registry CRUD roundtrip; indexer rebuild + search; FastAPI factory + `/health` + `/info`; search/reindex/registry routes under the worker threadpool (SQLite cross-thread regression guard).
+- `test_smoke.py` — smoke tests: registry CRUD roundtrip; indexer rebuild + search; FastAPI factory + `/health` + `/info`; search/reindex/registry routes under the worker threadpool (SQLite cross-thread regression guard); capability inventory shape.
 - `test_agent_board.py` — 36 tests covering schema validation + per-field length caps, store roundtrip, FTS5 search, digest summarization, atomic ack (concurrent + idempotent), sweeper one-pass + lease coordination + threshold-zero clamp + force, key vault CRUD + master uniqueness + concurrent bootstrap, config seed + update, HTTP route smoke (`/board/status`, `/board/messages`, validation rejection, search, body-size cap, untrusted-peer rejection), peer-trust gate (loopback + Tailscale + `KE_BOARD_TRUSTED_CIDRS` override + `KE_TRUST_PROXY`), `prune_by_count` unacked-blocker preservation, and MCP tool discovery + dispatch.
 
 ## Dashboard
@@ -123,6 +123,8 @@ Top-level docs:
 - `CHANGELOG.md` — version history
 - `RESEARCH-LOG.md` — corpus-research session log (initialized empty for buyer use)
 - `CATALOG.md` — this file
+- `docs/Reference/GLOSSARY.md` — product naming contract for runtime,
+  memory, catalog, skills, tools, kits, scopes, and adapters
 - `LICENSE` — MIT (engine + dashboard + demo content)
 - `LICENSE-BUYER.md` — single-buyer commercial-permissive (paid Standard bundle)
 
@@ -130,7 +132,7 @@ Top-level docs:
 
 Ships with the MIT engine under `docs/`:
 
-- `docs/AGENT-BOARD.md` — agent coordination surface: trust model,
+- `docs/Reference/AGENT-BOARD.md` — agent coordination surface: trust model,
   channels, message types, HTTP API, MCP tools, CLI, dashboard tabs,
   sweeper, provider-key vault, standalone deployment, env vars,
   anti-patterns.

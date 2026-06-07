@@ -26,7 +26,7 @@ process supervision.
 ## Endpoints
 
 The standalone service exposes only `/board/*` and `/health`. See
-`docs/AGENT-BOARD.md` for the full route inventory.
+`docs/Reference/AGENT-BOARD.md` for the full route inventory.
 
 ## Files
 

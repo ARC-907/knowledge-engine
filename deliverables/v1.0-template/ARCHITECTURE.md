@@ -28,11 +28,35 @@ This is what makes the engine corpus-agnostic: drop in any markdown corpus,
 register it, reindex, and the dashboard and MCP server expose it without a
 single code change.
 
+An empty install can therefore have zero buyer-supplied skills, kits, tools,
+or hosted tools while the substrate for those objects is still present. Treat
+"empty" as a data state, not as a missing feature.
+
+## Capability and retrieval model
+
+Knowledge Engine is a scoped capability and memory runtime. Retrieval is not a
+single table or route; it is the combined discovery, search, open, and execute
+surface over several source-owned systems:
+
+| Source | Owns | Retrieval/execution surface |
+| --- | --- | --- |
+| Base corpus registry | Libraries, skills, kits, tools, prompts, schemas | `/search`, registry APIs, base MCP `search` / `registry_*` tools |
+| Project docs | Project/lane docs, logs, git context, pointers, embeddings | `project_docs.*` MCP tools and `knowledge-engine project-docs ...` CLI |
+| Agent board | Scoped agent messages, digests, blockers, acknowledgements | `/board/*`, board CLI, `board_*` MCP tools |
+| Hosted tools | Script/service/static tool registrations | `tools/host.py` backed by `foundation.db` |
+| Foundation | Shared substrate, provider bindings, queues, tool records, future catalog/memory | SQLite WAL backbone and optional pipeline modules |
+| Sandbox/execution adapter | External agent execution, such as OpenClaw/NemoClaw | `sandbox/` factory hook and `sandbox_adapter/` bring-your-own executor |
+
+The future retrieval broker should normalize and govern these existing
+surfaces. It should not flatten all stores into one database. Each source keeps
+ownership of its full/original content and exposes allowed open modes through
+adapters.
+
 ## Component map
 
 ```
 corpus/                         the knowledge content (data layer)
-  registry.json                 source-of-truth list of libraries/skills/tools
+  registry.json                 source-of-truth list of libraries/skills/kits/tools
   registry.schema.json          JSON Schema the registry is validated against
   libraries/                    domain libraries (3 demo libraries bundled)
   skills/  capabilities/  ...    other corpus surfaces (ship empty)
@@ -47,7 +71,7 @@ engine/                          the engine (code layer)
     indexer.py                   SQLite FTS5 indexer with bm25 ranking + snippets
     watcher.py                   watchdog-based auto-register of new corpus folders
     app.py                       FastAPI application factory
-    cli.py                       `knowledge-engine` CLI (bootstrap/reindex/search/...)
+    cli.py                       `knowledge-engine` CLI (bootstrap/capabilities/reindex/search/...)
     mcp_server.py                JSON-RPC 2.0 MCP stdio server
     api/                         FastAPI routes: health, registry, search, generate
     routing/                     provider abstraction: echo, cloud HTTP, Ollama
@@ -109,13 +133,13 @@ Tailscale CGNAT range (`100.64.0.0/10`) are accepted by default, all
 other peers get 403. Override the trusted set with `KE_BOARD_TRUSTED_CIDRS`
 and require an `X-Board-Key` for non-loopback writes by flipping
 `require_key_for_post=1` in the board config. Full trust model in
-[`docs/AGENT-BOARD.md`](docs/AGENT-BOARD.md).
+[`docs/Reference/AGENT-BOARD.md`](docs/Reference/AGENT-BOARD.md).
 
 ## MCP discovery surface
 
 `engine/src/knowledge_engine/mcp_server.py` is a JSON-RPC 2.0 server speaking
-MCP protocol `2024-11-05` over stdio. It exposes four tools to AI assistants
-(Claude Desktop, Cursor, Continue, any MCP client):
+MCP protocol `2024-11-05` over stdio. It exposes the base search and registry
+tools to AI assistants (Claude Desktop, Cursor, Continue, any MCP client):
 
 - `search(query, limit=10, kind=None)` — full-text search across enabled
   libraries / skills / tools. Pass `kind` to scope to one entry type.
@@ -123,8 +147,40 @@ MCP protocol `2024-11-05` over stdio. It exposes four tools to AI assistants
 - `registry_toggle(entry_id, enabled)` — enable or disable an entry.
 - `registry_get(entry_id)` — fetch a single registry entry.
 
+Plus the project-docs tool group (auto-discovered via
+`project_docs/mcp_tools/` — 46 tools in the current build):
+
+- **capability**: `project_docs.capabilities`,
+  `project_docs.config_status`, `project_docs.healthcheck`,
+  `project_docs.explain_available_tools`.
+- **query/retrieval**: `project_docs.search`, `project_docs.get_record`,
+  `project_docs.get_summary`, `project_docs.get_full_content`,
+  `project_docs.search_by_path`, `project_docs.search_by_type`,
+  `project_docs.search_by_branch`, `project_docs.search_recent`.
+- **pointers**: `project_docs.resolve_pointer`,
+  `project_docs.list_pointers`, `project_docs.validate_pointer`,
+  `project_docs.pointer_backrefs`.
+- **git/log/test context**: `project_docs.git_context`,
+  `project_docs.search_by_commit`, `project_docs.get_branch_lineage`,
+  `project_docs.get_change_context`, `project_docs.explain_file_history`,
+  `project_docs.search_by_diff`, `project_docs.search_test_logs`,
+  `project_docs.search_build_logs`, `project_docs.search_runtime_logs`,
+  `project_docs.get_test_history`, `project_docs.get_failure_context`,
+  `project_docs.get_latest_test_summary`.
+- **embeddings**: `project_docs.embedding_status`,
+  `project_docs.generate_embeddings`, `project_docs.refresh_embeddings`,
+  `project_docs.semantic_search`, `project_docs.similar_records`,
+  `project_docs.cluster_records`.
+- **identity/scanner**: `project_docs.list_projects`,
+  `project_docs.register_project`, `project_docs.validate_project`,
+  `project_docs.list_branches`, `project_docs.resolve_fingerprint`,
+  `project_docs.current_context`, `project_docs.scanner_report`,
+  `project_docs.scanner_ingest`, `project_docs.scanner_status`,
+  `project_docs.scanner_validate`, `project_docs.scanner_plan_pointers`,
+  `project_docs.scanner_apply_pointers`.
+
 Plus the agent-board tool group (auto-discovered via
-`agent_board/mcp_tools/` — 14 tools total):
+`agent_board/mcp_tools/` — 15 tools total):
 
 - **post** (5): `board_post`, `board_claim`, `board_release`,
   `board_blocker`, `board_ack`.
@@ -133,6 +189,7 @@ Plus the agent-board tool group (auto-discovered via
   `board_message_types`. `board_digest` is the **context-saver** —
   returns counts + recent subjects instead of full bodies, so an agent
   catching up doesn't flood its context window.
+- **scope** (1): `board_scopes` — list known physical board scopes.
 - **search** (1): `board_search` — FTS5 over the board with bm25
   ranking and snippets.
 - **sweep** (1): `board_sweep_now` — manual sweeper trigger.
@@ -181,7 +238,8 @@ Several subsystems are **opt-in** and the lean core works without them:
   (`api/board_routes.py`), CLI (`knowledge-engine board ...`), and an
   auto-discovered MCP tool group (`agent_board/mcp_tools/`). Optional
   standalone watchdog mode lives in `scripts/agent-board/` for headless
-  deploys. Buyer-facing guide: [`docs/AGENT-BOARD.md`](docs/AGENT-BOARD.md).
+  deploys. Buyer-facing guide:
+  [`docs/Reference/AGENT-BOARD.md`](docs/Reference/AGENT-BOARD.md).
   Opt-out via `KE_BOARD_ENABLED=0`. Supports **per-scope physical database
   segregation** — pass a `scope` (project / branch / agent / loop) and the
   board routes that request to `<KE_DATA_DIR>/board-scopes/{slug}.db`, a

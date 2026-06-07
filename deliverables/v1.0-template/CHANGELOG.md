@@ -236,7 +236,7 @@ backbone you can hoist into any system and power up.
   `board-watchdog.ps1` (Windows), `serve-board.sh` (POSIX) for headless
   deployments on a separate port (default 11437 to avoid colliding with
   the engine's 9210).
-- **Buyer guide** (`docs/AGENT-BOARD.md`) — channels, message types,
+- **Buyer guide** (`docs/Reference/AGENT-BOARD.md`) — channels, message types,
   HTTP API, MCP tool surface, CLI reference, dashboard walkthrough,
   sweeper details, provider keys, standalone deployment, configuration
   knobs.
