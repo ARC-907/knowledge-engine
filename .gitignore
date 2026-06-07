@@ -32,6 +32,12 @@ internal-planning/
 **/sandbox_nemoclaw/state/
 **/sandbox_nemoclaw/identity/
 **/sandbox_nemoclaw/logs/
+**/sandbox_openclaw/
+**/sandbox_nemoclaw/
+**/vendor/openclaw/
+**/vendor/nemoclaw/
+**/external/openclaw/
+**/external/nemoclaw/
 **/routing_local/data/
 
 # Generated graph artifacts (regenerable)
