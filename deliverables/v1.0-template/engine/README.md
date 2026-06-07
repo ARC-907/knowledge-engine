@@ -13,6 +13,11 @@ subtree is self-contained and can be lifted into its own repo without changes.
   - `app.py` — FastAPI application factory
   - `routing/` — provider abstraction; cloud providers live here
   - `api/` — HTTP route modules
+  - `project_docs/` — project/lane memory, scanner, pointers, git/log context, embeddings, MCP tools
+  - `agent_board/` — scoped board store, HTTP/CLI/MCP surfaces, sweeper, provider bindings
+  - `foundation/` — optional SQLite backbone for hosted tools, pipeline, shared state
+  - `tools/` — hosted script/service/static tool registry
+  - `sandbox/` — execution-adapter hook
 - `routing_local/` — **opt-in** Ollama / local-LLM provider; not imported unless installed
 - `sandbox_adapter/` — **opt-in** Docker / WSL sandbox adapter
 - `data/` — runtime artifacts (SQLite mirror, indexes); gitignored
@@ -24,6 +29,16 @@ subtree is self-contained and can be lifted into its own repo without changes.
 pip install -e .[dev]
 KE_CORPUS_ROOT=../corpus uvicorn knowledge_engine.app:create_app --factory --reload
 ```
+
+Capability inventory:
+
+```bash
+knowledge-engine capabilities
+```
+
+This prints seeded corpus counts plus available retrieval, board,
+project-docs, hosted-tool, and sandbox surfaces. Empty tool tables are reported
+as empty data, not as missing features.
 
 ## Configuration (env)
 

@@ -27,7 +27,7 @@ def slugify(name: str) -> str:
     return s.strip("-")
 
 
-_FOLDER_TO_KIND = {"libraries": "library", "skills": "skill", "kits": "tool", "capabilities": "tool"}
+_FOLDER_TO_KIND = {"libraries": "library", "skills": "skill", "kits": "kit", "capabilities": "tool"}
 
 
 def auto_register(config: Config, registry: Registry, on_change: Callable[[], None] | None = None) -> int:

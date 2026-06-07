@@ -10,9 +10,14 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-EntryKind = Literal["library", "skill", "tool"]
+EntryKind = Literal["library", "skill", "kit", "tool"]
 
-_KIND_TO_BUCKET = {"library": "libraries", "skill": "skills", "tool": "tools"}
+_KIND_TO_BUCKET = {
+    "library": "libraries",
+    "skill": "skills",
+    "kit": "kits",
+    "tool": "tools",
+}
 _BUCKET_TO_KIND = {v: k for k, v in _KIND_TO_BUCKET.items()}
 
 
@@ -77,6 +82,7 @@ class Registry:
             "version": 1,
             "libraries": [],
             "skills": [],
+            "kits": [],
             "tools": [],
             "lifecycle": {"watch_enabled": True, "auto_register": True},
         }

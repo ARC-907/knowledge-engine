@@ -38,13 +38,13 @@ SERVER_INFO = {"name": "knowledge-engine", "version": __version__}
 TOOLS = [
     {
         "name": "search",
-        "description": "Full-text search across enabled libraries/skills/tools in the corpus.",
+        "description": "Full-text search across enabled libraries, skills, kits, and tools in the corpus.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "FTS5 query string"},
                 "limit": {"type": "integer", "default": 10},
-                "kind": {"type": "string", "enum": ["library", "skill", "tool"], "description": "Optional kind filter"},
+                "kind": {"type": "string", "enum": ["library", "skill", "kit", "tool"], "description": "Optional kind filter"},
             },
             "required": ["query"],
         },
@@ -55,7 +55,7 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "kind": {"type": "string", "enum": ["library", "skill", "tool"]},
+                "kind": {"type": "string", "enum": ["library", "skill", "kit", "tool"]},
                 "enabled_only": {"type": "boolean", "default": False},
             },
         },

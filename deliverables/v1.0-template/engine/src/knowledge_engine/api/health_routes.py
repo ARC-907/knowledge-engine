@@ -26,6 +26,7 @@ def info(request: Request) -> dict:
         "counts": {
             "libraries": len(registry.list("library")),
             "skills": len(registry.list("skill")),
+            "kits": len(registry.list("kit")),
             "tools": len(registry.list("tool")),
         },
         "providers": providers.list(),

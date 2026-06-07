@@ -11,6 +11,9 @@ from .registry import Registry, RegistryEntry
 from .indexer import Indexer
 
 
+BASE_MCP_TOOLS = ["search", "registry_list", "registry_toggle", "registry_get"]
+
+
 def _slugify(name: str) -> str:
     out = []
     for ch in name.lower():
@@ -25,15 +28,15 @@ def _slugify(name: str) -> str:
 
 
 def _bootstrap(config: Config, registry: Registry) -> dict[str, int]:
-    """Walk corpus/ and register every library/skill/tool folder found."""
+    """Walk corpus/ and register every library/skill/kit/tool folder found."""
     root = config.corpus_root
     plan = [
         ("libraries", "library"),
         ("skills", "skill"),
-        ("kits", "tool"),
+        ("kits", "kit"),
         ("capabilities", "tool"),
     ]
-    counts: dict[str, int] = {"library": 0, "skill": 0, "tool": 0, "skipped": 0}
+    counts: dict[str, int] = {"library": 0, "skill": 0, "kit": 0, "tool": 0, "skipped": 0}
     for sub, kind in plan:
         folder = root / sub
         if not folder.exists():
@@ -56,12 +59,108 @@ def _bootstrap(config: Config, registry: Registry) -> dict[str, int]:
     return counts
 
 
+def _safe_payload(fn, fallback):
+    """Run an optional capability probe without letting it break CLI inventory."""
+    try:
+        return fn()
+    except Exception as exc:  # noqa: BLE001 - inventory must degrade gracefully
+        return {"status": "error", "error": str(exc), **fallback}
+
+
+def _capability_inventory(config: Config, registry: Registry) -> dict:
+    """Return the runtime capability inventory for humans and agents.
+
+    This reports both seeded data and empty-but-available substrates. An empty
+    hosted-tool table or empty skill registry is not a missing feature; it means
+    no project/agent has populated that surface yet.
+    """
+    counts = {
+        "libraries": len(registry.list("library")),
+        "skills": len(registry.list("skill")),
+        "kits": len(registry.list("kit")),
+        "tools": len(registry.list("tool")),
+    }
+
+    def project_docs_payload() -> dict:
+        from .project_docs.config import load_config as load_pd_config
+        from .project_docs.mcp_tools import collect_tools as collect_pd_tools
+
+        pd_cfg = load_pd_config()
+        pd_tools, _ = collect_pd_tools(pd_cfg)
+        return {
+            "status": "available",
+            "enabled": pd_cfg.enabled,
+            "mcp_enabled": pd_cfg.mcp.enabled,
+            "tool_count": len(pd_tools),
+            "tools": [tool["name"] for tool in pd_tools],
+        }
+
+    def board_payload() -> dict:
+        from .agent_board.mcp_tools import collect_tools as collect_board_tools
+        from .agent_board import scopes
+
+        board_tools, _ = collect_board_tools()
+        known_scopes = scopes.list_scopes()
+        return {
+            "status": "available",
+            "tool_count": len(board_tools),
+            "tools": [tool["name"] for tool in board_tools],
+            "scope_count": len(known_scopes),
+            "scopes": known_scopes,
+        }
+
+    def hosted_tools_payload() -> dict:
+        from .tools import host
+
+        hosted = host.list_tools(enabled_only=False)
+        return {
+            "status": "available",
+            "tool_count": len(hosted),
+            "tools": [
+                {
+                    "name": tool.get("name"),
+                    "kind": tool.get("kind"),
+                    "route": tool.get("route"),
+                    "enabled": bool(tool.get("enabled", 0)),
+                }
+                for tool in hosted
+            ],
+        }
+
+    def sandbox_payload() -> dict:
+        from .sandbox import get_sandbox
+
+        sandbox = get_sandbox()
+        return {
+            "status": "available",
+            "adapter": getattr(sandbox, "name", sandbox.__class__.__name__),
+            "configured": getattr(sandbox, "name", "") != "noop",
+        }
+
+    return {
+        "runtime": "knowledge-engine",
+        "corpus_root": str(config.corpus_root),
+        "data_dir": str(config.data_dir),
+        "registry": {
+            "path": str(config.registry_path),
+            "counts": counts,
+            "empty_surfaces": [name for name, count in counts.items() if count == 0],
+        },
+        "base_mcp": {"tool_count": len(BASE_MCP_TOOLS), "tools": BASE_MCP_TOOLS},
+        "project_docs": _safe_payload(project_docs_payload, {"tool_count": 0, "tools": []}),
+        "board": _safe_payload(board_payload, {"tool_count": 0, "tools": [], "scopes": []}),
+        "hosted_tools": _safe_payload(hosted_tools_payload, {"tool_count": 0, "tools": []}),
+        "sandbox": _safe_payload(sandbox_payload, {}),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="knowledge-engine")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("info", help="Print configuration and counts")
     sub.add_parser("bootstrap", help="Walk corpus/ and register every folder as an entry")
+    sub.add_parser("capabilities", help="Print runtime capability and retrieval-surface inventory")
     sub.add_parser("reindex", help="Rebuild FTS5 index over enabled entries")
     sub.add_parser("watch", help="Start watchdog: auto-register new corpus folders")
     sub.add_parser("mcp", help="Run MCP stdio server for AI clients")
@@ -114,9 +213,14 @@ def main() -> int:
             "counts": {
                 "libraries": len(registry.list("library")),
                 "skills": len(registry.list("skill")),
+                "kits": len(registry.list("kit")),
                 "tools": len(registry.list("tool")),
             },
         }, indent=2))
+        return 0
+
+    if args.cmd == "capabilities":
+        print(json.dumps(_capability_inventory(config, registry), indent=2))
         return 0
 
     if args.cmd == "bootstrap":

@@ -14,7 +14,7 @@ router = APIRouter()
 
 class EntryIn(BaseModel):
     id: str
-    kind: Literal["library", "skill", "tool"]
+    kind: Literal["library", "skill", "kit", "tool"]
     name: str
     path: str
     enabled: bool = True

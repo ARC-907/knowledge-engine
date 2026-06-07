@@ -25,6 +25,7 @@
       "external_deps": []
     }
   ],
+  "kits": [],
   "tools": [],
   "lifecycle": {
     "watch_enabled": false,
