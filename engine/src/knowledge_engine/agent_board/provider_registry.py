@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from ..foundation import db
+from ..runtime.foundation import db
 
 # Recommended env-var binding per known provider. Operators may override
 # with any name; these are just the defaults the GUI pre-fills and that

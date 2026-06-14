@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from ..foundation import db
+from ..runtime.foundation import db
 
 KEY_PREFIX = "keb_"
 
@@ -355,7 +355,7 @@ def ensure_master_key() -> dict[str, Any] | None:
 
         # Best-effort file write — never raise from bootstrap.
         try:
-            from ..config import Config
+            from ..core.config import Config
             cfg = Config.from_env()
             key_file = cfg.data_dir / "board-master-key.txt"
             key_file.write_text(

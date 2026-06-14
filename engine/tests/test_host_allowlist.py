@@ -8,7 +8,7 @@ paths so future edits cannot silently re-introduce a shell-injection surface.
 
 from __future__ import annotations
 
-from knowledge_engine.tools import host
+from knowledge_engine.tool_host import host
 
 
 def _stub_tool(command: str, timeout: int = 5) -> dict:

@@ -25,7 +25,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
-from ..agent_board import keys, providers, schemas, scopes, store, sweeper
+from ...agent_board import keys, provider_registry as providers, schemas, scopes, store, sweeper
 
 
 router = APIRouter()

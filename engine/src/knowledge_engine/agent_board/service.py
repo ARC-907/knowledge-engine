@@ -77,7 +77,7 @@ def _resolve_cors_origins() -> list[str]:
 
 def create_standalone_app() -> FastAPI:
     """Build a FastAPI app exposing only the /board/* routes."""
-    from ..api import board_routes  # local import — keeps Settings cold-import safe
+    from ..server.api import board_routes  # local import — keeps Settings cold-import safe
 
     app = FastAPI(
         title="Knowledge Engine — Agent Board (standalone)",

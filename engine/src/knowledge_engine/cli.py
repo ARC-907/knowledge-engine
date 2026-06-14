@@ -6,9 +6,9 @@ import argparse
 import json
 import sys
 
-from .config import Config
-from .registry import Registry, RegistryEntry
-from .indexer import Indexer
+from .core.config import Config
+from .core.registry import Registry, RegistryEntry
+from .retrieval.fts5 import Indexer
 
 
 BASE_MCP_TOOLS = ["search", "registry_list", "registry_toggle", "registry_get"]
@@ -110,7 +110,7 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
         }
 
     def hosted_tools_payload() -> dict:
-        from .tools import host
+        from .tool_host import host
 
         hosted = host.list_tools(enabled_only=False)
         return {
@@ -128,7 +128,7 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
         }
 
     def sandbox_payload() -> dict:
-        from .sandbox import get_sandbox
+        from .runtime.sandbox import get_sandbox
 
         sandbox = get_sandbox()
         return {
@@ -229,7 +229,7 @@ def main() -> int:
         return 0
 
     if args.cmd == "watch":
-        from .watcher import start_watcher, auto_register
+        from .core.watcher import start_watcher, auto_register
         added = auto_register(config, registry)
         print(json.dumps({"initial_added": added}))
         observer = start_watcher(config, registry)
@@ -244,7 +244,7 @@ def main() -> int:
         return 0
 
     if args.cmd == "mcp":
-        from .mcp_server import main as mcp_main
+        from .mcp.server import main as mcp_main
         return mcp_main()
 
     if args.cmd == "reindex":

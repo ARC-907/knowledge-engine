@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from ..registry import RegistryEntry
+from ...core.registry import RegistryEntry
 
 router = APIRouter()
 

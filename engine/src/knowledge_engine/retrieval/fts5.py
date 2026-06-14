@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from .config import Config
-from .registry import Registry
+from ..core.config import Config
+from ..core.registry import Registry
 
 INDEX_FILENAME = "index.db"
 TEXT_SUFFIXES = {".md", ".txt", ".rst"}

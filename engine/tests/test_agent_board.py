@@ -370,7 +370,7 @@ def test_trust_gate_loopback_and_tailscale(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     # Default trusted set is loopback + Tailscale CGNAT.
     os.environ.pop("KE_BOARD_TRUSTED_CIDRS", None)
-    from knowledge_engine.api.board_routes import _trusted_networks
+    from knowledge_engine.server.api.board_routes import _trusted_networks
     nets = _trusted_networks()
     assert any(str(n) == "127.0.0.1/32" for n in nets)
     assert any(str(n) == "::1/128" for n in nets)
@@ -381,7 +381,7 @@ def test_trust_gate_env_override(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     os.environ["KE_BOARD_TRUSTED_CIDRS"] = "10.0.0.0/8, 127.0.0.1/32"
     try:
-        from knowledge_engine.api.board_routes import _trusted_networks
+        from knowledge_engine.server.api.board_routes import _trusted_networks
         nets = _trusted_networks()
         # Override replaces the default — Tailscale is no longer trusted.
         assert any(str(n) == "10.0.0.0/8" for n in nets)
@@ -396,7 +396,7 @@ def test_trust_gate_untrusted_peer_rejected(tmp_path: Path) -> None:
     # Restrict to loopback only so a Tailscale-looking peer is *not* trusted.
     os.environ["KE_BOARD_TRUSTED_CIDRS"] = "127.0.0.1/32,::1/128"
     try:
-        from knowledge_engine.api.board_routes import (
+        from knowledge_engine.server.api.board_routes import (
             _is_trusted_peer, _trusted_networks,
         )
 
@@ -415,7 +415,7 @@ def test_trust_gate_untrusted_peer_rejected(tmp_path: Path) -> None:
 def test_trust_proxy_off_by_default(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     os.environ.pop("KE_TRUST_PROXY", None)
-    from knowledge_engine.api.board_routes import _trust_proxy_enabled
+    from knowledge_engine.server.api.board_routes import _trust_proxy_enabled
     assert _trust_proxy_enabled() is False
 
 
@@ -423,7 +423,7 @@ def test_trust_proxy_opt_in(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     os.environ["KE_TRUST_PROXY"] = "1"
     try:
-        from knowledge_engine.api.board_routes import _trust_proxy_enabled
+        from knowledge_engine.server.api.board_routes import _trust_proxy_enabled
         assert _trust_proxy_enabled() is True
     finally:
         os.environ.pop("KE_TRUST_PROXY", None)
@@ -499,7 +499,7 @@ def test_master_key_bootstrap_concurrent(tmp_path: Path) -> None:
     """Concurrent ensure_master_key calls produce at most one master."""
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import keys
-    from knowledge_engine.foundation import db as fdb
+    from knowledge_engine.runtime.foundation import db as fdb
     import concurrent.futures
 
     results: list[dict | None] = []
@@ -579,7 +579,7 @@ def test_http_request_body_size_cap(tmp_path: Path) -> None:
 
 def test_sweeper_lease_excludes_second_holder(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.foundation import db
+    from knowledge_engine.runtime.foundation import db
 
     assert db.acquire_sweeper_lease("holder-a", ttl_seconds=60) is True
     # Different holder, lease still valid — must be refused.
@@ -591,7 +591,7 @@ def test_sweeper_lease_excludes_second_holder(tmp_path: Path) -> None:
 def test_sweep_once_skips_when_lease_held_elsewhere(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import sweeper
-    from knowledge_engine.foundation import db
+    from knowledge_engine.runtime.foundation import db
 
     # Someone else holds the lease.
     assert db.acquire_sweeper_lease("other-process", ttl_seconds=600) is True
@@ -605,7 +605,7 @@ def test_sweep_once_skips_when_lease_held_elsewhere(tmp_path: Path) -> None:
 def test_sweep_once_force_bypasses_lease(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import sweeper
-    from knowledge_engine.foundation import db
+    from knowledge_engine.runtime.foundation import db
 
     assert db.acquire_sweeper_lease("other-process", ttl_seconds=600) is True
     result = sweeper.sweep_once(force=True)
@@ -662,7 +662,7 @@ def test_http_status_route_rejects_untrusted(tmp_path: Path) -> None:
 def test_prune_by_count_preserves_unacked_blockers(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import store
-    from knowledge_engine.pipeline import message_board as mb
+    from knowledge_engine.runtime.pipeline import message_board as mb
 
     # Post 1 unacked blocker first (oldest).
     blocker = store.post_with_validation({
@@ -820,7 +820,7 @@ def test_toggle_can_reenable_a_disabled_master(tmp_path: Path) -> None:
     """A disabled-master toggle (to re-enable) is always allowed."""
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import keys
-    from knowledge_engine.foundation import db as fdb
+    from knowledge_engine.runtime.foundation import db as fdb
 
     master = keys.ensure_master_key()
     conn = fdb.get_connection()
@@ -891,7 +891,7 @@ def test_db_path_resolves_dynamically_per_request(tmp_path: Path) -> None:
     """
     _env(tmp_path / "corpus", tmp_path / "data")
     import os
-    from knowledge_engine.foundation import db as fdb
+    from knowledge_engine.runtime.foundation import db as fdb
 
     first_path = fdb.resolve_db_path()
     conn1 = fdb.get_connection()
@@ -920,7 +920,7 @@ def test_ensure_master_key_self_heals_after_manual_delete(tmp_path: Path) -> Non
     """
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import keys
-    from knowledge_engine.foundation import db as fdb
+    from knowledge_engine.runtime.foundation import db as fdb
 
     first = keys.ensure_master_key()
     assert first is not None
@@ -1062,7 +1062,7 @@ def test_list_scopes_discovers_created(tmp_path: Path) -> None:
 
 def test_using_db_context_manager_routes_and_restores(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.foundation import db as fdb
+    from knowledge_engine.runtime.foundation import db as fdb
     from knowledge_engine.agent_board import scopes
 
     assert fdb.active_scope_db_path() is None
@@ -1201,7 +1201,7 @@ def test_board_keys_empty_by_default(tmp_path: Path) -> None:
 def test_provider_registry_empty_by_default(tmp_path: Path) -> None:
     """The provider-credential registry ships with zero bindings."""
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import providers
+    from knowledge_engine.agent_board import provider_registry as providers
 
     assert providers.list_providers() == []
 
@@ -1227,7 +1227,7 @@ def test_http_both_vaults_empty_on_fresh_install(tmp_path: Path) -> None:
 
 def test_provider_register_reports_env_set_without_leaking_secret(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import providers
+    from knowledge_engine.agent_board import provider_registry as providers
 
     secret = "sk-test-DO-NOT-LEAK-12345"
     os.environ.pop("KE_TEST_PROVIDER_VAR", None)
@@ -1253,7 +1253,7 @@ def test_provider_register_reports_env_set_without_leaking_secret(tmp_path: Path
 
 def test_provider_resolve_secret_reads_env(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import providers
+    from knowledge_engine.agent_board import provider_registry as providers
 
     os.environ.pop("KE_TEST_PROVIDER_VAR", None)
     providers.register_provider(provider="openai", env_var="KE_TEST_PROVIDER_VAR")
@@ -1273,7 +1273,7 @@ def test_provider_resolve_secret_reads_env(tmp_path: Path) -> None:
 
 def test_provider_toggle_and_delete(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import providers
+    from knowledge_engine.agent_board import provider_registry as providers
 
     b = providers.register_provider(provider="ollama", env_var="")
     assert b["enabled"] is True
@@ -1285,7 +1285,7 @@ def test_provider_toggle_and_delete(tmp_path: Path) -> None:
 
 def test_provider_default_env_var_hints(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import providers
+    from knowledge_engine.agent_board import provider_registry as providers
 
     assert providers.default_env_var("anthropic") == "KE_ANTHROPIC_API_KEY"
     assert providers.default_env_var("openai") == "KE_OPENAI_API_KEY"
@@ -1296,7 +1296,7 @@ def test_provider_default_env_var_hints(tmp_path: Path) -> None:
 def test_provider_register_rejects_bad_input(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     import pytest
-    from knowledge_engine.agent_board import providers
+    from knowledge_engine.agent_board import provider_registry as providers
 
     with pytest.raises(ValueError):
         providers.register_provider(provider="")

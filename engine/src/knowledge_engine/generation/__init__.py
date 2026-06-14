@@ -25,7 +25,7 @@ class GenerationResponse:
 
 
 class Provider(ABC):
-    """Abstract provider. Implementations live in cloud.py / routing_local/."""
+    """Abstract provider. Implementations live in cloud_http.py / ollama_provider.py."""
 
     name: str = "abstract"
 

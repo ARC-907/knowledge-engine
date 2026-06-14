@@ -23,8 +23,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, TypeVar
 
-from ..foundation import db
-from ..pipeline import message_board as mb
+from ..runtime.foundation import db
+from ..runtime.pipeline import message_board as mb
 from . import schemas
 
 _F = TypeVar("_F", bound=Callable[..., Any])

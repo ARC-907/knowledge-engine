@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ..config import Config
+from ..core.config import Config
 
 # Scope keys are operator/agent-supplied, so they're slugified before they
 # ever touch the filesystem. Only a conservative charset survives; anything

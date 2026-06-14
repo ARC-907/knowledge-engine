@@ -19,8 +19,8 @@ def test_registry_roundtrip(tmp_path: Path) -> None:
     data.mkdir()
     _env(corpus, data)
 
-    from knowledge_engine.config import Config
-    from knowledge_engine.registry import Registry, RegistryEntry
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry, RegistryEntry
 
     config = Config.from_env()
     reg = Registry(config.registry_path, config.data_dir / "registry.db")
@@ -40,9 +40,9 @@ def test_kits_are_first_class_registry_entries(tmp_path: Path) -> None:
     data.mkdir()
     _env(corpus, data)
 
-    from knowledge_engine.config import Config
-    from knowledge_engine.registry import Registry
-    from knowledge_engine.watcher import auto_register
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry
+    from knowledge_engine.core.watcher import auto_register
 
     config = Config.from_env()
     reg = Registry(config.registry_path, config.data_dir / "registry.db")
@@ -64,9 +64,9 @@ def test_indexer_smoke(tmp_path: Path) -> None:
     data.mkdir()
     _env(corpus, data)
 
-    from knowledge_engine.config import Config
-    from knowledge_engine.registry import Registry, RegistryEntry
-    from knowledge_engine.indexer import Indexer
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry, RegistryEntry
+    from knowledge_engine.retrieval.fts5 import Indexer
 
     config = Config.from_env()
     reg = Registry(config.registry_path, config.data_dir / "registry.db")
@@ -129,8 +129,8 @@ def test_search_and_reindex_routes_threadsafe(tmp_path: Path) -> None:
 
     from fastapi.testclient import TestClient
     from knowledge_engine.app import create_app
-    from knowledge_engine.config import Config
-    from knowledge_engine.registry import Registry, RegistryEntry
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry, RegistryEntry
 
     config = Config.from_env()
     reg = Registry(config.registry_path, config.data_dir / "registry.db")
@@ -169,8 +169,8 @@ def test_capability_inventory_reports_empty_substrates(tmp_path: Path) -> None:
     _env(corpus, data)
 
     from knowledge_engine.cli import _capability_inventory
-    from knowledge_engine.config import Config
-    from knowledge_engine.registry import Registry
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry
 
     config = Config.from_env()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")

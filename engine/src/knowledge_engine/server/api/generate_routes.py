@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from ..routing import GenerationRequest
+from ...generation import GenerationRequest
 
 router = APIRouter()
 

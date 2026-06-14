@@ -23,8 +23,8 @@ from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
-from ..foundation import config
-from ..foundation import db as db_mod
+from ..runtime.foundation import config
+from ..runtime.foundation import db as db_mod
 
 PIPELINE_ROOT = config.PIPELINE_ROOT
 
