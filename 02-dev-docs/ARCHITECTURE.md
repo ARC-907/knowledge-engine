@@ -28,7 +28,7 @@ This is what makes the engine corpus-agnostic: drop in any markdown corpus,
 register it, reindex, and the dashboard and MCP server expose it without a
 single code change.
 
-An empty install can therefore have zero buyer-supplied skills, kits, tools,
+An empty install can therefore have zero user-supplied skills, kits, tools,
 or hosted tools while the substrate for those objects is still present. Treat
 "empty" as a data state, not as a missing feature.
 
@@ -40,7 +40,7 @@ surface over several source-owned systems:
 
 | Source | Owns | Retrieval/execution surface |
 | --- | --- | --- |
-| Base corpus registry | Libraries, skills, kits, tools, prompts, schemas | `/search`, registry APIs, base MCP `search` / `registry_*` tools |
+| Base corpus registry | Libraries, skills, kits, tools | `/search`, registry APIs, base MCP `search` / `registry_*` tools |
 | Project docs | Project/lane docs, logs, git context, pointers, embeddings | `project_docs.*` MCP tools and `knowledge-engine project-docs ...` CLI |
 | Agent board | Scoped agent messages, digests, blockers, acknowledgements | `/board/*`, board CLI, `board_*` MCP tools |
 | Hosted tools | Script/service/static tool registrations | `tools/host.py` backed by `foundation.db` |
@@ -58,10 +58,8 @@ adapters.
 corpus/                         the knowledge content (data layer)
   registry.json                 source-of-truth list of libraries/skills/kits/tools
   registry.schema.json          JSON Schema the registry is validated against
-  libraries/                    domain libraries (3 demo libraries bundled)
-  skills/  capabilities/  ...    other corpus surfaces (ship empty)
-  schemas/  prompts/             bundled JSON schemas + prompt templates
-  samples/                       demo-library + demo-skill (used by first-run + tests)
+  samples/                       demo-library + demo-skill (enabled by default; used by first-run + tests)
+  <your content>                 drop your own libraries/skills/kits/tools here and register them
 
 engine/                          the engine (code layer)
   pyproject.toml                 package metadata; `knowledge-engine` console script
@@ -73,7 +71,7 @@ engine/                          the engine (code layer)
     app.py                       FastAPI application factory
     cli.py                       `knowledge-engine` CLI (bootstrap/capabilities/reindex/search/...)
     mcp_server.py                JSON-RPC 2.0 MCP stdio server
-    api/                         FastAPI routes: health, registry, search, generate
+    api/                         FastAPI routes: health, registry, search, generate, board
     routing/                     provider abstraction: echo, cloud HTTP, Ollama
     embeddings/                  opt-in bge-m3 embedding index + cosine search
     sandbox/                     NoopSandbox scaffold + get_sandbox() factory hook
@@ -81,6 +79,7 @@ engine/                          the engine (code layer)
     pipeline/                    opt-in multi-worker pipeline (queue + message board + worker registry + task classifier)
     agent_board/                 first-class agent coordination surface — schemas, scopes (per-project/branch/agent DB routing), store, FTS5 search, keys, sweeper, CLI, MCP tool group
     tools/                       opt-in tool host (script/service/static tool registry over HTTP)
+    project_docs/                opt-in project/lane docs subsystem — scanner, ingest, embeddings, git context, pointers; MCP tool group + project-docs CLI
   routing_local/                 opt-in Ollama provider module
   sandbox_adapter/              opt-in sandboxed-agent scaffold (README only)
   tests/                         pytest smoke + regression tests
@@ -132,8 +131,8 @@ The `/board/*` surface adds its own peer-trust gate: loopback and the
 Tailscale CGNAT range (`100.64.0.0/10`) are accepted by default, all
 other peers get 403. Override the trusted set with `KE_BOARD_TRUSTED_CIDRS`
 and require an `X-Board-Key` for non-loopback writes by flipping
-`require_key_for_post=1` in the board config. Full trust model in
-[`docs/Reference/AGENT-BOARD.md`](docs/Reference/AGENT-BOARD.md).
+`require_key_for_post=1` in the board config. Full trust model + route
+inventory in [`AGENT-BOARD.md`](AGENT-BOARD.md).
 
 ## MCP discovery surface
 
@@ -228,7 +227,7 @@ Several subsystems are **opt-in** and the lean core works without them:
   `queue` (lease-based SQLite task queue), `message_board` (append-only
   coordination channel), `worker_registry` (heartbeat tracking + auto-release
   of stale claims), `task_classifier` (tiny model that classifies incoming
-  tasks by domain/complexity). Buyers running coordinated agent pipelines
+  tasks by domain/complexity). Teams running coordinated agent pipelines
   on top of the engine wire this in; the lean-core happy path never touches it.
 - `agent_board/` — first-class agent coordination surface that promotes
   `pipeline/message_board` into a fully-tooled product: schema-validated
@@ -238,8 +237,7 @@ Several subsystems are **opt-in** and the lean core works without them:
   (`api/board_routes.py`), CLI (`knowledge-engine board ...`), and an
   auto-discovered MCP tool group (`agent_board/mcp_tools/`). Optional
   standalone watchdog mode lives in `scripts/agent-board/` for headless
-  deploys. Buyer-facing guide:
-  [`docs/Reference/AGENT-BOARD.md`](docs/Reference/AGENT-BOARD.md).
+  deploys. Reference guide: [`AGENT-BOARD.md`](AGENT-BOARD.md).
   Opt-out via `KE_BOARD_ENABLED=0`. Supports **per-scope physical database
   segregation** — pass a `scope` (project / branch / agent / loop) and the
   board routes that request to `<KE_DATA_DIR>/board-scopes/{slug}.db`, a

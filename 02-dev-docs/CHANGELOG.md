@@ -236,7 +236,7 @@ backbone you can hoist into any system and power up.
   `board-watchdog.ps1` (Windows), `serve-board.sh` (POSIX) for headless
   deployments on a separate port (default 11437 to avoid colliding with
   the engine's 9210).
-- **Buyer guide** (`docs/Reference/AGENT-BOARD.md`) — channels, message types,
+- **Agent Board reference guide** ([`AGENT-BOARD.md`](AGENT-BOARD.md)) — channels, message types,
   HTTP API, MCP tool surface, CLI reference, dashboard walkthrough,
   sweeper details, provider keys, standalone deployment, configuration
   knobs.
@@ -261,9 +261,9 @@ all changes are persisted in the `board_config` singleton row.
 
 The first public release of Knowledge-Engine: a corpus-agnostic, self-hosted
 knowledge engine with FTS5 search, an MCP stdio server, a single-file
-Alpine.js dashboard, and an optional bge-m3 embedding index. Ships with three
-demonstration libraries showing how to organize a knowledge corpus around
-domain-tuned three-lens frameworks so that AI agents can navigate it.
+Alpine.js dashboard, and an optional bge-m3 embedding index. Ships with a demo
+library and demo skill showing how to organize a knowledge corpus around a
+domain-tuned three-lens framework so that AI agents can navigate it.
 
 ### Added
 
@@ -279,25 +279,14 @@ domain-tuned three-lens frameworks so that AI agents can navigate it.
 - **Opt-in embedding index** (`knowledge_engine.embeddings`) — bge-m3 / Ollama
   embeddings of every markdown file in the corpus, stored in SQLite for cosine
   search. Independent of the FTS5 indexer.
-- **Demonstration corpus** — three reference libraries under `corpus/libraries/`:
-  - **Decision Analysis** — three-lens: FRAME → ANALYZE → DECIDE
-  - **AI Monetization** — three-lens: IDENTIFY → EVALUATE → EXECUTE
-  - **System Design** — three-lens: FRAME → DESIGN → EVOLVE
-- **Bundled JSON schemas** (`corpus/schemas/`) — ten schemas for common
-  research-data shapes (agent-message, audit-finding, calendar-event,
-  cluster-record, conflict-record, handoff-bundle, research-object,
-  source-record, task, tool-card).
-- **Bundled prompt templates** (`corpus/prompts/`) — twelve agnostic templates:
-  three audit, three code, four research, one extraction-worker, one cloud
-  synthesis-agent.
-- **Buyer documentation** (`docs/`) — index plus QUICKSTART,
-  BRING-YOUR-OWN-CORPUS, LIBRARY-AUTHORING, SKILL-AUTHORING, MCP-WIRING,
-  EMBEDDINGS, DEPLOYMENT, THEMING, FAQ.
-- **Licensing** — MIT for engine + dashboard + demo content (`LICENSE`);
-  single-buyer commercial-permissive for the paid Standard bundle
-  (`LICENSE-BUYER.md`).
-- `corpus/libraries/EMPTY.md` — "how to add a library" reference for every
-  empty corpus subdirectory.
+- **Demo corpus** (`corpus/samples/`) — a demo library (`demo-library`,
+  three-lens CONCEPT → PATTERN → APPLY) and a demo skill (`demo-skill`),
+  enabled in `corpus/registry.json` so `reindex` has real content on a
+  fresh clone.
+- **Documentation** — QUICKSTART, BRING-YOUR-OWN-CORPUS, LIBRARY-AUTHORING,
+  SKILL-AUTHORING, MCP-WIRING, EMBEDDINGS, DEPLOYMENT, THEMING, FAQ
+  (now under `01-user-docs/`).
+- **Licensing** — MIT for the whole project (`LICENSE`).
 - `engine/tests/test_smoke.py` — four pytest smoke tests covering registry
   CRUD, indexer rebuild + search, FastAPI factory, and search/reindex routes
   under the worker threadpool (cross-thread SQLite regression guard).

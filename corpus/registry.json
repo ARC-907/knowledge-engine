@@ -9,7 +9,7 @@
       "path": "samples/demo-library",
       "enabled": true,
       "auto_registered": false,
-      "description": "Minimal scaffolding reference shipped with the free MIT engine. The paid Standard bundle (delivered via Polar) adds 3 curated reference libraries: Decision Analysis, AI Monetization, System Design.",
+      "description": "Minimal scaffolding reference shipped with the engine; demonstrates the CONCEPT -> PATTERN -> APPLY three-lens library shape.",
       "tags": ["sample", "demo"]
     }
   ],

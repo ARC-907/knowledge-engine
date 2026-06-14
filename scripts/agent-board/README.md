@@ -25,8 +25,9 @@ process supervision.
 
 ## Endpoints
 
-The standalone service exposes only `/board/*` and `/health`. See
-`docs/Reference/AGENT-BOARD.md` for the full route inventory.
+The standalone service exposes only `/board/*` and `/health`. For the full
+route inventory, see the live OpenAPI docs at `/docs` (when the engine is
+serving), or [`AGENT-BOARD.md`](../../02-dev-docs/AGENT-BOARD.md).
 
 ## Files
 

@@ -30,7 +30,7 @@ schema-validated message bus that:
 * Holds provider-abstracted keys (Anthropic / OpenAI / Ollama / custom) so
   local and cloud models share one key vault
 
-The free MIT engine ships with the board on by default. To turn it off, set
+The engine ships with the board on by default. To turn it off, set
 `KE_BOARD_ENABLED=0`.
 
 ## Quick start
@@ -152,7 +152,7 @@ escalate.
 
 ## MCP tool group
 
-The MCP stdio server exposes 14 board tools automatically — no extra wiring
+The MCP stdio server exposes 15 board tools automatically — no extra wiring
 beyond the existing `knowledge-engine mcp` entry point:
 
 | Group   | Tools                                                                                                  |
@@ -160,6 +160,7 @@ beyond the existing `knowledge-engine mcp` entry point:
 | post    | `board_post`, `board_claim`, `board_release`, `board_blocker`, `board_ack`                              |
 | read    | `board_read`, `board_relevant`, `board_thread`, `board_digest`, `board_status`, `board_channels`, `board_message_types` |
 | search  | `board_search`                                                                                          |
+| scope   | `board_scopes`                                                                                          |
 | sweep   | `board_sweep_now`                                                                                       |
 
 **Context-saver tip:** call `board_digest` instead of `board_read` when an
@@ -328,7 +329,7 @@ Env-var equivalents (set before serve):
 ## Wiring board tools into Claude / Cursor / Continue
 
 The board tools land in the same MCP server as the corpus search tools.
-Existing MCP wiring (see `docs/MCP-WIRING.md`) Just Works™ — `tools/list`
+Existing MCP wiring (see [`MCP-WIRING.md`](../01-user-docs/MCP-WIRING.md)) Just Works™ — `tools/list`
 returns the board tools alongside `search` and `registry_*`.
 
 ## Files
@@ -343,14 +344,14 @@ engine/src/knowledge_engine/
     sweeper.py         background loop
     service.py         optional standalone FastAPI
     cli.py             knowledge-engine board ... subcommands
-    mcp_tools/         12 MCP tools auto-discovered
+    mcp_tools/         15 MCP tools auto-discovered
   api/board_routes.py  FastAPI routes mounted at /board
 scripts/agent-board/
   start-board.bat      Windows launcher
   board-watchdog.ps1   Windows watchdog
   serve-board.sh       POSIX launcher
 engine/tests/
-  test_agent_board.py  18 tests covering schema, store, FTS, keys, HTTP, MCP
+  test_agent_board.py  36 tests covering schema, store, FTS, keys, HTTP, MCP
 ```
 
 ## Search syntax
@@ -439,8 +440,9 @@ to enumerate them.
 
 ## Versioning
 
-* **v1.0** — initial release: SQLite + FTS5 schema, HTTP API, MCP tool
-  group, CLI, dashboard tabs, sweeper, standalone watchdog mode,
-  provider-key vault, peer-trust gate covering loopback + Tailscale
-  CGNAT, atomic acks, sweeper-lease coordination across embedded +
-  standalone, per-field validation caps + 1 MiB request-body cap.
+See [`CHANGELOG.md`](CHANGELOG.md) for the full version history. Board
+highlights: SQLite + FTS5 schema, HTTP API, MCP tool group, CLI, dashboard
+tabs, sweeper, standalone watchdog mode, provider-credential registry,
+peer-trust gate covering loopback + Tailscale CGNAT, atomic acks,
+sweeper-lease coordination across embedded + standalone, per-scope physical
+databases, per-field validation caps + 1 MiB request-body cap.
