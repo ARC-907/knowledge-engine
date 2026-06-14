@@ -17,10 +17,10 @@ from .. import __version__
 from ..core.config import Config
 from ..core.registry import Registry
 from ..retrieval.fts5 import Indexer
-from ..project_docs.config import load_config as load_pd_config
-from ..project_docs.mcp_tools import collect_tools as collect_pd_tools
-from ..project_docs.mcp_tools.base import ToolContext
-from ..project_docs.paths import resolve_project_root
+from ..project_context.config import load_config as load_pd_config
+from ..project_context.mcp_tools import collect_tools as collect_pd_tools
+from ..project_context.mcp_tools.base import ToolContext
+from ..project_context.paths import resolve_project_root
 
 # Agent board MCP tool group — discovered via the parallel auto-collect pattern.
 try:
@@ -98,7 +98,7 @@ class Server:
             if pd_cfg.mcp.enabled:
                 self.pd_ctx = ToolContext(cfg=pd_cfg, root=resolve_project_root())
                 self.pd_tools, self.pd_dispatch = collect_pd_tools(pd_cfg)
-        except Exception:  # noqa: BLE001 — project-docs must never break the base server
+        except Exception:  # noqa: BLE001 — project-context must never break the base server
             self.pd_tools, self.pd_dispatch, self.pd_ctx = [], {}, None
 
         # ── Agent board subsystem (optional, off unless module imports) ──

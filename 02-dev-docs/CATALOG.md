@@ -31,14 +31,14 @@ add your own under `corpus/` and register them (see
 ## Engine modules (`engine/src/knowledge_engine/`)
 
 - `cli.py` — `knowledge-engine` console-script entrypoint
-  (`info | bootstrap | capabilities | reindex | watch | search | serve | mcp | project-docs | board | board-serve`)
+  (`info | bootstrap | capabilities | reindex | watch | search | serve | mcp | project-context | board | board-serve`)
 - `app.py`, `mcp_server.py` — compatibility shims re-exporting `server.app` / `mcp.server`
 - `core/` — `config.py` (env path/URL config, `KE_*`, `OLLAMA_BASE_URL`), `registry.py` (JSON registry + SQLite mirror), `watcher.py` (`watchdog` auto-register)
 - `server/` — `app.py` (FastAPI application factory) + `api/` route modules: `health_routes`, `registry_routes`, `search_routes`, `generate_routes`, `board_routes`
 - `mcp/server.py` — JSON-RPC 2.0 MCP stdio server (protocol `2024-11-05`)
 - `generation/` — provider abstraction: `EchoProvider`, `CloudHTTPProvider` (`cloud_http.py`), `OllamaProvider`
 - `retrieval/` — `fts5.py` (SQLite FTS5 indexer with `bm25` ranking + snippet highlighting) + opt-in bge-m3 embeddings (`embeddings/build.py` + `search.py`)
-- `project_docs/` — opt-in project/lane documentation subsystem: scanner, ingest, embeddings, git context, pointers, registry; `mcp_tools/` group + `knowledge-engine project-docs` CLI
+- `project_context/` — opt-in project/lane documentation subsystem: scanner, ingest, embeddings, git context, pointers, registry; `mcp_tools/` group + `knowledge-engine project-context` CLI
 - `agent_board/` — first-class coordination surface: `schemas.py`, `scopes.py`, `store.py`, `keys.py`, `provider_registry.py`, `sweeper.py`, `service.py`, `cli.py`, `mcp_tools/` (auto-discovered MCP tool group)
 - `tool_host/` — opt-in tool host: `host.py` (HTTP-addressable script/service/static tool registry)
 - `runtime/` — execution substrate: `foundation/` (`config.py` YAML loader + `db.py` SQLite WAL backbone, schema auto-create, FTS5 board mirror), `pipeline/` (`queue.py`, `message_board.py`, `worker_registry.py`, `task_classifier.py`), `sandbox/` (`NoopSandbox` + `get_sandbox()` hook)
@@ -53,7 +53,7 @@ add your own under `corpus/` and register them (see
 - `test_smoke.py` — registry CRUD roundtrip; indexer rebuild + search; FastAPI factory + `/health` + `/info`; search/reindex/registry routes under the worker threadpool (SQLite cross-thread regression guard); capability inventory shape.
 - `test_agent_board.py` — board schema validation + per-field caps, store roundtrip, FTS5 search, digest summarization, atomic ack, sweeper lease/force/threshold-clamp, key vault CRUD + master uniqueness, config, HTTP route smoke, peer-trust gate, `prune_by_count` preservation, and MCP tool discovery + dispatch.
 - `test_host_allowlist.py` — hosted-tool host allowlist enforcement.
-- `project_docs/` — the project-docs subsystem test suite (config, db, ingest, scanner, embeddings, pointers, git context, query/registry/log MCP tools, etc.), with fixtures under `tests/fixtures/sample_project/`.
+- `project_context/` — the project-context subsystem test suite (config, db, ingest, scanner, embeddings, pointers, git context, query/registry/log MCP tools, etc.), with fixtures under `tests/fixtures/sample_project/`.
 
 ## Dashboard
 

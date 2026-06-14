@@ -1,6 +1,6 @@
 """Auto-discovered MCP tool group for the agent board.
 
-Mirrors the `project_docs.mcp_tools` pattern: every file in this package named
+Mirrors the `project_context.mcp_tools` pattern: every file in this package named
 ``*_tools.py`` exports three module-level attributes:
 
 * ``GROUP: str``
@@ -9,7 +9,7 @@ Mirrors the `project_docs.mcp_tools` pattern: every file in this package named
 
 ``collect_tools()`` walks this package and returns the merged list + dispatch
 map for `mcp_server.py` to mount alongside the engine's base tools and the
-project-docs tools.
+project-context tools.
 """
 
 from __future__ import annotations

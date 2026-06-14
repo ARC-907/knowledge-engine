@@ -178,7 +178,7 @@ def test_capability_inventory_reports_empty_substrates(tmp_path: Path) -> None:
 
     assert inventory["runtime"] == "knowledge-engine"
     assert inventory["base_mcp"]["tool_count"] == 4
-    assert inventory["project_docs"]["tool_count"] >= 40
+    assert inventory["project_context"]["tool_count"] >= 40
     assert inventory["board"]["tool_count"] >= 10
     assert inventory["hosted_tools"]["status"] == "available"
     assert inventory["hosted_tools"]["tool_count"] == 0

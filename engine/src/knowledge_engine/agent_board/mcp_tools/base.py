@@ -1,6 +1,6 @@
 """Shared scaffolding for agent-board MCP tool modules.
 
-Result envelopes match the project-docs pattern so dispatching looks the same
+Result envelopes match the project-context pattern so dispatching looks the same
 to the MCP server. Lightweight context object exposes the store + keys so
 modules don't need to re-import everything.
 """

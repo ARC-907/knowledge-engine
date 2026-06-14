@@ -41,7 +41,7 @@ surface over several source-owned systems:
 | Source | Owns | Retrieval/execution surface |
 | --- | --- | --- |
 | Base corpus registry | Libraries, skills, kits, tools | `/search`, registry APIs, base MCP `search` / `registry_*` tools |
-| Project docs | Project/lane docs, logs, git context, pointers, embeddings | `project_docs.*` MCP tools and `knowledge-engine project-docs ...` CLI |
+| Project context | Project/lane docs, logs, git context, pointers, embeddings | `project_context.*` MCP tools and `knowledge-engine project-context ...` CLI |
 | Agent board | Scoped agent messages, digests, blockers, acknowledgements | `/board/*`, board CLI, `board_*` MCP tools |
 | Hosted tools | Script/service/static tool registrations | `tool_host/host.py` backed by `runtime.foundation.db` |
 | Foundation | Shared substrate, provider bindings, queues, tool records, future catalog/memory | SQLite WAL backbone and optional pipeline modules |
@@ -71,7 +71,7 @@ engine/                          the engine (code layer)
     mcp/                         server.py — JSON-RPC 2.0 MCP stdio server
     generation/                  provider abstraction: echo, cloud HTTP (cloud_http.py), Ollama
     retrieval/                   fts5.py (FTS5 index, bm25 + snippets) + embeddings/ (opt-in bge-m3 cosine search)
-    project_docs/                opt-in project/lane subsystem — scanner, ingest, embeddings, git context, pointers; MCP tool group + project-docs CLI
+    project_context/                opt-in project/lane subsystem — scanner, ingest, embeddings, git context, pointers; MCP tool group + project-context CLI
     agent_board/                 agent coordination surface — schemas, scopes (per-project/branch/agent DB routing), store, FTS5 search, keys, provider_registry, sweeper, CLI, MCP tool group
     tool_host/                   opt-in tool host (script/service/static tool registry over HTTP)
     runtime/                     execution substrate — foundation/ (YAML config + SQLite WAL backbone), pipeline/ (queue + message board + worker registry + task classifier), sandbox/ hook
@@ -141,37 +141,37 @@ tools to AI assistants (Claude Desktop, Cursor, Continue, any MCP client):
 - `registry_toggle(entry_id, enabled)` — enable or disable an entry.
 - `registry_get(entry_id)` — fetch a single registry entry.
 
-Plus the project-docs tool group (auto-discovered via
-`project_docs/mcp_tools/` — 46 tools in the current build):
+Plus the project-context tool group (auto-discovered via
+`project_context/mcp_tools/` — 46 tools in the current build):
 
-- **capability**: `project_docs.capabilities`,
-  `project_docs.config_status`, `project_docs.healthcheck`,
-  `project_docs.explain_available_tools`.
-- **query/retrieval**: `project_docs.search`, `project_docs.get_record`,
-  `project_docs.get_summary`, `project_docs.get_full_content`,
-  `project_docs.search_by_path`, `project_docs.search_by_type`,
-  `project_docs.search_by_branch`, `project_docs.search_recent`.
-- **pointers**: `project_docs.resolve_pointer`,
-  `project_docs.list_pointers`, `project_docs.validate_pointer`,
-  `project_docs.pointer_backrefs`.
-- **git/log/test context**: `project_docs.git_context`,
-  `project_docs.search_by_commit`, `project_docs.get_branch_lineage`,
-  `project_docs.get_change_context`, `project_docs.explain_file_history`,
-  `project_docs.search_by_diff`, `project_docs.search_test_logs`,
-  `project_docs.search_build_logs`, `project_docs.search_runtime_logs`,
-  `project_docs.get_test_history`, `project_docs.get_failure_context`,
-  `project_docs.get_latest_test_summary`.
-- **embeddings**: `project_docs.embedding_status`,
-  `project_docs.generate_embeddings`, `project_docs.refresh_embeddings`,
-  `project_docs.semantic_search`, `project_docs.similar_records`,
-  `project_docs.cluster_records`.
-- **identity/scanner**: `project_docs.list_projects`,
-  `project_docs.register_project`, `project_docs.validate_project`,
-  `project_docs.list_branches`, `project_docs.resolve_fingerprint`,
-  `project_docs.current_context`, `project_docs.scanner_report`,
-  `project_docs.scanner_ingest`, `project_docs.scanner_status`,
-  `project_docs.scanner_validate`, `project_docs.scanner_plan_pointers`,
-  `project_docs.scanner_apply_pointers`.
+- **capability**: `project_context.capabilities`,
+  `project_context.config_status`, `project_context.healthcheck`,
+  `project_context.explain_available_tools`.
+- **query/retrieval**: `project_context.search`, `project_context.get_record`,
+  `project_context.get_summary`, `project_context.get_full_content`,
+  `project_context.search_by_path`, `project_context.search_by_type`,
+  `project_context.search_by_branch`, `project_context.search_recent`.
+- **pointers**: `project_context.resolve_pointer`,
+  `project_context.list_pointers`, `project_context.validate_pointer`,
+  `project_context.pointer_backrefs`.
+- **git/log/test context**: `project_context.git_context`,
+  `project_context.search_by_commit`, `project_context.get_branch_lineage`,
+  `project_context.get_change_context`, `project_context.explain_file_history`,
+  `project_context.search_by_diff`, `project_context.search_test_logs`,
+  `project_context.search_build_logs`, `project_context.search_runtime_logs`,
+  `project_context.get_test_history`, `project_context.get_failure_context`,
+  `project_context.get_latest_test_summary`.
+- **embeddings**: `project_context.embedding_status`,
+  `project_context.generate_embeddings`, `project_context.refresh_embeddings`,
+  `project_context.semantic_search`, `project_context.similar_records`,
+  `project_context.cluster_records`.
+- **identity/scanner**: `project_context.list_projects`,
+  `project_context.register_project`, `project_context.validate_project`,
+  `project_context.list_branches`, `project_context.resolve_fingerprint`,
+  `project_context.current_context`, `project_context.scanner_report`,
+  `project_context.scanner_ingest`, `project_context.scanner_status`,
+  `project_context.scanner_validate`, `project_context.scanner_plan_pointers`,
+  `project_context.scanner_apply_pointers`.
 
 Plus the agent-board tool group (auto-discovered via
 `agent_board/mcp_tools/` — 15 tools total):

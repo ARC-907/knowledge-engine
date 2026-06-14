@@ -2,6 +2,36 @@
 
 All notable changes to the Knowledge-Engine.
 
+## [2.0.0] — 2026-06-14
+
+### Changed (BREAKING) — `project_docs` subsystem renamed to `project_context`
+
+Renamed for clarity (the subsystem indexes project *context* — code, docstrings,
+comments, logs, git — not just "docs"):
+
+- **MCP tools** `project_docs.*` → `project_context.*` (every tool in the group).
+- **CLI** `knowledge-engine project-docs` → `knowledge-engine project-context`.
+- **Config** `[project_docs]` TOML table → `[project_context]`; `ProjectDocsConfig`
+  → `ProjectContextConfig`; `PROJECT_DOCS_DEFAULTS` → `PROJECT_CONTEXT_DEFAULTS`.
+- **Default storage dir** `.knowledge-engine/project-docs` → `.knowledge-engine/project-context`.
+- **Python package** `knowledge_engine.project_docs` → `knowledge_engine.project_context`.
+
+SQLite **table names are intentionally unchanged** (`project_docs`,
+`project_docs_fts`, `project_doc_bodies`, …) so existing per-project databases keep
+working without a storage migration. The default storage *directory* changed —
+set `[project_context].database_dir` to your old `.knowledge-engine/project-docs`
+path if you have existing project DBs to retain.
+
+### Changed — internal package layout (non-breaking)
+
+Flattened the flat package into layered subpackages with no other public-surface
+change: `core/` (config, registry, watcher), `server/` (app + `api/`), `mcp/`,
+`generation/` (was `routing/`), `retrieval/` (`fts5.py` + `embeddings/`),
+`tool_host/` (was `tools/`), `runtime/` (`foundation/` + `pipeline/` + `sandbox/`);
+`agent_board/providers.py` → `provider_registry.py`. Root `app.py` / `mcp_server.py`
+remain as compatibility shims, so `knowledge_engine.app` / `.mcp_server` import
+paths still resolve.
+
 ## [1.2.0] — 2026-05-31
 
 Two additive Agent Board capabilities on top of 1.1.0: physical

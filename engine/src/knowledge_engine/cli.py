@@ -81,9 +81,9 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
         "tools": len(registry.list("tool")),
     }
 
-    def project_docs_payload() -> dict:
-        from .project_docs.config import load_config as load_pd_config
-        from .project_docs.mcp_tools import collect_tools as collect_pd_tools
+    def project_context_payload() -> dict:
+        from .project_context.config import load_config as load_pd_config
+        from .project_context.mcp_tools import collect_tools as collect_pd_tools
 
         pd_cfg = load_pd_config()
         pd_tools, _ = collect_pd_tools(pd_cfg)
@@ -147,7 +147,7 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
             "empty_surfaces": [name for name, count in counts.items() if count == 0],
         },
         "base_mcp": {"tool_count": len(BASE_MCP_TOOLS), "tools": BASE_MCP_TOOLS},
-        "project_docs": _safe_payload(project_docs_payload, {"tool_count": 0, "tools": []}),
+        "project_context": _safe_payload(project_context_payload, {"tool_count": 0, "tools": []}),
         "board": _safe_payload(board_payload, {"tool_count": 0, "tools": [], "scopes": []}),
         "hosted_tools": _safe_payload(hosted_tools_payload, {"tool_count": 0, "tools": []}),
         "sandbox": _safe_payload(sandbox_payload, {}),
@@ -173,7 +173,7 @@ def main() -> int:
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--port", type=int, default=9210)
 
-    pd = sub.add_parser("project-docs", help="Project-specific documentation subsystem")
+    pd = sub.add_parser("project-context", help="Project-specific documentation subsystem")
     pd.add_argument("pd_args", nargs=argparse.REMAINDER,
                     help="Subcommand + args (e.g. 'info', 'capabilities')")
 
@@ -190,8 +190,8 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    if args.cmd == "project-docs":
-        from .project_docs.cli import main as pd_main
+    if args.cmd == "project-context":
+        from .project_context.cli import main as pd_main
         return pd_main(args.pd_args)
 
     if args.cmd == "board":

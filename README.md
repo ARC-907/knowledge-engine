@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org)
-[![Status: v1.2](https://img.shields.io/badge/status-v1.2-blue.svg)](02-dev-docs/CHANGELOG.md)
+[![Status: v2.0](https://img.shields.io/badge/status-v2.0-blue.svg)](02-dev-docs/CHANGELOG.md)
 [![MCP protocol](https://img.shields.io/badge/MCP-2024--11--05-7C3AED.svg)](https://modelcontextprotocol.io)
 ![FTS5 + bge-m3](https://img.shields.io/badge/search-FTS5%20%2B%20bge--m3-003B57.svg?logo=sqlite&logoColor=white)
 
@@ -50,7 +50,7 @@ If `corpus/registry.json` references a library that isn't present in `corpus/`, 
 - MCP stdio server (JSON-RPC 2.0, protocol `2024-11-05`) — compatible with Claude Desktop, Cursor, Continue, any MCP client
 - SQLite FTS5 indexer with `bm25` ranking + snippet highlighting; optional bge-m3 embedding index for semantic search
 - Pluggable provider abstraction (echo / Ollama / cloud HTTP stub) for generation routing
-- Project-docs, agent-board, hosted-tool, and sandbox substrates that you can populate with your own projects and agents
+- Project-context, agent-board, hosted-tool, and sandbox substrates that you can populate with your own projects and agents
 - Demo corpus under `corpus/samples/`, registry definitions at `corpus/registry.json` + `corpus/registry.schema.json`
 
 ## MCP server
@@ -60,7 +60,7 @@ knowledge-engine mcp   # JSON-RPC 2.0 over stdio, protocol 2024-11-05
 ```
 
 The base tools are `search`, `registry_list`, `registry_toggle`, and
-`registry_get`. Optional tool groups add project-docs and board tools when the
+`registry_get`. Optional tool groups add project-context and board tools when the
 runtime can import them and they're enabled in config. Run
 `knowledge-engine capabilities` to see the current retrieval and capability
 surfaces, including empty-but-available substrates. See

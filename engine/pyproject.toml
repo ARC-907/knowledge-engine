@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "knowledge-engine"
-version = "1.2.0"
+version = "2.0.0"
 description = "Corpus-agnostic knowledge engine: registry, FTS5 indexer, FastAPI, MCP server."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,7 +17,7 @@ dependencies = [
     "watchdog>=4.0",
     "jsonschema>=4.21",
     "httpx>=0.27",
-    # project-docs TOML config: tomllib is stdlib on 3.11+, backport on 3.10
+    # project-context TOML config: tomllib is stdlib on 3.11+, backport on 3.10
     "tomli>=2.0; python_version < '3.11'",
 ]
 
@@ -33,7 +33,7 @@ knowledge-engine = "knowledge_engine.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-knowledge_engine = ["project_docs/migrations/*.sql"]
+knowledge_engine = ["project_context/migrations/*.sql"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

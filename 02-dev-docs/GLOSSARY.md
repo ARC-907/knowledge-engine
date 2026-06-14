@@ -74,7 +74,7 @@ allowed by scope policy.
 ## Retrieval
 
 **Retrieval Layer** is the combined discovery/search/open surface across base
-corpus search, project-docs tools, board tools, embeddings, pointer resolution,
+corpus search, project-context tools, board tools, embeddings, pointer resolution,
 hosted tool cards, skills, and global/local catalogs.
 
 **Retrieval Broker** is the future unifying facade over the existing retrieval
@@ -82,7 +82,7 @@ surfaces. It should route requests to adapters without flattening sovereign
 stores.
 
 **Adapter** is a source-specific implementation behind the broker, such as
-base corpus, project docs, board, hosted tools, global catalog, global memory,
+base corpus, project context, board, hosted tools, global catalog, global memory,
 or execution adapter.
 
 **Federation** is explicit cross-scope retrieval or capability use. Federation
@@ -92,7 +92,7 @@ requires selected sources, selected scopes, policy approval, and traceability.
 
 - Prefer product terms in UI: project, lane, board, library, kit, skill, tool,
   memory, catalog.
-- Keep implementation terms in code where precise: `project_docs`, `agent_board`,
+- Keep implementation terms in code where precise: `project_context`, `agent_board`,
   `foundation`, `registry`, `adapter`.
 - Do not use "library", "memory", "catalog", and "registry" interchangeably.
 - Do not use "tool" when the object is only documentation for a workflow; call

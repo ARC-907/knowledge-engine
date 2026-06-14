@@ -6,18 +6,16 @@ subtree is self-contained and can be lifted into its own repo without changes.
 ## Layout
 
 - `src/knowledge_engine/` — core package
-  - `config.py` — loads paths from env (`KE_CORPUS_ROOT`, `KE_DATA_DIR`)
-  - `registry.py` — `corpus/registry.json` is source of truth; SQLite mirror at `data/registry.db`
-  - `indexer.py` — FTS5 indexer over enabled libraries / skills / tools
-  - `search.py` — query API
-  - `app.py` — FastAPI application factory
-  - `routing/` — provider abstraction; cloud providers live here
-  - `api/` — HTTP route modules
-  - `project_docs/` — project/lane memory, scanner, pointers, git/log context, embeddings, MCP tools
-  - `agent_board/` — scoped board store, HTTP/CLI/MCP surfaces, sweeper, provider bindings
-  - `foundation/` — optional SQLite backbone for hosted tools, pipeline, shared state
-  - `tools/` — hosted script/service/static tool registry
-  - `sandbox/` — execution-adapter hook
+  - `cli.py` — `knowledge-engine` CLI entrypoint; `app.py` / `mcp_server.py` — compat shims
+  - `core/` — env config (`KE_CORPUS_ROOT`, `KE_DATA_DIR`), corpus registry (source of truth + SQLite mirror), watchdog auto-register
+  - `server/` — FastAPI app factory + HTTP route modules (`api/`)
+  - `mcp/` — JSON-RPC 2.0 MCP stdio server
+  - `generation/` — provider abstraction (echo / cloud HTTP / Ollama)
+  - `retrieval/` — FTS5 indexer (`fts5.py`) + optional bge-m3 embeddings
+  - `project_context/` — project/lane memory: scanner, pointers, git/log context, embeddings, MCP tools
+  - `agent_board/` — scoped board store, HTTP/CLI/MCP surfaces, sweeper, provider credential bindings
+  - `tool_host/` — hosted script/service/static tool registry
+  - `runtime/` — execution substrate: `foundation/` (SQLite backbone), `pipeline/`, `sandbox/` hook
 - `routing_local/` — **opt-in** Ollama / local-LLM provider; not imported unless installed
 - `sandbox_adapter/` — **opt-in** Docker / WSL sandbox adapter
 - `data/` — runtime artifacts (SQLite mirror, indexes); gitignored
@@ -37,7 +35,7 @@ knowledge-engine capabilities
 ```
 
 This prints seeded corpus counts plus available retrieval, board,
-project-docs, hosted-tool, and sandbox surfaces. Empty tool tables are reported
+project-context, hosted-tool, and sandbox surfaces. Empty tool tables are reported
 as empty data, not as missing features.
 
 ## Configuration (env)
