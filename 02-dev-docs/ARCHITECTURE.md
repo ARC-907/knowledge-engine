@@ -43,7 +43,7 @@ surface over several source-owned systems:
 | Base corpus registry | Libraries, skills, kits, tools | `/search`, registry APIs, base MCP `search` / `registry_*` tools |
 | Project docs | Project/lane docs, logs, git context, pointers, embeddings | `project_docs.*` MCP tools and `knowledge-engine project-docs ...` CLI |
 | Agent board | Scoped agent messages, digests, blockers, acknowledgements | `/board/*`, board CLI, `board_*` MCP tools |
-| Hosted tools | Script/service/static tool registrations | `tools/host.py` backed by `foundation.db` |
+| Hosted tools | Script/service/static tool registrations | `tool_host/host.py` backed by `runtime.foundation.db` |
 | Foundation | Shared substrate, provider bindings, queues, tool records, future catalog/memory | SQLite WAL backbone and optional pipeline modules |
 | Sandbox/execution adapter | External agent execution, such as OpenClaw/NemoClaw | `sandbox/` factory hook and `sandbox_adapter/` bring-your-own executor |
 
@@ -64,22 +64,17 @@ corpus/                         the knowledge content (data layer)
 engine/                          the engine (code layer)
   pyproject.toml                 package metadata; `knowledge-engine` console script
   src/knowledge_engine/
-    config.py                    env-driven paths (KE_CORPUS_ROOT, KE_DATA_DIR, ...)
-    registry.py                  JSON registry + SQLite mirror; the source of truth
-    indexer.py                   SQLite FTS5 indexer with bm25 ranking + snippets
-    watcher.py                   watchdog-based auto-register of new corpus folders
-    app.py                       FastAPI application factory
-    cli.py                       `knowledge-engine` CLI (bootstrap/capabilities/reindex/search/...)
-    mcp_server.py                JSON-RPC 2.0 MCP stdio server
-    api/                         FastAPI routes: health, registry, search, generate, board
-    routing/                     provider abstraction: echo, cloud HTTP, Ollama
-    embeddings/                  opt-in bge-m3 embedding index + cosine search
-    sandbox/                     NoopSandbox scaffold + get_sandbox() factory hook
-    foundation/                  opt-in pipeline foundation (YAML config loader + SQLite WAL backbone)
-    pipeline/                    opt-in multi-worker pipeline (queue + message board + worker registry + task classifier)
-    agent_board/                 first-class agent coordination surface — schemas, scopes (per-project/branch/agent DB routing), store, FTS5 search, keys, sweeper, CLI, MCP tool group
-    tools/                       opt-in tool host (script/service/static tool registry over HTTP)
-    project_docs/                opt-in project/lane docs subsystem — scanner, ingest, embeddings, git context, pointers; MCP tool group + project-docs CLI
+    cli.py                       `knowledge-engine` CLI entrypoint (bootstrap/capabilities/reindex/search/...)
+    app.py  mcp_server.py        compat shims re-exporting server.app / mcp.server
+    core/                        config.py (env paths), registry.py (source of truth), watcher.py (auto-register)
+    server/                      app.py (FastAPI factory) + api/ routes (health, registry, search, generate, board)
+    mcp/                         server.py — JSON-RPC 2.0 MCP stdio server
+    generation/                  provider abstraction: echo, cloud HTTP (cloud_http.py), Ollama
+    retrieval/                   fts5.py (FTS5 index, bm25 + snippets) + embeddings/ (opt-in bge-m3 cosine search)
+    project_docs/                opt-in project/lane subsystem — scanner, ingest, embeddings, git context, pointers; MCP tool group + project-docs CLI
+    agent_board/                 agent coordination surface — schemas, scopes (per-project/branch/agent DB routing), store, FTS5 search, keys, provider_registry, sweeper, CLI, MCP tool group
+    tool_host/                   opt-in tool host (script/service/static tool registry over HTTP)
+    runtime/                     execution substrate — foundation/ (YAML config + SQLite WAL backbone), pipeline/ (queue + message board + worker registry + task classifier), sandbox/ hook
   routing_local/                 opt-in Ollama provider module
   sandbox_adapter/              opt-in sandboxed-agent scaffold (README only)
   tests/                         pytest smoke + regression tests
@@ -210,44 +205,44 @@ bare connection across threads.
 
 Several subsystems are **opt-in** and the lean core works without them:
 
-- `embeddings/` — bge-m3 semantic search via Ollama. Build with
-  `python -m knowledge_engine.embeddings.build`.
+- `retrieval/embeddings/` — bge-m3 semantic search via Ollama. Build with
+  `python -m knowledge_engine.retrieval.embeddings.build`.
 - `routing_local/` — the Ollama provider for local model routing.
 - `sandbox_adapter/` — a scaffold for sandboxed-agent execution; ships as a
   README only. Bring your own executor.
-- `foundation/` — YAML config loader (`config.py`) + SQLite WAL backbone
-  (`db.py`). The shared base for the pipeline and tools layers. Lives under
+- `runtime/foundation/` — YAML config loader (`config.py`) + SQLite WAL backbone
+  (`db.py`). The shared base for the pipeline and tool-host layers. Lives under
   `$KE_PIPELINE_ROOT` (default: `./pipeline`); SQLite at `$KE_PIPELINE_DB`
   (default: `$KE_DATA_DIR/pipeline.db`). The DB path is resolved
   **dynamically** on every `get_connection()` (`db.resolve_db_path`), not
   frozen at import — so the backbone can be re-pointed at a different
   database at runtime, or host two DBs in one process, without stale-path
   reads. Connections are cached per-resolved-path in thread-local storage.
-- `pipeline/` — coordinated multi-worker pipeline on top of `foundation/`:
+- `runtime/pipeline/` — coordinated multi-worker pipeline on top of `runtime/foundation/`:
   `queue` (lease-based SQLite task queue), `message_board` (append-only
   coordination channel), `worker_registry` (heartbeat tracking + auto-release
   of stale claims), `task_classifier` (tiny model that classifies incoming
   tasks by domain/complexity). Teams running coordinated agent pipelines
   on top of the engine wire this in; the lean-core happy path never touches it.
 - `agent_board/` — first-class agent coordination surface that promotes
-  `pipeline/message_board` into a fully-tooled product: schema-validated
+  `runtime/pipeline/message_board` into a fully-tooled product: schema-validated
   channels + types (`schemas.py`), FTS5 search + context-compressed digest
   (`store.py`), background sweeper for TTL + stale-blocker reminders
   (`sweeper.py`), provider-key vault (`keys.py`), HTTP routes
-  (`api/board_routes.py`), CLI (`knowledge-engine board ...`), and an
+  (`server/api/board_routes.py`), CLI (`knowledge-engine board ...`), and an
   auto-discovered MCP tool group (`agent_board/mcp_tools/`). Optional
   standalone watchdog mode lives in `scripts/agent-board/` for headless
   deploys. Reference guide: [`AGENT-BOARD.md`](AGENT-BOARD.md).
   Opt-out via `KE_BOARD_ENABLED=0`. Supports **per-scope physical database
   segregation** — pass a `scope` (project / branch / agent / loop) and the
   board routes that request to `<KE_DATA_DIR>/board-scopes/{slug}.db`, a
-  self-contained engine-block of state, via the `foundation.db.using_db`
+  self-contained engine-block of state, via the `runtime.foundation.db.using_db`
   ContextVar. Omit it for the shared board; the sweeper sweeps the default
   DB plus every scope in one leased pass.
-- `tools/` — `host.py` registers addressable tools that agents discover and
+- `tool_host/` — `host.py` registers addressable tools that agents discover and
   invoke over HTTP. Three tool kinds: `script` (run a command), `service`
   (proxy to an upstream HTTP service), `static` (serve a file or directory).
-  Built on `foundation/db.py`.
+  Built on `runtime/foundation/db.py`.
 
 If an optional layer's dependencies are absent at install time, the layer
 degrades gracefully — it is never allowed to silently break the lean core.

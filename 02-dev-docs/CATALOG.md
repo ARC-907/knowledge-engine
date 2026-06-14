@@ -30,23 +30,18 @@ add your own under `corpus/` and register them (see
 
 ## Engine modules (`engine/src/knowledge_engine/`)
 
-- `app.py` — FastAPI application factory
-- `cli.py` — `knowledge-engine` console script
+- `cli.py` — `knowledge-engine` console-script entrypoint
   (`info | bootstrap | capabilities | reindex | watch | search | serve | mcp | project-docs | board | board-serve`)
-- `config.py` — env-driven path/URL config (`KE_*`, `OLLAMA_BASE_URL`)
-- `indexer.py` — SQLite FTS5 indexer with `bm25` ranking + snippet highlighting
-- `mcp_server.py` — JSON-RPC 2.0 MCP stdio server (protocol `2024-11-05`)
-- `registry.py` — JSON-backed registry + SQLite mirror
-- `watcher.py` — `watchdog`-based auto-register of new corpus folders
-- `api/` — FastAPI route modules: `health_routes`, `registry_routes`, `search_routes`, `generate_routes`, `board_routes`
-- `embeddings/` — opt-in bge-m3 embedding index + cosine search (`build.py` + `search.py`)
-- `routing/` — provider abstraction: `EchoProvider`, `CloudHTTPProvider`, `OllamaProvider`
-- `sandbox/` — `NoopSandbox` scaffold + `get_sandbox()` factory hook
-- `foundation/` — opt-in pipeline foundation: `config.py` (YAML loader) + `db.py` (SQLite WAL backbone, schema auto-create, FTS5 board mirror)
-- `pipeline/` — opt-in multi-worker pipeline: `queue.py`, `message_board.py`, `worker_registry.py`, `task_classifier.py`
-- `agent_board/` — first-class coordination surface: `schemas.py`, `scopes.py`, `store.py`, `keys.py`, `providers.py`, `sweeper.py`, `service.py`, `cli.py`, `mcp_tools/` (auto-discovered MCP tool group)
+- `app.py`, `mcp_server.py` — compatibility shims re-exporting `server.app` / `mcp.server`
+- `core/` — `config.py` (env path/URL config, `KE_*`, `OLLAMA_BASE_URL`), `registry.py` (JSON registry + SQLite mirror), `watcher.py` (`watchdog` auto-register)
+- `server/` — `app.py` (FastAPI application factory) + `api/` route modules: `health_routes`, `registry_routes`, `search_routes`, `generate_routes`, `board_routes`
+- `mcp/server.py` — JSON-RPC 2.0 MCP stdio server (protocol `2024-11-05`)
+- `generation/` — provider abstraction: `EchoProvider`, `CloudHTTPProvider` (`cloud_http.py`), `OllamaProvider`
+- `retrieval/` — `fts5.py` (SQLite FTS5 indexer with `bm25` ranking + snippet highlighting) + opt-in bge-m3 embeddings (`embeddings/build.py` + `search.py`)
 - `project_docs/` — opt-in project/lane documentation subsystem: scanner, ingest, embeddings, git context, pointers, registry; `mcp_tools/` group + `knowledge-engine project-docs` CLI
-- `tools/` — opt-in tool host: `host.py` (HTTP-addressable script/service/static tool registry)
+- `agent_board/` — first-class coordination surface: `schemas.py`, `scopes.py`, `store.py`, `keys.py`, `provider_registry.py`, `sweeper.py`, `service.py`, `cli.py`, `mcp_tools/` (auto-discovered MCP tool group)
+- `tool_host/` — opt-in tool host: `host.py` (HTTP-addressable script/service/static tool registry)
+- `runtime/` — execution substrate: `foundation/` (`config.py` YAML loader + `db.py` SQLite WAL backbone, schema auto-create, FTS5 board mirror), `pipeline/` (`queue.py`, `message_board.py`, `worker_registry.py`, `task_classifier.py`), `sandbox/` (`NoopSandbox` + `get_sandbox()` hook)
 
 ### Optional adjuncts
 

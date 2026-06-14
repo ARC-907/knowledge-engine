@@ -345,7 +345,7 @@ engine/src/knowledge_engine/
     service.py         optional standalone FastAPI
     cli.py             knowledge-engine board ... subcommands
     mcp_tools/         15 MCP tools auto-discovered
-  api/board_routes.py  FastAPI routes mounted at /board
+  server/api/board_routes.py  FastAPI routes mounted at /board
 scripts/agent-board/
   start-board.bat      Windows launcher
   board-watchdog.ps1   Windows watchdog
