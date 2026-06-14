@@ -1,9 +1,7 @@
-# --- workspace-level (covers workspace + deliverables tree) ---
-
-# Internal-only material — context for building the product, never shipped to
-# buyers and never part of any public mirror. Only deliverables/ is the product.
-productization-plan/
-internal-planning/
+# --- knowledge-engine (project repo) ---
+# This repo is the engine + dashboard + demo corpus. Internal/publishing
+# material (productization plan, build planning, storefront copy) lives
+# OUTSIDE this repo in ../knowledge-engine-internal/.
 
 # Python (anywhere in the tree)
 **/__pycache__/
@@ -90,8 +88,9 @@ Thumbs.db
 archive/
 legacy/
 
-# Operator dev tooling
-tools/
+# Operator dev tooling (repo-root only — anchored so it does NOT catch the
+# engine's knowledge_engine/tools/ Python package)
+/tools/
 pre-publish-grep.ps1
 pre-publish-grep.sh
 audit-fix.ps1

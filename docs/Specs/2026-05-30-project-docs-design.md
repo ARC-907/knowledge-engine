@@ -2,7 +2,7 @@
 
 **Status:** proposed
 **Date:** 2026-05-30
-**Target:** `deliverables/v1.0-template/engine/src/knowledge_engine/project_docs/`
+**Target:** `engine/src/knowledge_engine/project_docs/`
 **Scope decision:** build all phases; Phase 1 (identity + store + read) is the first vertical slice.
 
 This document resolves the ambiguities in the feature brief into concrete decisions,
@@ -32,7 +32,7 @@ document's concrete choices win, but never at the expense of the brief's safety 
 
 ## 2. Package layout
 
-Under `deliverables/v1.0-template/engine/src/knowledge_engine/project_docs/`:
+Under `engine/src/knowledge_engine/project_docs/`:
 
 ```
 project_docs/

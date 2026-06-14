@@ -13,7 +13,7 @@
 
 **Reference spec:** `docs/Specs/2026-05-30-project-docs-design.md` (architecture source of truth). Read it before any task.
 
-**Base directory for all paths below:** `deliverables/v1.0-template/engine/`
+**Base directory for all paths below:** `engine/`
 
 ---
 
