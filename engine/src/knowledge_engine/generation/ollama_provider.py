@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import httpx
 
-from . import Provider, GenerationRequest, GenerationResponse
+from .base import Provider, GenerationRequest, GenerationResponse
 
 
 class OllamaProvider(Provider):

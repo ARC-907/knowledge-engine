@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from . import GenerationRequest, GenerationResponse, Provider
+from .base import GenerationRequest, GenerationResponse, Provider
 
 
 class EchoProvider(Provider):
