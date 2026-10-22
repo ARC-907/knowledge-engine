@@ -151,6 +151,8 @@ _JSON_FIELDS = frozenset(
         "output_schema",
         "input_json",
         "meta_json",
+        "allowed_methods",
+        "allowed_headers",
     }
 )
 
@@ -369,7 +371,10 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             last_invoked_at TEXT,
-            invocation_count INTEGER DEFAULT 0
+            invocation_count INTEGER DEFAULT 0,
+            allow_inline INTEGER DEFAULT 0,
+            allowed_methods TEXT,
+            allowed_headers TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_tools_kind ON hosted_tools(kind);
         CREATE INDEX IF NOT EXISTS idx_tools_route ON hosted_tools(route);
@@ -590,6 +595,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _add_column(conn, "chat_conversations", "persona_id", "TEXT")
     _add_column(conn, "chat_messages", "excluded_from_context", "INTEGER DEFAULT 0")
     _add_column(conn, "chat_messages", "bookmarked", "INTEGER DEFAULT 0")
+    # Tool-host hardening: NULL method/header lists mean "use the host defaults".
+    _add_column(conn, "hosted_tools", "allow_inline", "INTEGER DEFAULT 0")
+    _add_column(conn, "hosted_tools", "allowed_methods", "TEXT")
+    _add_column(conn, "hosted_tools", "allowed_headers", "TEXT")
     conn.commit()
     seed_board_config(conn)
     _backfill_messages_fts_once(conn)
