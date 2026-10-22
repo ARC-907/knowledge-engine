@@ -45,7 +45,7 @@ surface over several source-owned systems:
 | Agent board | Scoped agent messages, digests, blockers, acknowledgements | `/board/*`, board CLI, `board_*` MCP tools |
 | Hosted tools | Script/service/static tool registrations | `tool_host/host.py` backed by `runtime.foundation.db` |
 | Foundation | Shared substrate, provider bindings, queues, tool records, future catalog/memory | SQLite WAL backbone and optional pipeline modules |
-| Sandbox/execution adapter | External agent execution, such as OpenClaw/NemoClaw | `sandbox/` factory hook and `sandbox_adapter/` bring-your-own executor |
+| Sandbox/execution adapter | Execution delegated to an external or sandboxed agent runtime | `sandbox/` factory hook and `sandbox_adapter/` bring-your-own executor |
 
 The future retrieval broker should normalize and govern these existing
 surfaces. It should not flatten all stores into one database. Each source keeps
