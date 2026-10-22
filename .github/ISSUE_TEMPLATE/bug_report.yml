@@ -1,0 +1,44 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. knowledge-engine bootstrap
+        2. knowledge-engine reindex
+        3. curl http://127.0.0.1:9210/search?q=...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: knowledge-engine version
+      description: Output of `knowledge-engine info` or `/health`
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      multiple: true
+      options: [CLI, HTTP API, Dashboard (/ui), MCP server, project-context, agent-board, other]
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "OS, Python version, how installed (uv tool / pip / git)"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell
