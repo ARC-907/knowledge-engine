@@ -7,15 +7,22 @@ on:
   schedule:
     - cron: "41 6 * * 2"
 
-permissions: read-all
+permissions:
+  contents: read
+
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analysis:
     name: scorecard analysis
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
-      id-token: write
+      contents: read         # check out the source
+      security-events: write # upload the SARIF report to code scanning
+      id-token: write        # OIDC: required by publish_results to sign results for the Scorecard API
+      actions: read          # Scorecard reads workflow runs for the Token-Permissions/Pinned-Dependencies checks
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
