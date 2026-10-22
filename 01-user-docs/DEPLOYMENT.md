@@ -115,7 +115,8 @@ The engine can route text generation to providers. If you wire those up:
 
 - **Your corpus is the source of truth.** It's plain markdown — back it up like
   any other repo (git, your normal backup).
-- **The indexes are derived data.** `engine/data/index.db` (FTS5) and
+- **The indexes are derived data.** `<KE_DATA_DIR>/index.db` (FTS5; default
+  data dir `<KE_HOME>/.knowledge-engine/data`) and
   `embeddings.db` (if you built embeddings) can always be rebuilt with
   `knowledge-engine reindex` and the embeddings `build` command. You do not
   need to back them up — though backing them up saves a rebuild on restore.

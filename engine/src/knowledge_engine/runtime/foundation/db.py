@@ -5,7 +5,8 @@ tools, and chat. WAL mode for concurrent reads. Schema auto-creates on first
 connection.
 
 Env vars:
-    KE_PIPELINE_DB     (default: $KE_DATA_DIR/pipeline.db or ./engine/data/pipeline.db)
+    KE_PIPELINE_DB     (default: <data_dir>/pipeline.db, where data_dir is $KE_DATA_DIR
+                        or $KE_HOME/.knowledge-engine/data -- see core/paths.py)
 
 This is a coordination store, not a document store. Research objects, source
 records, and handoff bundles remain on the filesystem for inspectability.
@@ -25,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from ...core import paths as engine_paths
 from . import config  # noqa: F401  — ensures .env is loaded before DB path resolves
 
 _logger = logging.getLogger(__name__)
@@ -57,25 +59,27 @@ _scope_db_path: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "ke_scope_db_path", default=None
 )
 
+PIPELINE_DB_FILENAME = "pipeline.db"
+
 
 def resolve_db_path(db_path: Path | str | None = None) -> str:
     """Resolve the active pipeline DB path. Read on every connection request.
 
     Precedence: explicit ``db_path`` arg → active scope context
-    (``using_db``) → ``KE_PIPELINE_DB`` env → ``KE_DATA_DIR``/pipeline.db →
-    ``./engine/data/pipeline.db``.
+    (``using_db``) → ``KE_PIPELINE_DB`` env → ``<data_dir>/pipeline.db``, with
+    ``data_dir`` resolved by ``core.paths`` (``KE_DATA_DIR``, else
+    ``<KE_HOME>/.knowledge-engine/data``) so the board shares one data
+    directory with the registry and FTS index.
     """
     if db_path:
         return str(Path(db_path).resolve())
     scoped = _scope_db_path.get()
     if scoped:
         return scoped
-    env_db = os.environ.get("KE_PIPELINE_DB")
+    env_db = os.environ.get("KE_PIPELINE_DB", "").strip()
     if env_db:
-        return str(Path(env_db).resolve())
-    data_dir = os.environ.get("KE_DATA_DIR")
-    base = Path(data_dir) if data_dir else (Path.cwd() / "engine" / "data")
-    return str((base / "pipeline.db").resolve())
+        return str(Path(env_db).expanduser().resolve())
+    return str(engine_paths.resolve_data_dir() / PIPELINE_DB_FILENAME)
 
 
 @contextlib.contextmanager

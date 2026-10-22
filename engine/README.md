@@ -7,7 +7,7 @@ subtree is self-contained and can be lifted into its own repo without changes.
 
 - `src/knowledge_engine/` — core package
   - `cli.py` — `knowledge-engine` CLI entrypoint; `app.py` / `mcp_server.py` — compat shims
-  - `core/` — env config (`KE_CORPUS_ROOT`, `KE_DATA_DIR`), corpus registry (source of truth + SQLite mirror), watchdog auto-register
+  - `core/` — env config + path resolver (`KE_HOME`, `KE_CORPUS_ROOT`, `KE_DATA_DIR`), corpus registry (source of truth + SQLite mirror), watchdog auto-register
   - `server/` — FastAPI app factory + HTTP route modules (`api/`)
   - `mcp/` — JSON-RPC 2.0 MCP stdio server
   - `generation/` — provider abstraction (echo / cloud HTTP / Ollama)
@@ -18,7 +18,6 @@ subtree is self-contained and can be lifted into its own repo without changes.
   - `runtime/` — execution substrate: `foundation/` (SQLite backbone), `pipeline/`, `sandbox/` hook
 - `routing_local/` — **opt-in** Ollama / local-LLM provider; not imported unless installed
 - `sandbox_adapter/` — **opt-in** Docker / WSL sandbox adapter
-- `data/` — runtime artifacts (SQLite mirror, indexes); gitignored
 - `tests/` — pytest smoke tests
 
 ## Run
@@ -42,8 +41,9 @@ as empty data, not as missing features.
 
 | Variable | Default | Purpose |
 | -------- | ------- | ------- |
-| `KE_CORPUS_ROOT` | `../corpus` | Root of the corpus tree |
-| `KE_DATA_DIR` | `./data` | Runtime SQLite + index location |
+| `KE_HOME` | nearest dir (cwd upward) with `corpus/registry.json`, else cwd | Base for the defaults below |
+| `KE_CORPUS_ROOT` | `${KE_HOME}/corpus` | Root of the corpus tree |
+| `KE_DATA_DIR` | `${KE_HOME}/.knowledge-engine/data` | Runtime SQLite + index location (created on first write) |
 | `KE_REGISTRY_PATH` | `${KE_CORPUS_ROOT}/registry.json` | Registry file |
 
 No path is hardcoded.

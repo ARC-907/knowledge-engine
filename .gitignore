@@ -25,6 +25,8 @@
 **/*.db-shm
 **/*.db-wal
 **/engine/data/*.db
+# Default engine data dir (<KE_HOME>/.knowledge-engine/data) and project-context state
+**/.knowledge-engine/
 
 # Optional-layer state (relative anywhere)
 **/sandbox_nemoclaw/state/

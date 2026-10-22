@@ -98,6 +98,7 @@ TOOLS = [
 class Server:
     def __init__(self) -> None:
         self.config = Config.from_env()
+        self.config.ensure_dirs()
         self.registry = Registry(self.config.registry_path, self.config.data_dir / "registry.db")
         self.indexer = Indexer(self.config, self.registry)
         # ── Project-docs subsystem (optional, off unless configured) ──

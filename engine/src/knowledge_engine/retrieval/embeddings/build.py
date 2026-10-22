@@ -12,8 +12,9 @@ Usage:
 Env vars:
     KE_OLLAMA_URL      (default: http://127.0.0.1:11434)
     KE_EMBED_MODEL     (default: bge-m3:latest)
-    KE_CORPUS_ROOT     (default: ./corpus)
-    KE_EMBEDDINGS_DB   (default: $KE_DATA_DIR/embeddings.db or ./engine/data/embeddings.db)
+    KE_CORPUS_ROOT     (default: $KE_HOME/corpus -- see core/paths.py)
+    KE_EMBEDDINGS_DB   (default: <data_dir>/embeddings.db; data_dir is $KE_DATA_DIR
+                        or $KE_HOME/.knowledge-engine/data)
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+from ...core import paths as engine_paths
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -36,10 +39,9 @@ from pathlib import Path
 OLLAMA_URL = os.environ.get("KE_OLLAMA_URL", "http://127.0.0.1:11434")
 EMBED_MODEL = os.environ.get("KE_EMBED_MODEL", "bge-m3:latest")
 
-CORPUS_ROOT = Path(os.environ.get("KE_CORPUS_ROOT", str(Path.cwd() / "corpus"))).resolve()
-
-_default_db_dir = Path(os.environ.get("KE_DATA_DIR", str(Path.cwd() / "engine" / "data")))
-DB_PATH = Path(os.environ.get("KE_EMBEDDINGS_DB", str(_default_db_dir / "embeddings.db"))).resolve()
+_paths = engine_paths.resolve(warn_missing_corpus=False)  # import time: stay quiet
+CORPUS_ROOT = _paths.corpus_root
+DB_PATH = Path(os.environ.get("KE_EMBEDDINGS_DB", str(_paths.data_dir / "embeddings.db"))).resolve()
 
 CHUNK_SIZE = 1500  # chars per chunk (bge-m3 context is ~8192 tokens)
 CHUNK_OVERLAP = 200

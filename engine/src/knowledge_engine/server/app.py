@@ -24,6 +24,8 @@ _logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
     config = Config.from_env()
+    # The registry mirror and FTS index below open SQLite files in data_dir.
+    config.ensure_dirs()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")
     indexer = Indexer(config, registry)
     providers = ProviderRegistry()
