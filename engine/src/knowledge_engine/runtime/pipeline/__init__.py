@@ -16,6 +16,6 @@ Modules:
   - task_classifier.py   Tiny classifier for domain/complexity routing.
 """
 
-from . import queue, message_board, worker_registry, task_classifier
+from . import message_board, queue, task_classifier, worker_registry
 
-__all__ = ["queue", "message_board", "worker_registry", "task_classifier"]
+__all__ = ["message_board", "queue", "task_classifier", "worker_registry"]

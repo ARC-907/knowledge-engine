@@ -30,12 +30,10 @@ class Provider(ABC):
     name: str = "abstract"
 
     @abstractmethod
-    def generate(self, request: GenerationRequest) -> GenerationResponse:
-        ...
+    def generate(self, request: GenerationRequest) -> GenerationResponse: ...
 
     @abstractmethod
-    def available(self) -> bool:
-        ...
+    def available(self) -> bool: ...
 
 
 class ProviderRegistry:

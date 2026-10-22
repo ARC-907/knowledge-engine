@@ -28,20 +28,38 @@ CATEGORY_AGENT_DEF = "agent_def"
 CATEGORY_TOOL_DEF = "tool_def"
 CATEGORY_REFERENCE = "reference"
 
-CATEGORIES = frozenset({
-    CATEGORY_DOC, CATEGORY_DEVLOG, CATEGORY_QA, CATEGORY_DESIGN_NOTE,
-    CATEGORY_DECISION_RECORD, CATEGORY_TEST_PLAN, CATEGORY_TEST_LOG,
-    CATEGORY_BUILD_LOG, CATEGORY_RUNTIME_LOG, CATEGORY_DIAGNOSTIC_LOG,
-    CATEGORY_DOCSTRING, CATEGORY_COMMENT, CATEGORY_GIT_META,
-    CATEGORY_DIFF_SUMMARY, CATEGORY_SKILL, CATEGORY_AGENT_DEF,
-    CATEGORY_TOOL_DEF, CATEGORY_REFERENCE,
-})
+CATEGORIES = frozenset(
+    {
+        CATEGORY_DOC,
+        CATEGORY_DEVLOG,
+        CATEGORY_QA,
+        CATEGORY_DESIGN_NOTE,
+        CATEGORY_DECISION_RECORD,
+        CATEGORY_TEST_PLAN,
+        CATEGORY_TEST_LOG,
+        CATEGORY_BUILD_LOG,
+        CATEGORY_RUNTIME_LOG,
+        CATEGORY_DIAGNOSTIC_LOG,
+        CATEGORY_DOCSTRING,
+        CATEGORY_COMMENT,
+        CATEGORY_GIT_META,
+        CATEGORY_DIFF_SUMMARY,
+        CATEGORY_SKILL,
+        CATEGORY_AGENT_DEF,
+        CATEGORY_TOOL_DEF,
+        CATEGORY_REFERENCE,
+    }
+)
 
 # Categories that represent logs (raw retention is extra-sensitive for these).
-LOG_CATEGORIES = frozenset({
-    CATEGORY_TEST_LOG, CATEGORY_BUILD_LOG,
-    CATEGORY_RUNTIME_LOG, CATEGORY_DIAGNOSTIC_LOG,
-})
+LOG_CATEGORIES = frozenset(
+    {
+        CATEGORY_TEST_LOG,
+        CATEGORY_BUILD_LOG,
+        CATEGORY_RUNTIME_LOG,
+        CATEGORY_DIAGNOSTIC_LOG,
+    }
+)
 
 # ── Sanitization outcomes ────────────────────────────────────────────
 SANITIZED = "sanitized"
@@ -52,15 +70,26 @@ REJECTED_OVERSIZE = "rejected_oversize"
 REJECTED_BINARY = "rejected_binary"
 REJECTED_UNSAFE = "rejected_unsafe"
 
-SANITIZATION_STATES = frozenset({
-    SANITIZED, RAW_OMITTED, RAW_RETAINED, REDACTED,
-    REJECTED_OVERSIZE, REJECTED_BINARY, REJECTED_UNSAFE,
-})
+SANITIZATION_STATES = frozenset(
+    {
+        SANITIZED,
+        RAW_OMITTED,
+        RAW_RETAINED,
+        REDACTED,
+        REJECTED_OVERSIZE,
+        REJECTED_BINARY,
+        REJECTED_UNSAFE,
+    }
+)
 
 # A record whose sanitization status is one of these must not be stored.
-REJECTED_STATES = frozenset({
-    REJECTED_OVERSIZE, REJECTED_BINARY, REJECTED_UNSAFE,
-})
+REJECTED_STATES = frozenset(
+    {
+        REJECTED_OVERSIZE,
+        REJECTED_BINARY,
+        REJECTED_UNSAFE,
+    }
+)
 
 # ── Ingestion outcomes ───────────────────────────────────────────────
 INGESTED = "ingested"
@@ -93,10 +122,15 @@ POINTER_TESTLOG = "testlog"
 POINTER_BUILDLOG = "buildlog"
 POINTER_NOTE = "note"
 
-POINTER_TYPES = frozenset({
-    POINTER_DOCSTRING, POINTER_DOC, POINTER_TESTLOG,
-    POINTER_BUILDLOG, POINTER_NOTE,
-})
+POINTER_TYPES = frozenset(
+    {
+        POINTER_DOCSTRING,
+        POINTER_DOC,
+        POINTER_TESTLOG,
+        POINTER_BUILDLOG,
+        POINTER_NOTE,
+    }
+)
 
 # ── Scanner modes ────────────────────────────────────────────────────
 MODE_REPORT = "report"
@@ -105,10 +139,15 @@ MODE_POINTER_PLAN = "pointer_plan"
 MODE_POINTER_APPLY = "pointer_apply"
 MODE_EMBEDDING = "embedding"
 
-SCAN_MODES = frozenset({
-    MODE_REPORT, MODE_INGEST, MODE_POINTER_PLAN,
-    MODE_POINTER_APPLY, MODE_EMBEDDING,
-})
+SCAN_MODES = frozenset(
+    {
+        MODE_REPORT,
+        MODE_INGEST,
+        MODE_POINTER_PLAN,
+        MODE_POINTER_APPLY,
+        MODE_EMBEDDING,
+    }
+)
 
 # ── MCP result modes ─────────────────────────────────────────────────
 RESULT_SUMMARY = "summary"

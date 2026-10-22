@@ -20,17 +20,13 @@ except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
 
 # ── Resolve pipeline root from env vars ───────────────────────────────
-PIPELINE_ROOT = Path(
-    os.environ.get("KE_PIPELINE_ROOT", str(Path.cwd() / "pipeline"))
-).resolve()
-CONFIG_DIR = Path(
-    os.environ.get("KE_CONFIG_DIR", str(PIPELINE_ROOT / "config"))
-).resolve()
+PIPELINE_ROOT = Path(os.environ.get("KE_PIPELINE_ROOT", str(Path.cwd() / "pipeline"))).resolve()
+CONFIG_DIR = Path(os.environ.get("KE_CONFIG_DIR", str(PIPELINE_ROOT / "config"))).resolve()
 
 # ── Load .env on import (stdlib, no dotenv dependency) ─────
 _env_file = PIPELINE_ROOT / ".env"
 if _env_file.exists():
-    with open(_env_file, "r", encoding="utf-8") as _f:
+    with open(_env_file, encoding="utf-8") as _f:
         for _line in _f:
             _line = _line.strip()
             if not _line or _line.startswith("#") or "=" not in _line:
@@ -44,18 +40,22 @@ if _env_file.exists():
 def _load_yaml(filename: str) -> dict[str, Any]:
     """Load a YAML config file from the config/ directory."""
     if yaml is None:
-        raise ImportError("PyYAML is required for the pipeline config loader. `pip install pyyaml`.")
+        raise ImportError(
+            "PyYAML is required for the pipeline config loader. `pip install pyyaml`."
+        )
     path = CONFIG_DIR / filename
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
 def _write_yaml(filename: str, data: dict[str, Any]) -> Path:
     """Write a YAML config file to the config/ directory."""
     if yaml is None:
-        raise ImportError("PyYAML is required for the pipeline config writer. `pip install pyyaml`.")
+        raise ImportError(
+            "PyYAML is required for the pipeline config writer. `pip install pyyaml`."
+        )
     path = CONFIG_DIR / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as f:
@@ -136,12 +136,14 @@ def load_proxy_failover() -> dict[str, Any]:
         return {
             "fail_threshold": 3,
             "failback_interval_seconds": 300,
-            "candidates": [{
-                "host": proxy.get("host", "127.0.0.1"),
-                "port": proxy.get("port", 8420),
-                "node_id": proxy.get("node_id", "primary"),
-                "priority": 1,
-            }],
+            "candidates": [
+                {
+                    "host": proxy.get("host", "127.0.0.1"),
+                    "port": proxy.get("port", 8420),
+                    "node_id": proxy.get("node_id", "primary"),
+                    "priority": 1,
+                }
+            ],
         }
     return failover
 
@@ -155,10 +157,7 @@ def get_enabled_nodes(nodes_config: dict[str, Any] | None = None) -> dict[str, A
     """Return only nodes marked as enabled."""
     if nodes_config is None:
         nodes_config = load_nodes()
-    return {
-        k: v for k, v in nodes_config.get("nodes", {}).items()
-        if v.get("enabled", False)
-    }
+    return {k: v for k, v in nodes_config.get("nodes", {}).items() if v.get("enabled", False)}
 
 
 def get_research_api_priority(apis_config: dict[str, Any] | None = None) -> list[str]:

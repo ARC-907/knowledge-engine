@@ -33,7 +33,9 @@ class LifecycleIn(BaseModel):
 
 
 @router.get("")
-def list_entries(request: Request, kind: str | None = None, enabled_only: bool = False) -> list[dict]:
+def list_entries(
+    request: Request, kind: str | None = None, enabled_only: bool = False
+) -> list[dict]:
     return request.app.state.registry.list(kind=kind, enabled_only=enabled_only)
 
 

@@ -57,4 +57,7 @@ def test_find_config_file_absent(tmp_path: Path, monkeypatch) -> None:
 
 def test_defaults_dict_matches_dataclass() -> None:
     assert PROJECT_CONTEXT_DEFAULTS["enabled"] is False
-    assert PROJECT_CONTEXT_DEFAULTS["scanner"]["pointer_replacement"]["pointer_scheme"] == "KE-DOCSTRING"
+    assert (
+        PROJECT_CONTEXT_DEFAULTS["scanner"]["pointer_replacement"]["pointer_scheme"]
+        == "KE-DOCSTRING"
+    )

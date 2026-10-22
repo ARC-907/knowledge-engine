@@ -8,8 +8,9 @@ reads and partial projections.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, fields
-from typing import Any, Mapping
+from typing import Any
 
 
 def _from_mapping(cls: type, row: Mapping[str, Any]) -> Any:
@@ -49,7 +50,7 @@ class DocRecord:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "DocRecord":
+    def from_row(cls, row: Mapping[str, Any]) -> DocRecord:
         return _from_mapping(cls, row)
 
 
@@ -68,7 +69,7 @@ class IngestionRun:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "IngestionRun":
+    def from_row(cls, row: Mapping[str, Any]) -> IngestionRun:
         return _from_mapping(cls, row)
 
 
@@ -94,7 +95,7 @@ class TestRun:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "TestRun":
+    def from_row(cls, row: Mapping[str, Any]) -> TestRun:
         return _from_mapping(cls, row)
 
 
@@ -125,7 +126,7 @@ class LogRecord:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "LogRecord":
+    def from_row(cls, row: Mapping[str, Any]) -> LogRecord:
         return _from_mapping(cls, row)
 
 
@@ -147,7 +148,7 @@ class Pointer:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "Pointer":
+    def from_row(cls, row: Mapping[str, Any]) -> Pointer:
         return _from_mapping(cls, row)
 
 

@@ -47,12 +47,14 @@ def _cmd_config_status(_args) -> int:
 def _cmd_info(_args) -> int:
     cfg = load_config()
     root = resolve_project_root()
-    _print({
-        "root": str(root),
-        "enabled": cfg.enabled,
-        "database_dir": str(Path(root) / cfg.database_dir),
-        "fingerprint_database": str(Path(root) / cfg.fingerprint_database),
-    })
+    _print(
+        {
+            "root": str(root),
+            "enabled": cfg.enabled,
+            "database_dir": str(Path(root) / cfg.database_dir),
+            "fingerprint_database": str(Path(root) / cfg.fingerprint_database),
+        }
+    )
     return 0
 
 

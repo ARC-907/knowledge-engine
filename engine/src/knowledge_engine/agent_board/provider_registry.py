@@ -31,7 +31,7 @@ credentials the engine uses to authenticate *out* to providers.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -44,7 +44,7 @@ DEFAULT_ENV_VARS: dict[str, str] = {
     "anthropic": "KE_ANTHROPIC_API_KEY",
     "openai": "KE_OPENAI_API_KEY",
     "cloud-http": "KE_CLOUD_API_KEY",
-    "ollama": "",          # local; usually keyless (uses KE_OLLAMA_URL)
+    "ollama": "",  # local; usually keyless (uses KE_OLLAMA_URL)
     "custom": "",
 }
 
@@ -52,7 +52,7 @@ KNOWN_PROVIDERS = tuple(DEFAULT_ENV_VARS.keys())
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def default_env_var(provider: str) -> str:
@@ -109,9 +109,7 @@ def get_provider(key_id: str) -> dict[str, Any] | None:
 def list_providers() -> list[dict[str, Any]]:
     """All bindings, each annotated with `env_set`. Never returns secrets."""
     conn = db.get_connection()
-    rows = conn.execute(
-        "SELECT * FROM api_keys ORDER BY provider, display_name"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM api_keys ORDER BY provider, display_name").fetchall()
     return [_annotate(dict(r)) for r in rows]
 
 
@@ -208,12 +206,12 @@ __all__ = [
     "DEFAULT_ENV_VARS",
     "KNOWN_PROVIDERS",
     "default_env_var",
-    "register_provider",
+    "delete_provider",
     "get_provider",
     "list_providers",
-    "toggle_provider",
-    "delete_provider",
-    "verify_provider",
-    "resolve_secret",
+    "register_provider",
     "resolve_env_var",
+    "resolve_secret",
+    "toggle_provider",
+    "verify_provider",
 ]

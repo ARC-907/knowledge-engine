@@ -14,6 +14,7 @@ Branch detection is delegated to the optional ``git_context`` module; when that
 module is unavailable, git is disabled by config, or the binary is missing, this
 module degrades gracefully to the configured default branch rather than raising.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -41,9 +42,7 @@ def register_project(
     """
     resolved_name = name if name is not None else Path(root).name
     croot = canonical_root(root)
-    project_fp = fingerprints.ensure_project(
-        conn, croot, resolved_name, override=fingerprint
-    )
+    project_fp = fingerprints.ensure_project(conn, croot, resolved_name, override=fingerprint)
     row = conn.execute(
         "SELECT name, root_path FROM projects WHERE project_fp = ?",
         (project_fp,),
@@ -61,8 +60,7 @@ def list_projects(conn: sqlite3.Connection) -> list[dict]:
     Each entry is ``{"project_fp", "name", "root_path", "created_at"}``.
     """
     cur = conn.execute(
-        "SELECT project_fp, name, root_path, created_at "
-        "FROM projects ORDER BY name, project_fp"
+        "SELECT project_fp, name, root_path, created_at FROM projects ORDER BY name, project_fp"
     )
     return [
         {

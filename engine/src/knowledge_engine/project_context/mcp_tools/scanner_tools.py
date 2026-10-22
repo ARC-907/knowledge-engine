@@ -26,10 +26,12 @@ from typing import Any
 
 from .. import git_context
 from ..models import ScanReport
-from ..scanner import ingest as scanner_ingest
-from ..scanner import pointer_apply as scanner_pointer_apply
-from ..scanner import pointer_plan as scanner_pointer_plan
-from ..scanner import report as scanner_report
+from ..scanner import (
+    ingest as scanner_ingest,
+    pointer_apply as scanner_pointer_apply,
+    pointer_plan as scanner_pointer_plan,
+    report as scanner_report,
+)
 from ..scanner.validators import GateError
 from .base import ToolContext, status_result, text_result
 
@@ -44,14 +46,14 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.scanner_report",
             "description": "Report-only scan of the project root: candidate counts "
-                           "by category, estimated bytes, sanitization-risk flags, git "
-                           "availability, and recommended next actions. Writes nothing.",
+            "by category, estimated bytes, sanitization-risk flags, git "
+            "availability, and recommended next actions. Writes nothing.",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
             "name": "project_context.scanner_ingest",
             "description": "Ingest discovered candidates into the project DB. Requires "
-                           "scanner.enabled; returns not_permitted when the gate is off.",
+            "scanner.enabled; returns not_permitted when the gate is off.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -64,19 +66,19 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.scanner_status",
             "description": "Report the scanner's current gate states (enabled, mode, "
-                           "pointer-replacement, source-mutation) and git availability.",
+            "pointer-replacement, source-mutation) and git availability.",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
             "name": "project_context.scanner_validate",
             "description": "Pre-flight validation: report which scanner modes are "
-                           "currently permitted for this installation. Writes nothing.",
+            "currently permitted for this installation. Writes nothing.",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
             "name": "project_context.scanner_plan_pointers",
             "description": "Build a reversible docstring->pointer rewrite plan. Requires "
-                           "scanner.pointer_replacement.enabled; never mutates source.",
+            "scanner.pointer_replacement.enabled; never mutates source.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -89,8 +91,8 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.scanner_apply_pointers",
             "description": "Execute a rewrite plan, replacing docstrings with pointer "
-                           "stubs. Requires pointer-replacement + source-mutation gates "
-                           "AND mcp.allow_mutating_tools; returns not_permitted otherwise.",
+            "stubs. Requires pointer-replacement + source-mutation gates "
+            "AND mcp.allow_mutating_tools; returns not_permitted otherwise.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -141,7 +143,7 @@ def _git_available(root, cfg) -> bool:
     """Return whether git context is available for ``root`` (never raises)."""
     try:
         return git_context.collect(root, cfg) is not None
-    except Exception:  # noqa: BLE001 - git is optional; absence must not break status
+    except Exception:
         logger.debug("git_context.collect failed during scanner status", exc_info=True)
         return False
 
@@ -232,9 +234,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
 
     if name == "project_context.scanner_apply_pointers":
         if not cfg.mcp.allow_mutating_tools:
-            return status_result(
-                "not_permitted", reason="mcp.allow_mutating_tools must be true"
-            )
+            return status_result("not_permitted", reason="mcp.allow_mutating_tools must be true")
         plan_id = args.get("plan_id")
         if plan_id is None:
             return status_result("invalid_args", reason="plan_id is required")

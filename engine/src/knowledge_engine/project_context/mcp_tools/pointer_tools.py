@@ -33,8 +33,8 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.resolve_pointer",
             "description": "Resolve a ke-doc:// (or KE-DOCSTRING://) pointer URI to a "
-                           "compact record envelope. Full content is gated by "
-                           "mcp.allow_full_content; defaults to summary mode.",
+            "compact record envelope. Full content is gated by "
+            "mcp.allow_full_content; defaults to summary mode.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -45,13 +45,12 @@ def tools(cfg) -> list[dict]:
                     "project_fp": {
                         "type": "string",
                         "description": "Project fingerprint selecting the DB "
-                                       "(defaults to the current root's project).",
+                        "(defaults to the current root's project).",
                     },
                     "mode": {
                         "type": "string",
                         "enum": ["summary", "full"],
-                        "description": "Result mode; 'full' requires the "
-                                       "allow_full_content gate.",
+                        "description": "Result mode; 'full' requires the allow_full_content gate.",
                     },
                 },
                 "required": ["uri"],
@@ -59,8 +58,7 @@ def tools(cfg) -> list[dict]:
         },
         {
             "name": "project_context.list_pointers",
-            "description": "List allocated pointers, optionally filtered to a single "
-                           "record_id.",
+            "description": "List allocated pointers, optionally filtered to a single record_id.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -78,7 +76,7 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.validate_pointer",
             "description": "Validate a pointer URI's grammar and existence; returns "
-                           "{valid, exists, content_hash_match}.",
+            "{valid, exists, content_hash_match}.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -97,7 +95,7 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.pointer_backrefs",
             "description": "Return recorded back-references (source locations that cite "
-                           "a pointer) for a pointer id.",
+            "a pointer) for a pointer id.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -141,9 +139,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
     return status_result("unknown_tool", name=name)
 
 
-def _resolve_pointer(
-    args: dict[str, Any], ctx: ToolContext, conn: Any
-) -> dict[str, Any]:
+def _resolve_pointer(args: dict[str, Any], ctx: ToolContext, conn: Any) -> dict[str, Any]:
     """Resolve a pointer, enforcing the full-content gate before returning."""
     uri = args.get("uri", "")
     mode = args.get("mode", ctx.cfg.mcp.default_result_mode)

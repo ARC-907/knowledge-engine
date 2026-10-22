@@ -80,7 +80,7 @@ class StubProvider(EmbeddingProvider):
         counter = 0
         # Expand the digest deterministically until we have enough components.
         while len(values) < self._dim:
-            seed = f"{counter}:{text}".encode("utf-8")
+            seed = f"{counter}:{text}".encode()
             digest = hashlib.sha256(seed).digest()
             for i in range(0, len(digest), 2):
                 if len(values) >= self._dim:
@@ -92,7 +92,7 @@ class StubProvider(EmbeddingProvider):
         return values[: self._dim]
 
 
-def get_provider(cfg: "ProjectContextConfig") -> EmbeddingProvider | None:
+def get_provider(cfg: ProjectContextConfig) -> EmbeddingProvider | None:
     """Resolve the configured embedding provider, honoring all gates.
 
     Returns ``None`` (it does not raise) when embeddings are disabled or when

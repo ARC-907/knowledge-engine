@@ -18,18 +18,18 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from . import validators
-from .pointer_plan import BACKUP_SUFFIX, _parse_span, stub_for
 from .. import ingest, pointers
 from ..schema import CATEGORY_DOCSTRING, POINTER_DOCSTRING
+from . import validators
+from .pointer_plan import BACKUP_SUFFIX, _parse_span, stub_for
 
 
 def _utcnow() -> str:
     """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _not_permitted(plan_id: str, reason: str) -> dict:

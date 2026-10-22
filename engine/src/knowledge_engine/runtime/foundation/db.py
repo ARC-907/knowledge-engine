@@ -19,9 +19,10 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime, timedelta, timezone
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from . import config  # noqa: F401  — ensures .env is loaded before DB path resolves
 
@@ -86,7 +87,7 @@ def using_db(db_path: Path | str) -> Iterator[str]:
     its own physical SQLite engine-block while sharing one process::
 
         with using_db(scope_db_path("branch-feat-auth")):
-            store.post_with_validation(...)   # lands in the scoped DB
+            store.post_with_validation(...)  # lands in the scoped DB
     """
     resolved = str(Path(db_path).resolve())
     token = _scope_db_path.set(resolved)
@@ -125,13 +126,26 @@ _FTS_BACKFILLED_LOCK = threading.Lock()
 _MASTER_KEY_LOCK = threading.Lock()
 
 # JSON-serialized fields — auto-deserialized by dict_from_row
-_JSON_FIELDS = frozenset({
-    "depends_on", "assigned_capability", "source_policy",
-    "output_artifacts", "audit_trail", "capabilities",
-    "current_tasks", "config_json", "ack_by", "available_models",
-    "tags", "shared_with", "input_schema", "output_schema",
-    "input_json", "meta_json",
-})
+_JSON_FIELDS = frozenset(
+    {
+        "depends_on",
+        "assigned_capability",
+        "source_policy",
+        "output_artifacts",
+        "audit_trail",
+        "capabilities",
+        "current_tasks",
+        "config_json",
+        "ack_by",
+        "available_models",
+        "tags",
+        "shared_with",
+        "input_schema",
+        "output_schema",
+        "input_json",
+        "meta_json",
+    }
+)
 
 
 def get_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
@@ -585,11 +599,21 @@ def seed_board_config(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT id FROM board_config WHERE id = 1").fetchone()
     if row is not None:
         return
-    now = datetime.now(timezone.utc).isoformat()
-    default_channels = json.dumps([
-        "ops", "research", "project", "worktree", "branch",
-        "library", "planning", "execution", "testing", "chatter",
-    ])
+    now = datetime.now(UTC).isoformat()
+    default_channels = json.dumps(
+        [
+            "ops",
+            "research",
+            "project",
+            "worktree",
+            "branch",
+            "library",
+            "planning",
+            "execution",
+            "testing",
+            "chatter",
+        ]
+    )
     conn.execute(
         """INSERT INTO board_config (
             id, engine_port, standalone_port, sweep_interval_s,
@@ -642,7 +666,7 @@ def _conn_path(conn: sqlite3.Connection) -> str:
         if row:
             d = dict(row) if hasattr(row, "keys") else {}
             for key in ("file", "name", "seq"):
-                if key in d and d[key]:
+                if d.get(key):
                     return str(d[key])
     except sqlite3.Error:
         pass
@@ -664,16 +688,14 @@ def acquire_sweeper_lease(holder: str, ttl_seconds: int = 120) -> bool:
     """
     if ttl_seconds < 5:
         ttl_seconds = 5
-    now_dt = datetime.now(timezone.utc)
+    now_dt = datetime.now(UTC)
     now = now_dt.isoformat()
     expires_at = (now_dt + timedelta(seconds=ttl_seconds)).isoformat()
     payload = json.dumps({"holder": holder, "expires_at": expires_at})
 
     conn = get_connection()
     # SQLite needs serialization across writers; busy_timeout already set.
-    cursor = conn.execute(
-        "SELECT value FROM kv_store WHERE key = 'board.sweeper_lease'"
-    )
+    cursor = conn.execute("SELECT value FROM kv_store WHERE key = 'board.sweeper_lease'")
     row = cursor.fetchone()
     if row is None:
         try:
@@ -714,9 +736,7 @@ def acquire_sweeper_lease(holder: str, ttl_seconds: int = 120) -> bool:
 def release_sweeper_lease(holder: str) -> None:
     """Release the lease if this holder owns it. Best-effort."""
     conn = get_connection()
-    row = conn.execute(
-        "SELECT value FROM kv_store WHERE key = 'board.sweeper_lease'"
-    ).fetchone()
+    row = conn.execute("SELECT value FROM kv_store WHERE key = 'board.sweeper_lease'").fetchone()
     if row is None:
         return
     try:
@@ -780,8 +800,12 @@ def log_event(
         """INSERT INTO events (timestamp, event_type, task_id, node_id, agent_id, detail, data_json)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (
-            datetime.now(timezone.utc).isoformat(),
-            event_type, task_id, node_id, agent_id, detail,
+            datetime.now(UTC).isoformat(),
+            event_type,
+            task_id,
+            node_id,
+            agent_id,
+            detail,
             json.dumps(data) if data else None,
         ),
     )

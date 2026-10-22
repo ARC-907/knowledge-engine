@@ -17,7 +17,8 @@ from __future__ import annotations
 import importlib
 import logging
 import pkgutil
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 _logger = logging.getLogger(__name__)
 
@@ -48,4 +49,4 @@ def collect_tools() -> tuple[list[dict], dict[str, DispatchFn]]:
     return defs, dispatch
 
 
-__all__ = ["collect_tools", "DispatchFn"]
+__all__ = ["DispatchFn", "collect_tools"]

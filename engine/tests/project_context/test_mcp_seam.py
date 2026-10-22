@@ -33,7 +33,9 @@ def test_capability_tools_present_and_safe(tmp_path: Path) -> None:
     assert "project_context.config_status" in names
     assert "project_context.healthcheck" in names
 
-    res = dispatch["project_context.capabilities"]("project_context.capabilities", {}, _ctx(tmp_path, cfg))
+    res = dispatch["project_context.capabilities"](
+        "project_context.capabilities", {}, _ctx(tmp_path, cfg)
+    )
     payload = json.loads(res["content"][0]["text"])
     assert payload["scanner_enabled"] is False
     assert payload["embeddings_enabled"] is False
@@ -43,7 +45,9 @@ def test_capability_tools_present_and_safe(tmp_path: Path) -> None:
 def test_healthcheck_never_raises(tmp_path: Path) -> None:
     cfg = ProjectContextConfig()
     _, dispatch = collect_tools(cfg)
-    res = dispatch["project_context.healthcheck"]("project_context.healthcheck", {}, _ctx(tmp_path, cfg))
+    res = dispatch["project_context.healthcheck"](
+        "project_context.healthcheck", {}, _ctx(tmp_path, cfg)
+    )
     payload = json.loads(res["content"][0]["text"])
     assert payload["registry"] == "ok"
     assert payload["project_count"] == 0

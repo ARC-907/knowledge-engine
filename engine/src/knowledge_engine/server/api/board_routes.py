@@ -27,7 +27,6 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from ...agent_board import keys, provider_registry as providers, schemas, scopes, store, sweeper
 
-
 router = APIRouter()
 
 
@@ -270,16 +269,19 @@ def list_messages(
 ) -> list[dict[str, Any]]:
     _require_trust(req)
     return store.poll(
-        since=since, channel=channel, message_type=message_type,
-        task_id=task_id, product_id=product_id, sender_node_id=sender_node_id,
-        limit=limit, scope=scope,
+        since=since,
+        channel=channel,
+        message_type=message_type,
+        task_id=task_id,
+        product_id=product_id,
+        sender_node_id=sender_node_id,
+        limit=limit,
+        scope=scope,
     )
 
 
 @router.get("/messages/{message_id}")
-def get_message(
-    req: Request, message_id: str, scope: str | None = Query(None)
-) -> dict[str, Any]:
+def get_message(req: Request, message_id: str, scope: str | None = Query(None)) -> dict[str, Any]:
     _require_trust(req)
     msg = store.read(message_id, scope=scope)
     if not msg:
@@ -357,9 +359,7 @@ def digest(
     scope: str | None = Query(None),
 ) -> dict[str, Any]:
     _require_trust(req)
-    return store.digest(
-        channel=channel, since=since, max_messages=max_messages, scope=scope
-    )
+    return store.digest(channel=channel, since=since, max_messages=max_messages, scope=scope)
 
 
 # ── Stats ──────────────────────────────────────────────────────
@@ -420,7 +420,9 @@ def create_key(req: Request, payload: dict[str, Any] = Body(...)) -> dict[str, A
     notes = payload.get("notes")
     expires_at = payload.get("expires_at")
     key = keys.create_key(
-        display_name=name, notes=notes, expires_at=expires_at,
+        display_name=name,
+        notes=notes,
+        expires_at=expires_at,
     )
     permissions = payload.get("permissions") or []
     for grant in permissions:

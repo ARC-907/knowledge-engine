@@ -43,7 +43,7 @@ def _resolve_body(raw: str) -> str:
     if raw == "-":
         return sys.stdin.read().strip()
     if raw.startswith("@"):
-        with open(raw[1:], "r", encoding="utf-8") as f:
+        with open(raw[1:], encoding="utf-8") as f:
             return f.read().strip()
     return raw
 
@@ -59,7 +59,9 @@ def _get(url: str, key: str | None = None) -> Any:
 def _post(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
-        url, data=data, method="POST",
+        url,
+        data=data,
+        method="POST",
         headers={"Content-Type": "application/json"},
     )
     if key:
@@ -71,7 +73,9 @@ def _post(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
 def _patch(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
-        url, data=data, method="PATCH",
+        url,
+        data=data,
+        method="PATCH",
         headers={"Content-Type": "application/json"},
     )
     if key:
@@ -203,8 +207,7 @@ def cmd_post(args, base: str) -> int:
     try:
         msg = _post(f"{base}/board/messages", payload, key=args.key)
     except urllib.error.HTTPError as e:
-        print(f"post rejected ({e.code}): {e.read().decode('utf-8', 'replace')}",
-              file=sys.stderr)
+        print(f"post rejected ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
         return 1
     except urllib.error.URLError as e:
         print(f"board unreachable at {base}: {e}", file=sys.stderr)
@@ -282,11 +285,11 @@ def cmd_ack(args, base: str) -> int:
     try:
         msg = _post(
             f"{base}/board/messages/{urllib.parse.quote(args.message_id, safe='')}/ack",
-            payload, key=args.key,
+            payload,
+            key=args.key,
         )
     except urllib.error.HTTPError as e:
-        print(f"ack rejected ({e.code}): {e.read().decode('utf-8', 'replace')}",
-              file=sys.stderr)
+        print(f"ack rejected ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
         return 1
     print(json.dumps(msg, indent=2))
     return 0
@@ -296,8 +299,7 @@ def cmd_sweep(args, base: str) -> int:
     try:
         result = _post(f"{base}/board/sweep", {}, key=args.key)
     except urllib.error.HTTPError as e:
-        print(f"sweep rejected ({e.code}): {e.read().decode('utf-8', 'replace')}",
-              file=sys.stderr)
+        print(f"sweep rejected ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2))
     return 0
@@ -313,21 +315,24 @@ def cmd_keys_create(args, base: str) -> int:
     if args.notes:
         payload["notes"] = args.notes
     if args.permission:
-        payload["permissions"] = [{
-            "resource_type": args.permission_resource_type,
-            "resource_id": args.permission_resource_id,
-            "permission": args.permission,
-        }]
+        payload["permissions"] = [
+            {
+                "resource_type": args.permission_resource_type,
+                "resource_id": args.permission_resource_id,
+                "permission": args.permission,
+            }
+        ]
     print(json.dumps(_post(f"{base}/board/keys", payload, key=args.key), indent=2))
     return 0
 
 
 def cmd_keys_revoke(args, base: str) -> int:
-    print(json.dumps(
-        _delete(f"{base}/board/keys/{urllib.parse.quote(args.key_id, safe='')}",
-                key=args.key),
-        indent=2,
-    ))
+    print(
+        json.dumps(
+            _delete(f"{base}/board/keys/{urllib.parse.quote(args.key_id, safe='')}", key=args.key),
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -335,8 +340,9 @@ def cmd_keys_bootstrap(args, base: str) -> int:
     try:
         result = _post(f"{base}/board/keys/bootstrap-master", {})
     except urllib.error.HTTPError as e:
-        print(f"bootstrap rejected ({e.code}): {e.read().decode('utf-8', 'replace')}",
-              file=sys.stderr)
+        print(
+            f"bootstrap rejected ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr
+        )
         return 1
     print(json.dumps(result, indent=2))
     return 0
@@ -397,9 +403,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("status", help="Service health + counts + last-sweep.").set_defaults(func=cmd_status)
+    sub.add_parser("status", help="Service health + counts + last-sweep.").set_defaults(
+        func=cmd_status
+    )
     sub.add_parser("channels", help="List configured channels.").set_defaults(func=cmd_channels)
-    sub.add_parser("types", help="List canonical message types + scopes.").set_defaults(func=cmd_types)
+    sub.add_parser("types", help="List canonical message types + scopes.").set_defaults(
+        func=cmd_types
+    )
     sub.add_parser("scopes", help="List per-scope databases.").set_defaults(func=cmd_scopes)
 
     pr = sub.add_parser("read", help="Read messages.", parents=[scope_parent])
@@ -510,8 +520,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args, base)
     except urllib.error.HTTPError as e:
-        print(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')}",
-              file=sys.stderr)
+        print(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
         return 1
     except urllib.error.URLError as e:
         print(f"board unreachable at {base}: {e}", file=sys.stderr)

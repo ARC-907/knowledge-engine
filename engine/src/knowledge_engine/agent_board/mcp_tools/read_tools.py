@@ -74,7 +74,8 @@ def tools() -> list[dict[str, Any]]:
                     "node_id": {"type": "string", "description": "Caller's identity."},
                     "role": {"type": "string"},
                     "current_task_ids": {
-                        "type": "array", "items": {"type": "string"},
+                        "type": "array",
+                        "items": {"type": "string"},
                         "description": "Tasks the caller is currently working on.",
                     },
                     "since": {"type": "string"},
@@ -111,7 +112,10 @@ def tools() -> list[dict[str, Any]]:
                     "channel": {"type": "string"},
                     "since": {"type": "string"},
                     "max_messages": {
-                        "type": "integer", "default": 200, "minimum": 10, "maximum": 2000,
+                        "type": "integer",
+                        "default": 200,
+                        "minimum": 10,
+                        "maximum": 2000,
                         "description": "Cap on messages scanned for the summary.",
                     },
                     **_SCOPE_PROP,
@@ -177,7 +181,8 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
         if not corr and not thr:
             return error_result("either correlation_id or thread_id is required")
         msgs = store.thread_messages(
-            correlation_id=corr, thread_id=thr,
+            correlation_id=corr,
+            thread_id=thr,
             limit=int(args.get("limit", 100)),
             scope=scope,
         )
@@ -192,34 +197,45 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
         return text_result(summary)
     if name == "board_scopes":
         from .. import scopes as scopes_mod
-        return text_result({
-            "scopes": scopes_mod.list_scopes(),
-            "root": str(scopes_mod.scopes_root()),
-        })
+
+        return text_result(
+            {
+                "scopes": scopes_mod.list_scopes(),
+                "root": str(scopes_mod.scopes_root()),
+            }
+        )
     if name == "board_status":
         cfg = store.load_config()
-        return text_result({
-            "messages_total": store.total_count(),
-            "channel_stats": store.channel_stats(),
-            "last_sweep": store.last_sweep(),
-            "config": {
-                "engine_port": cfg["engine_port"],
-                "sweep_interval_s": cfg["sweep_interval_s"],
-                "sweeper_enabled": bool(cfg["sweeper_enabled"]),
-                "channels": cfg["channels"],
-            },
-        })
+        return text_result(
+            {
+                "messages_total": store.total_count(),
+                "channel_stats": store.channel_stats(),
+                "last_sweep": store.last_sweep(),
+                "config": {
+                    "engine_port": cfg["engine_port"],
+                    "sweep_interval_s": cfg["sweep_interval_s"],
+                    "sweeper_enabled": bool(cfg["sweeper_enabled"]),
+                    "channels": cfg["channels"],
+                },
+            }
+        )
     if name == "board_channels":
         cfg = store.load_config()
         from .. import schemas as schemas
-        return text_result({
-            "channels": cfg["channels"],
-            "defaults": list(schemas.DEFAULT_CHANNELS),
-        })
+
+        return text_result(
+            {
+                "channels": cfg["channels"],
+                "defaults": list(schemas.DEFAULT_CHANNELS),
+            }
+        )
     if name == "board_message_types":
         from .. import schemas as schemas
-        return text_result({
-            "message_types": list(schemas.MESSAGE_TYPES),
-            "visibility_scopes": list(schemas.VISIBILITY_SCOPES),
-        })
+
+        return text_result(
+            {
+                "message_types": list(schemas.MESSAGE_TYPES),
+                "visibility_scopes": list(schemas.VISIBILITY_SCOPES),
+            }
+        )
     return error_result(f"unknown tool: {name}")

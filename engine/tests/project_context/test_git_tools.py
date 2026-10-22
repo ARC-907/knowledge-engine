@@ -113,9 +113,7 @@ def test_diff_gated_tools_disabled_when_git_off(tmp_path: Path) -> None:
 def test_search_by_commit_empty_project(tmp_path: Path) -> None:
     conn = _project_conn(tmp_path)
     ctx = _ctx(_enabled_cfg(), tmp_path, project_conn=conn)
-    result = git_tools.dispatch(
-        "project_context.search_by_commit", {"commit": "deadbeef"}, ctx
-    )
+    result = git_tools.dispatch("project_context.search_by_commit", {"commit": "deadbeef"}, ctx)
     payload = _payload(result)
     assert payload == []
 

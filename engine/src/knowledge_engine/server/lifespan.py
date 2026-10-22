@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 
@@ -32,8 +32,9 @@ def _board_sweeper_should_run() -> bool:
     """
     try:
         from ..agent_board import store as board_store
+
         cfg = board_store.load_config()
-    except Exception:  # noqa: BLE001
+    except Exception:
         cfg = {"sweeper_enabled": True}
     sweeper_env = os.environ.get("KE_BOARD_SWEEPER")
     if sweeper_env is not None:
@@ -53,10 +54,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     board_sweeper = None
     if env_truthy("KE_BOARD_ENABLED", default=True):
         try:
-            from ..agent_board import sweeper as board_sweeper  # noqa: F811
+            from ..agent_board import sweeper as board_sweeper
+
             if _board_sweeper_should_run():
                 board_sweeper.start()
-        except Exception:  # noqa: BLE001
+        except Exception:
             _logger.exception("board sweeper failed to start; continuing")
             board_sweeper = None
     try:
@@ -65,5 +67,5 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if board_sweeper is not None:
             try:
                 board_sweeper.stop()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 _logger.exception("board sweeper failed to stop cleanly")

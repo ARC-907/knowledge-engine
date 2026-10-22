@@ -9,8 +9,8 @@ from knowledge_engine.project_context.config import ProjectContextConfig
 from knowledge_engine.project_context.paths import (
     canonical_root,
     fingerprint_db_path,
-    project_db_path,
     project_context_dir,
+    project_db_path,
     slugify,
 )
 
@@ -32,6 +32,9 @@ def test_canonical_root_stable(tmp_path: Path) -> None:
 
 def test_db_paths_under_configured_dirs(tmp_path: Path) -> None:
     cfg = ProjectContextConfig()
-    assert project_context_dir(tmp_path, cfg) == (tmp_path / ".knowledge-engine" / "project-context").resolve()
+    assert (
+        project_context_dir(tmp_path, cfg)
+        == (tmp_path / ".knowledge-engine" / "project-context").resolve()
+    )
     assert project_db_path(tmp_path, cfg, "My Proj").name == "my-proj.sqlite"
     assert fingerprint_db_path(tmp_path, cfg).name == "project-fingerprints.sqlite"

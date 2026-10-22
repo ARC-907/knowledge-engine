@@ -17,7 +17,7 @@ import base64
 import hashlib
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 PROJECT_FP_PREFIX = "proj_"
 BRANCH_FP_PREFIX = "br_"
@@ -30,7 +30,7 @@ class ContextError(Exception):
 
 def _now() -> str:
     """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _b32lower(digest: bytes) -> str:
@@ -45,7 +45,9 @@ def project_fp(canonical_root: str, remote_identity: str | None = None) -> str:
     characters of the SHA-256 digest of the canonical root (optionally salted
     with a sanitized remote identity).
     """
-    payload = canonical_root if remote_identity is None else f"{canonical_root}\x00{remote_identity}"
+    payload = (
+        canonical_root if remote_identity is None else f"{canonical_root}\x00{remote_identity}"
+    )
     digest = hashlib.sha256(payload.encode("utf-8")).digest()
     return PROJECT_FP_PREFIX + _b32lower(digest)[:_FP_LEN]
 
@@ -106,9 +108,7 @@ def ensure_project(
         else None
     )
 
-    row = conn.execute(
-        "SELECT root_path FROM projects WHERE project_fp = ?", (fp,)
-    ).fetchone()
+    row = conn.execute("SELECT root_path FROM projects WHERE project_fp = ?", (fp,)).fetchone()
 
     if row is None:
         conn.execute(
@@ -171,9 +171,7 @@ def ensure_project(
         "WHERE project_fp = ?",
         (canonical_root, name, remote_hash, now, fp),
     )
-    conn.execute(
-        "UPDATE project_fingerprints SET manual_override = 1 WHERE project_fp = ?", (fp,)
-    )
+    conn.execute("UPDATE project_fingerprints SET manual_override = 1 WHERE project_fp = ?", (fp,))
     _log_event(
         conn,
         "project_override",
@@ -199,9 +197,7 @@ def ensure_branch(
     fp = override or branch_fp(project_fp, branch_name)
     now = _now()
 
-    row = conn.execute(
-        "SELECT branch_fp FROM branches WHERE branch_fp = ?", (fp,)
-    ).fetchone()
+    row = conn.execute("SELECT branch_fp FROM branches WHERE branch_fp = ?", (fp,)).fetchone()
     if row is not None:
         _log_event(
             conn,

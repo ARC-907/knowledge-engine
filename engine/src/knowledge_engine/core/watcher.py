@@ -6,7 +6,7 @@ Soft-coupled: if `watchdog` package not installed, raises at startup.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from .config import Config
 from .registry import Registry, RegistryEntry
@@ -30,7 +30,9 @@ def slugify(name: str) -> str:
 _FOLDER_TO_KIND = {"libraries": "library", "skills": "skill", "kits": "kit", "capabilities": "tool"}
 
 
-def auto_register(config: Config, registry: Registry, on_change: Callable[[], None] | None = None) -> int:
+def auto_register(
+    config: Config, registry: Registry, on_change: Callable[[], None] | None = None
+) -> int:
     """One-shot scan: register any folder under corpus/{libraries,skills,kits,capabilities} not yet in registry."""
     added = 0
     for sub, kind in _FOLDER_TO_KIND.items():
@@ -43,13 +45,15 @@ def auto_register(config: Config, registry: Registry, on_change: Callable[[], No
             entry_id = f"{kind}-{slugify(child.name)}"
             if registry.get(entry_id):
                 continue
-            registry.upsert(RegistryEntry(
-                id=entry_id,
-                kind=kind,  # type: ignore[arg-type]
-                name=child.name,
-                path=str(child.relative_to(config.corpus_root)).replace("\\", "/"),
-                auto_registered=True,
-            ))
+            registry.upsert(
+                RegistryEntry(
+                    id=entry_id,
+                    kind=kind,  # type: ignore[arg-type]
+                    name=child.name,
+                    path=str(child.relative_to(config.corpus_root)).replace("\\", "/"),
+                    auto_registered=True,
+                )
+            )
             added += 1
             log.info("auto-registered %s", entry_id)
     if added and on_change:
@@ -60,8 +64,8 @@ def auto_register(config: Config, registry: Registry, on_change: Callable[[], No
 def start_watcher(config: Config, registry: Registry, on_change: Callable[[], None] | None = None):
     """Start a background watchdog observer. Returns the observer (call .stop() to halt)."""
     try:
-        from watchdog.observers import Observer  # type: ignore
         from watchdog.events import FileSystemEventHandler  # type: ignore
+        from watchdog.observers import Observer  # type: ignore
     except ImportError as e:
         raise RuntimeError("watchdog not installed; pip install watchdog") from e
 

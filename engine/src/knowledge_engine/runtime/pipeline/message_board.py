@@ -13,14 +13,14 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..foundation import db
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _extract_target_node(msg: dict[str, Any]) -> str | None:
@@ -77,8 +77,8 @@ def post_message(
     message_id = str(uuid.uuid4())
     now = _now_iso()
     expires_at = (
-        datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
-    ).isoformat() if ttl_hours > 0 else None
+        (datetime.now(UTC) + timedelta(hours=ttl_hours)).isoformat() if ttl_hours > 0 else None
+    )
 
     conn = db.get_connection()
     conn.execute(
@@ -88,9 +88,24 @@ def post_message(
             visibility_scope, requires_ack, reply_to, correlation_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            message_id, channel, thread_id, task_id, product_id, sender_node_id, sender_node_id,
-            sender_role, model_id, message_type, subject, body, now, expires_at,
-            visibility_scope, 1 if requires_ack else 0, reply_to, correlation_id,
+            message_id,
+            channel,
+            thread_id,
+            task_id,
+            product_id,
+            sender_node_id,
+            sender_node_id,
+            sender_role,
+            model_id,
+            message_type,
+            subject,
+            body,
+            now,
+            expires_at,
+            visibility_scope,
+            1 if requires_ack else 0,
+            reply_to,
+            correlation_id,
         ),
     )
     conn.commit()
@@ -199,8 +214,11 @@ def get_relevant_messages(
 def post_claim(node_id: str, task_id: str, role: str | None = None) -> dict[str, Any]:
     """Announce a task claim on the board."""
     return post_message(
-        message_type="claim", sender_node_id=node_id, sender_role=role,
-        task_id=task_id, subject=f"Task {task_id[:8]}... claimed by {node_id}",
+        message_type="claim",
+        sender_node_id=node_id,
+        sender_role=role,
+        task_id=task_id,
+        subject=f"Task {task_id[:8]}... claimed by {node_id}",
         visibility_scope="all",
     )
 
@@ -208,27 +226,37 @@ def post_claim(node_id: str, task_id: str, role: str | None = None) -> dict[str,
 def post_release(node_id: str, task_id: str, reason: str = "") -> dict[str, Any]:
     """Announce a task release."""
     return post_message(
-        message_type="release", sender_node_id=node_id,
-        task_id=task_id, subject=f"Task {task_id[:8]}... released",
-        body=reason, visibility_scope="all",
+        message_type="release",
+        sender_node_id=node_id,
+        task_id=task_id,
+        subject=f"Task {task_id[:8]}... released",
+        body=reason,
+        visibility_scope="all",
     )
 
 
 def post_blocker(node_id: str, task_id: str, description: str) -> dict[str, Any]:
     """Flag a blocker for human or coordinator attention."""
     return post_message(
-        message_type="blocker", sender_node_id=node_id,
-        task_id=task_id, subject=f"BLOCKED: {task_id[:8]}...",
-        body=description, visibility_scope="all", requires_ack=True,
+        message_type="blocker",
+        sender_node_id=node_id,
+        task_id=task_id,
+        subject=f"BLOCKED: {task_id[:8]}...",
+        body=description,
+        visibility_scope="all",
+        requires_ack=True,
     )
 
 
 def post_heartbeat_msg(node_id: str, tasks: list[str]) -> dict[str, Any]:
     """Health message for the board."""
     return post_message(
-        message_type="node_health", sender_node_id=node_id,
+        message_type="node_health",
+        sender_node_id=node_id,
         subject=f"{node_id} alive, {len(tasks)} tasks",
-        body=json.dumps(tasks), visibility_scope="all", ttl_hours=1,
+        body=json.dumps(tasks),
+        visibility_scope="all",
+        ttl_hours=1,
     )
 
 

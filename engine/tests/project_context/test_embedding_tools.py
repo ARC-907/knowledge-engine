@@ -16,8 +16,10 @@ import pytest
 
 from knowledge_engine.project_context import db, paths
 from knowledge_engine.project_context.config import ProjectContextConfig
-from knowledge_engine.project_context.embeddings import index as emb_index
-from knowledge_engine.project_context.embeddings import providers as emb_providers
+from knowledge_engine.project_context.embeddings import (
+    index as emb_index,
+    providers as emb_providers,
+)
 from knowledge_engine.project_context.mcp_tools import base, embedding_tools
 
 PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
@@ -233,9 +235,7 @@ def test_semantic_search_returns_results(tmp_path):
     conn = _project_db()
     _insert_doc(conn, "d1", "alpha document")
     _insert_doc(conn, "d2", "beta document")
-    embedding_tools.dispatch(
-        "project_context.generate_embeddings", {}, _ctx(cfg, conn, tmp_path)
-    )
+    embedding_tools.dispatch("project_context.generate_embeddings", {}, _ctx(cfg, conn, tmp_path))
     result = embedding_tools.dispatch(
         "project_context.semantic_search",
         {"query": "alpha document"},
@@ -253,9 +253,7 @@ def test_similar_records_returns_neighbours(tmp_path):
     conn = _project_db()
     _insert_doc(conn, "d1", "alpha document")
     _insert_doc(conn, "d2", "beta document")
-    embedding_tools.dispatch(
-        "project_context.generate_embeddings", {}, _ctx(cfg, conn, tmp_path)
-    )
+    embedding_tools.dispatch("project_context.generate_embeddings", {}, _ctx(cfg, conn, tmp_path))
     result = embedding_tools.dispatch(
         "project_context.similar_records", {"record_id": "d1"}, _ctx(cfg, conn, tmp_path)
     )
@@ -275,9 +273,7 @@ def test_cluster_records_returns_clusters(tmp_path):
     _insert_doc(conn, "d1", "alpha document")
     _insert_doc(conn, "d2", "beta document")
     _insert_doc(conn, "d3", "gamma notes")
-    embedding_tools.dispatch(
-        "project_context.generate_embeddings", {}, _ctx(cfg, conn, tmp_path)
-    )
+    embedding_tools.dispatch("project_context.generate_embeddings", {}, _ctx(cfg, conn, tmp_path))
     result = embedding_tools.dispatch(
         "project_context.cluster_records", {"k": 3}, _ctx(cfg, conn, tmp_path)
     )

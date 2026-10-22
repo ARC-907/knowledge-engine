@@ -171,8 +171,7 @@ def diff_summary(root: Path | str, a: str, b: str) -> DiffSummary:
         )
     files_changed, insertions, deletions = _parse_numstat(out)
     summary = (
-        f"{files_changed} file(s) changed, "
-        f"{insertions} insertion(s)(+), {deletions} deletion(s)(-)"
+        f"{files_changed} file(s) changed, {insertions} insertion(s)(+), {deletions} deletion(s)(-)"
     )
     return DiffSummary(
         from_ref=a,

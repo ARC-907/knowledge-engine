@@ -59,10 +59,7 @@ def format_pointer(ptype: str, project_fp: str, branch_fp: str, record_id: str) 
     if ptype not in POINTER_TYPES:
         raise ValueError(f"unknown pointer type: {ptype!r}")
     kind = _kind_for(ptype)
-    return (
-        f"{KE_DOC_SCHEME}://{ptype}"
-        f"/project/{project_fp}/branch/{branch_fp}/{kind}/{record_id}"
-    )
+    return f"{KE_DOC_SCHEME}://{ptype}/project/{project_fp}/branch/{branch_fp}/{kind}/{record_id}"
 
 
 def parse_pointer(uri: str) -> dict[str, str]:
@@ -82,11 +79,7 @@ def parse_pointer(uri: str) -> dict[str, str]:
 
     if scheme == DOCSTRING_ALIAS_SCHEME:
         # Short form: project/<fp>/branch/<fp>/<kind>/<record_id>
-        if (
-            len(segments) != 6
-            or segments[0] != "project"
-            or segments[2] != "branch"
-        ):
+        if len(segments) != 6 or segments[0] != "project" or segments[2] != "branch":
             raise ValueError(f"malformed KE-DOCSTRING pointer: {uri!r}")
         return {
             "scheme": KE_DOC_SCHEME,
@@ -99,11 +92,7 @@ def parse_pointer(uri: str) -> dict[str, str]:
 
     if scheme == KE_DOC_SCHEME:
         # Full form: <type>/project/<fp>/branch/<fp>/<kind>/<record_id>
-        if (
-            len(segments) != 7
-            or segments[1] != "project"
-            or segments[3] != "branch"
-        ):
+        if len(segments) != 7 or segments[1] != "project" or segments[3] != "branch":
             raise ValueError(f"malformed ke-doc pointer: {uri!r}")
         ptype = segments[0]
         if ptype not in POINTER_TYPES:
@@ -238,7 +227,9 @@ def resolve(
         )
         envelope["related"] = _related_records(project_conn, record_id)
 
-    allow_full = bool(cfg is not None and getattr(getattr(cfg, "mcp", None), "allow_full_content", False))
+    allow_full = bool(
+        cfg is not None and getattr(getattr(cfg, "mcp", None), "allow_full_content", False)
+    )
     if mode == RESULT_FULL and allow_full:
         body = project_conn.execute(
             "SELECT searchable_body, raw_body FROM project_doc_bodies WHERE record_id = ?",
@@ -258,9 +249,7 @@ def _related_records(project_conn: sqlite3.Connection, record_id: str) -> list[d
         "SELECT dst_record_id, link_type FROM project_doc_links WHERE src_record_id = ?",
         (record_id,),
     ).fetchall()
-    return [
-        {"record_id": r["dst_record_id"], "link_type": r["link_type"]} for r in rows
-    ]
+    return [{"record_id": r["dst_record_id"], "link_type": r["link_type"]} for r in rows]
 
 
 def list_pointers(

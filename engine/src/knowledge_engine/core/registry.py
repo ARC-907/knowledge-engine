@@ -90,9 +90,7 @@ class Registry:
 
     def _persist(self) -> None:
         self._data["last_updated"] = time.time()
-        self.registry_path.write_text(
-            json.dumps(self._data, indent=2), encoding="utf-8"
-        )
+        self.registry_path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
         self._sync_to_sqlite()
 
     def _sync_to_sqlite(self) -> None:
@@ -120,7 +118,9 @@ class Registry:
             self._conn.commit()
 
     # ---------- Public API ----------
-    def list(self, kind: EntryKind | None = None, enabled_only: bool = False) -> list[dict[str, Any]]:
+    def list(
+        self, kind: EntryKind | None = None, enabled_only: bool = False
+    ) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         kinds = [kind] if kind else list(_KIND_TO_BUCKET.keys())
         for k in kinds:

@@ -14,15 +14,11 @@ class Config:
     registry_path: Path
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         # corpus_root defaults to ../corpus relative to engine/
         engine_dir = Path(__file__).resolve().parents[2]
-        corpus_root = Path(
-            os.environ.get("KE_CORPUS_ROOT", engine_dir.parent / "corpus")
-        ).resolve()
-        data_dir = Path(
-            os.environ.get("KE_DATA_DIR", engine_dir / "data")
-        ).resolve()
+        corpus_root = Path(os.environ.get("KE_CORPUS_ROOT", engine_dir.parent / "corpus")).resolve()
+        data_dir = Path(os.environ.get("KE_DATA_DIR", engine_dir / "data")).resolve()
         registry_path = Path(
             os.environ.get("KE_REGISTRY_PATH", corpus_root / "registry.json")
         ).resolve()

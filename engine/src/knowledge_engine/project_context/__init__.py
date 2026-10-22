@@ -22,4 +22,4 @@ def is_enabled(cfg: ProjectContextConfig | None = None) -> bool:
     return cfg.enabled
 
 
-__all__ = ["ProjectContextConfig", "load_config", "resolve_project_root", "is_enabled"]
+__all__ = ["ProjectContextConfig", "is_enabled", "load_config", "resolve_project_root"]

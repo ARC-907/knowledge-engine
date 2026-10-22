@@ -52,8 +52,7 @@ def project_conn(tmp_path: Path) -> sqlite3.Connection:
         (RECORD_ID, PROJECT_FP, BRANCH_FP, CONTENT_HASH),
     )
     conn.execute(
-        "INSERT INTO project_doc_bodies (record_id, searchable_body, raw_body) "
-        "VALUES (?, ?, NULL)",
+        "INSERT INTO project_doc_bodies (record_id, searchable_body, raw_body) VALUES (?, ?, NULL)",
         (RECORD_ID, "The full searchable body text."),
     )
     conn.commit()
@@ -86,9 +85,7 @@ def test_docstring_type_round_trips_through_canonical_form() -> None:
 
 
 def test_ke_docstring_alias_parses_to_docstring() -> None:
-    alias = (
-        f"KE-DOCSTRING://project/{PROJECT_FP}/branch/{BRANCH_FP}/doc/{RECORD_ID}"
-    )
+    alias = f"KE-DOCSTRING://project/{PROJECT_FP}/branch/{BRANCH_FP}/doc/{RECORD_ID}"
     parsed = pointers.parse_pointer(alias)
     assert parsed["scheme"] == "ke-doc"
     assert parsed["ptype"] == POINTER_DOCSTRING

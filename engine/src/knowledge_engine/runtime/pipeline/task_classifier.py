@@ -78,17 +78,19 @@ def classify_task(
     if context_hint:
         prompt += f"\n\nAdditional context: {context_hint}"
 
-    payload = json.dumps({
-        "model": model,
-        "prompt": prompt,
-        "system": CLASSIFIER_PROMPT,
-        "stream": False,
-        "options": {
-            "temperature": 0.1,
-            "num_ctx": 2048,
-            "num_predict": 256,
-        },
-    }).encode()
+    payload = json.dumps(
+        {
+            "model": model,
+            "prompt": prompt,
+            "system": CLASSIFIER_PROMPT,
+            "stream": False,
+            "options": {
+                "temperature": 0.1,
+                "num_ctx": 2048,
+                "num_predict": 256,
+            },
+        }
+    ).encode()
 
     try:
         req = urllib.request.Request(
@@ -120,7 +122,7 @@ def _parse_classification(text: str) -> dict[str, Any]:
     end = text.rfind("}")
     if start != -1 and end > start:
         try:
-            result = json.loads(text[start:end + 1])
+            result = json.loads(text[start : end + 1])
             return _validate_classification(result)
         except json.JSONDecodeError:
             pass

@@ -21,10 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .. import db as pddb, paths as pdpaths
 from ..config import ProjectContextConfig
-from .. import db as pddb
-from .. import paths as pdpaths
-
 
 # ── MCP result envelopes ─────────────────────────────────────────────
 
@@ -70,9 +68,11 @@ class ToolContext:
         """Resolve the on-disk slug for a project fingerprint (or current root)."""
         if project_fp is None:
             return pdpaths.slugify(self.root.name)
-        row = self.registry_conn().execute(
-            "SELECT name FROM projects WHERE project_fp=?", (project_fp,)
-        ).fetchone()
+        row = (
+            self.registry_conn()
+            .execute("SELECT name FROM projects WHERE project_fp=?", (project_fp,))
+            .fetchone()
+        )
         if row is None:
             return None
         return pdpaths.slugify(row["name"])

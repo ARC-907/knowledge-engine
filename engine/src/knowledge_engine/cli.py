@@ -10,7 +10,6 @@ from .core.config import Config
 from .core.registry import Registry, RegistryEntry
 from .retrieval.fts5 import Indexer
 
-
 BASE_MCP_TOOLS = ["search", "registry_list", "registry_toggle", "registry_get"]
 
 
@@ -48,13 +47,15 @@ def _bootstrap(config: Config, registry: Registry) -> dict[str, int]:
             if registry.get(entry_id):
                 counts["skipped"] += 1
                 continue
-            registry.upsert(RegistryEntry(
-                id=entry_id,
-                kind=kind,
-                name=child.name,
-                path=str(child.relative_to(root)).replace("\\", "/"),
-                auto_registered=True,
-            ))
+            registry.upsert(
+                RegistryEntry(
+                    id=entry_id,
+                    kind=kind,
+                    name=child.name,
+                    path=str(child.relative_to(root)).replace("\\", "/"),
+                    auto_registered=True,
+                )
+            )
             counts[kind] += 1
     return counts
 
@@ -63,7 +64,7 @@ def _safe_payload(fn, fallback):
     """Run an optional capability probe without letting it break CLI inventory."""
     try:
         return fn()
-    except Exception as exc:  # noqa: BLE001 - inventory must degrade gracefully
+    except Exception as exc:
         return {"status": "error", "error": str(exc), **fallback}
 
 
@@ -96,8 +97,8 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
         }
 
     def board_payload() -> dict:
-        from .agent_board.mcp_tools import collect_tools as collect_board_tools
         from .agent_board import scopes
+        from .agent_board.mcp_tools import collect_tools as collect_board_tools
 
         board_tools, _ = collect_board_tools()
         known_scopes = scopes.list_scopes()
@@ -174,12 +175,16 @@ def main() -> int:
     sp.add_argument("--port", type=int, default=9210)
 
     pd = sub.add_parser("project-context", help="Project-specific documentation subsystem")
-    pd.add_argument("pd_args", nargs=argparse.REMAINDER,
-                    help="Subcommand + args (e.g. 'info', 'capabilities')")
+    pd.add_argument(
+        "pd_args", nargs=argparse.REMAINDER, help="Subcommand + args (e.g. 'info', 'capabilities')"
+    )
 
     ab = sub.add_parser("board", help="Agent Board (post/read/search/ack/sweep/keys)")
-    ab.add_argument("board_args", nargs=argparse.REMAINDER,
-                    help="Subcommand + args (e.g. 'status', 'post', 'read', 'search')")
+    ab.add_argument(
+        "board_args",
+        nargs=argparse.REMAINDER,
+        help="Subcommand + args (e.g. 'status', 'post', 'read', 'search')",
+    )
 
     abs_serve = sub.add_parser(
         "board-serve",
@@ -192,31 +197,39 @@ def main() -> int:
 
     if args.cmd == "project-context":
         from .project_context.cli import main as pd_main
+
         return pd_main(args.pd_args)
 
     if args.cmd == "board":
         from .agent_board.cli import main as board_main
+
         return board_main(args.board_args)
 
     if args.cmd == "board-serve":
         from .agent_board.service import serve as board_serve
+
         return board_serve(host=args.host, port=args.port)
 
     config = Config.from_env()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")
 
     if args.cmd == "info":
-        print(json.dumps({
-            "corpus_root": str(config.corpus_root),
-            "data_dir": str(config.data_dir),
-            "registry_path": str(config.registry_path),
-            "counts": {
-                "libraries": len(registry.list("library")),
-                "skills": len(registry.list("skill")),
-                "kits": len(registry.list("kit")),
-                "tools": len(registry.list("tool")),
-            },
-        }, indent=2))
+        print(
+            json.dumps(
+                {
+                    "corpus_root": str(config.corpus_root),
+                    "data_dir": str(config.data_dir),
+                    "registry_path": str(config.registry_path),
+                    "counts": {
+                        "libraries": len(registry.list("library")),
+                        "skills": len(registry.list("skill")),
+                        "kits": len(registry.list("kit")),
+                        "tools": len(registry.list("tool")),
+                    },
+                },
+                indent=2,
+            )
+        )
         return 0
 
     if args.cmd == "capabilities":
@@ -229,13 +242,15 @@ def main() -> int:
         return 0
 
     if args.cmd == "watch":
-        from .core.watcher import start_watcher, auto_register
+        from .core.watcher import auto_register, start_watcher
+
         added = auto_register(config, registry)
         print(json.dumps({"initial_added": added}))
         observer = start_watcher(config, registry)
         print("Watching... Ctrl+C to stop.", file=sys.stderr)
         try:
             import time as _time
+
             while True:
                 _time.sleep(1)
         except KeyboardInterrupt:
@@ -245,6 +260,7 @@ def main() -> int:
 
     if args.cmd == "mcp":
         from .mcp.server import main as mcp_main
+
         return mcp_main()
 
     if args.cmd == "reindex":

@@ -34,16 +34,12 @@ from pathlib import Path
 OLLAMA_URL = os.environ.get("KE_OLLAMA_URL", "http://127.0.0.1:11434")
 EMBED_MODEL = os.environ.get("KE_EMBED_MODEL", "bge-m3:latest")
 
-CORPUS_ROOT = Path(
-    os.environ.get("KE_CORPUS_ROOT", str(Path.cwd() / "corpus"))
-).resolve()
+CORPUS_ROOT = Path(os.environ.get("KE_CORPUS_ROOT", str(Path.cwd() / "corpus"))).resolve()
 
 _default_db_dir = Path(os.environ.get("KE_DATA_DIR", str(Path.cwd() / "engine" / "data")))
-DB_PATH = Path(
-    os.environ.get("KE_EMBEDDINGS_DB", str(_default_db_dir / "embeddings.db"))
-).resolve()
+DB_PATH = Path(os.environ.get("KE_EMBEDDINGS_DB", str(_default_db_dir / "embeddings.db"))).resolve()
 
-CHUNK_SIZE = 1500   # chars per chunk (bge-m3 context is ~8192 tokens)
+CHUNK_SIZE = 1500  # chars per chunk (bge-m3 context is ~8192 tokens)
 CHUNK_OVERLAP = 200
 
 # Dirs to skip during corpus walk
@@ -238,9 +234,7 @@ def build_index(incremental: bool = False) -> dict:
             (rel, fhash, library, len(chunks)),
         )
 
-        file_id = conn.execute(
-            "SELECT id FROM files WHERE rel_path=?", (rel,)
-        ).fetchone()[0]
+        file_id = conn.execute("SELECT id FROM files WHERE rel_path=?", (rel,)).fetchone()[0]
 
         # Replace chunks for this file
         conn.execute("DELETE FROM chunks WHERE file_id=?", (file_id,))
@@ -257,7 +251,7 @@ def build_index(incremental: bool = False) -> dict:
                     (file_id, ci, chunk["text"], chunk["heading"], blob),
                 )
                 total_chunks += 1
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 print(f"  Embed error on {rel} chunk {ci}: {exc}")
                 errors += 1
 
@@ -268,7 +262,7 @@ def build_index(incremental: bool = False) -> dict:
             elapsed = time.time() - start_time
             rate = indexed / elapsed if elapsed > 0 else 0
             print(
-                f"  [{i+1}/{len(md_files)}] {indexed} indexed, "
+                f"  [{i + 1}/{len(md_files)}] {indexed} indexed, "
                 f"{skipped} skipped, {errors} errors, "
                 f"{total_chunks} chunks ({rate:.1f} files/sec)"
             )

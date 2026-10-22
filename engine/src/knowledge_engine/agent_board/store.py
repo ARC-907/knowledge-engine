@@ -20,8 +20,9 @@ from __future__ import annotations
 import functools
 import json
 import sqlite3
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any, TypeVar
 
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
@@ -49,6 +50,7 @@ def _scoped(fn: _F) -> _F:
     def wrapper(*args: Any, scope: str | None = None, **kwargs: Any) -> Any:
         if scope:
             from .scopes import scope_db_path
+
             with db.using_db(scope_db_path(scope)):
                 return fn(*args, **kwargs)
         return fn(*args, **kwargs)
@@ -76,12 +78,19 @@ def load_config() -> dict[str, Any]:
     return cfg
 
 
-_CONFIG_INT_FIELDS = frozenset({
-    "engine_port", "standalone_port", "sweep_interval_s",
-    "stale_blocker_hours", "digest_interval_minutes",
-    "max_messages_before_prune", "default_ttl_hours",
-    "sweeper_enabled", "require_key_for_post",
-})
+_CONFIG_INT_FIELDS = frozenset(
+    {
+        "engine_port",
+        "standalone_port",
+        "sweep_interval_s",
+        "stale_blocker_hours",
+        "digest_interval_minutes",
+        "max_messages_before_prune",
+        "default_ttl_hours",
+        "sweeper_enabled",
+        "require_key_for_post",
+    }
+)
 
 
 def update_config(patch: dict[str, Any]) -> dict[str, Any]:
@@ -160,9 +169,13 @@ def poll(
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     return mb.poll_messages(
-        since=since, task_id=task_id, product_id=product_id,
-        message_type=message_type, sender_node_id=sender_node_id,
-        limit=limit, channel=channel,
+        since=since,
+        task_id=task_id,
+        product_id=product_id,
+        message_type=message_type,
+        sender_node_id=sender_node_id,
+        limit=limit,
+        channel=channel,
     )
 
 
@@ -174,8 +187,11 @@ def relevant_for(
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     return mb.get_relevant_messages(
-        node_id=node_id, role=role, current_task_ids=current_task_ids,
-        since=since, limit=limit,
+        node_id=node_id,
+        role=role,
+        current_task_ids=current_task_ids,
+        since=since,
+        limit=limit,
     )
 
 
@@ -342,7 +358,8 @@ def digest(
     msgs = poll(since=since, channel=channel, limit=max_messages)
     if not include_sweeper_posts:
         msgs = [
-            m for m in msgs
+            m
+            for m in msgs
             if not (
                 m.get("sender_node_id") == _SWEEPER_NODE_ID
                 and m.get("message_type") in _DIGEST_SELF_TYPES
@@ -370,18 +387,19 @@ def digest(
         if corr:
             by_thread[corr] = by_thread.get(corr, 0) + 1
         if msg.get("requires_ack") and not _has_ack(msg):
-            open_blockers.append({
-                "message_id": msg.get("message_id"),
-                "subject": msg.get("subject"),
-                "task_id": msg.get("task_id"),
-                "from": msg.get("sender_node_id"),
-                "at": msg.get("created_at"),
-            })
+            open_blockers.append(
+                {
+                    "message_id": msg.get("message_id"),
+                    "subject": msg.get("subject"),
+                    "task_id": msg.get("task_id"),
+                    "from": msg.get("sender_node_id"),
+                    "at": msg.get("created_at"),
+                }
+            )
 
     top_senders = sorted(by_sender.items(), key=lambda kv: kv[1], reverse=True)[:5]
     busy_threads = [
-        {"correlation_id": cid, "count": cnt}
-        for cid, cnt in by_thread.items() if cnt >= 3
+        {"correlation_id": cid, "count": cnt} for cid, cnt in by_thread.items() if cnt >= 3
     ]
 
     return {
@@ -401,9 +419,7 @@ def digest(
 
 def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
     """Blockers that are requires_ack=1, unacked, and older than threshold."""
-    cutoff = (
-        datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
-    ).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(hours=threshold_hours)).isoformat()
     conn = db.get_connection()
     rows = conn.execute(
         """SELECT * FROM messages
@@ -527,9 +543,13 @@ def record_sweep(
             reminders_emitted, digests_emitted, error
         ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (
-            started_at, finished_at,
-            pruned_expired, pruned_overflow,
-            reminders_emitted, digests_emitted, error,
+            started_at,
+            finished_at,
+            pruned_expired,
+            pruned_overflow,
+            reminders_emitted,
+            digests_emitted,
+            error,
         ),
     )
     conn.commit()
@@ -537,9 +557,7 @@ def record_sweep(
 
 def last_sweep() -> dict[str, Any] | None:
     conn = db.get_connection()
-    row = conn.execute(
-        "SELECT * FROM board_sweeps ORDER BY started_at DESC LIMIT 1"
-    ).fetchone()
+    row = conn.execute("SELECT * FROM board_sweeps ORDER BY started_at DESC LIMIT 1").fetchone()
     return dict(row) if row else None
 
 
@@ -556,7 +574,7 @@ def _has_ack(msg: dict[str, Any]) -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ── Scope wrapping ─────────────────────────────────────────────
@@ -567,12 +585,22 @@ def _now_iso() -> str:
 # helpers used only by the sweeper (`record_sweep`, `last_sweep`) are left
 # unwrapped — the sweeper sets the scope context itself.
 _SCOPED_FUNCTIONS = (
-    "load_config", "update_config",
-    "post_with_validation", "read", "poll", "relevant_for",
-    "thread_messages", "search_messages",
-    "digest", "get_unacked_blockers", "ack_message",
-    "channel_stats", "type_stats", "total_count",
-    "prune_expired", "prune_by_count",
+    "load_config",
+    "update_config",
+    "post_with_validation",
+    "read",
+    "poll",
+    "relevant_for",
+    "thread_messages",
+    "search_messages",
+    "digest",
+    "get_unacked_blockers",
+    "ack_message",
+    "channel_stats",
+    "type_stats",
+    "total_count",
+    "prune_expired",
+    "prune_by_count",
 )
 for _name in _SCOPED_FUNCTIONS:
     globals()[_name] = _scoped(globals()[_name])
@@ -581,11 +609,22 @@ del _name
 
 # Convenience re-exports for callers that want flat imports.
 __all__ = [
-    "load_config", "update_config",
-    "post_with_validation", "read", "poll", "relevant_for",
-    "thread_messages", "search_messages",
-    "digest", "get_unacked_blockers", "ack_message",
-    "channel_stats", "type_stats", "total_count",
-    "prune_expired", "prune_by_count",
-    "record_sweep", "last_sweep",
+    "ack_message",
+    "channel_stats",
+    "digest",
+    "get_unacked_blockers",
+    "last_sweep",
+    "load_config",
+    "poll",
+    "post_with_validation",
+    "prune_by_count",
+    "prune_expired",
+    "read",
+    "record_sweep",
+    "relevant_for",
+    "search_messages",
+    "thread_messages",
+    "total_count",
+    "type_stats",
+    "update_config",
 ]

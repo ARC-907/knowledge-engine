@@ -53,7 +53,9 @@ def schema_version(conn: sqlite3.Connection) -> int:
     return int(row["v"]) if row and row["v"] is not None else 0
 
 
-def _discover(migrations_dir: Path, only_prefixes: tuple[str, ...] | None) -> list[tuple[int, Path]]:
+def _discover(
+    migrations_dir: Path, only_prefixes: tuple[str, ...] | None
+) -> list[tuple[int, Path]]:
     found: list[tuple[int, Path]] = []
     for sql_file in sorted(migrations_dir.glob("*.sql")):
         m = _MIGRATION_RE.match(sql_file.name)

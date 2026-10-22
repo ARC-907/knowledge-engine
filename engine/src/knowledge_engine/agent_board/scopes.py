@@ -101,9 +101,9 @@ def scope_db_paths() -> list[str]:
 
 __all__ = [
     "SCOPES_DIRNAME",
-    "slugify_scope",
-    "scopes_root",
-    "scope_db_path",
     "list_scopes",
+    "scope_db_path",
     "scope_db_paths",
+    "scopes_root",
+    "slugify_scope",
 ]

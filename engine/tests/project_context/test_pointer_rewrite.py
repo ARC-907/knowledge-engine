@@ -109,9 +109,7 @@ def _all_gates_on() -> ProjectContextConfig:
         allow_source_mutation=True,
         write_backups=True,
     )
-    scanner = replace(
-        base.scanner, enabled=True, dry_run=False, pointer_replacement=pointer
-    )
+    scanner = replace(base.scanner, enabled=True, dry_run=False, pointer_replacement=pointer)
     return replace(base, scanner=scanner)
 
 
@@ -158,9 +156,7 @@ def test_apply_blocked_without_gates(tmp_path):
     _ingest_docstring(project, registry, project_fp=project_fp, branch_fp=branch_fp)
 
     cfg = ProjectContextConfig()
-    plan = pointer_plan.run(
-        str(tmp_path), cfg, project, project_fp=project_fp, branch_fp=branch_fp
-    )
+    plan = pointer_plan.run(str(tmp_path), cfg, project, project_fp=project_fp, branch_fp=branch_fp)
     result = pointer_apply.run(
         plan["plan_id"],
         str(tmp_path),
@@ -174,9 +170,7 @@ def test_apply_blocked_without_gates(tmp_path):
 
     assert result["status"] == "not_permitted"
     assert src.read_bytes() == before
-    count = project.execute(
-        "SELECT COUNT(*) AS n FROM pointer_rewrite_events"
-    ).fetchone()["n"]
+    count = project.execute("SELECT COUNT(*) AS n FROM pointer_rewrite_events").fetchone()["n"]
     assert count == 0
 
 
@@ -189,9 +183,7 @@ def test_apply_missing_confirm_blocked(tmp_path):
     _ingest_docstring(project, registry, project_fp=project_fp, branch_fp=branch_fp)
 
     cfg = _all_gates_on()
-    plan = pointer_plan.run(
-        str(tmp_path), cfg, project, project_fp=project_fp, branch_fp=branch_fp
-    )
+    plan = pointer_plan.run(str(tmp_path), cfg, project, project_fp=project_fp, branch_fp=branch_fp)
     result = pointer_apply.run(
         plan["plan_id"],
         str(tmp_path),
@@ -216,9 +208,7 @@ def test_apply_replaces_span_and_rollback_restores(tmp_path):
     _ingest_docstring(project, registry, project_fp=project_fp, branch_fp=branch_fp)
 
     cfg = _all_gates_on()
-    plan = pointer_plan.run(
-        str(tmp_path), cfg, project, project_fp=project_fp, branch_fp=branch_fp
-    )
+    plan = pointer_plan.run(str(tmp_path), cfg, project, project_fp=project_fp, branch_fp=branch_fp)
     result = pointer_apply.run(
         plan["plan_id"],
         str(tmp_path),

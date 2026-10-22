@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from ..core.config import Config
 from ..core.registry import Registry
@@ -74,7 +74,8 @@ class Indexer:
                     files: Iterable[Path] = [entry_root]
                 else:
                     files = (
-                        p for p in entry_root.rglob("*")
+                        p
+                        for p in entry_root.rglob("*")
                         if p.is_file() and p.suffix.lower() in TEXT_SUFFIXES
                     )
                 for path in files:

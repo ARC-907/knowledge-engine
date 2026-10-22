@@ -1,4 +1,5 @@
 """Tests for project_context.registry."""
+
 from __future__ import annotations
 
 import sys
@@ -78,9 +79,7 @@ def test_register_project_explicit_name(tmp_path):
     proj = tmp_path / "raw-dir"
     proj.mkdir()
 
-    result = registry.register_project(
-        conn, str(proj), _cfg(), name="Friendly Name"
-    )
+    result = registry.register_project(conn, str(proj), _cfg(), name="Friendly Name")
     assert result["name"] == "Friendly Name"
 
 

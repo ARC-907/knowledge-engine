@@ -45,7 +45,9 @@ def _git_toplevel(start: Path) -> Path | None:
     return Path(top).resolve() if top else None
 
 
-def resolve_project_root(start: Path | None = None, cfg: ProjectContextConfig | None = None) -> Path:
+def resolve_project_root(
+    start: Path | None = None, cfg: ProjectContextConfig | None = None
+) -> Path:
     """Resolve the project root.
 
     Preference order: git top-level of ``start`` → ``start`` itself. ``cfg`` is

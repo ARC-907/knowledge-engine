@@ -12,12 +12,12 @@ from fastapi.staticfiles import StaticFiles
 from .. import __version__
 from ..core.config import Config
 from ..core.registry import Registry
-from ..retrieval.fts5 import Indexer
 from ..generation import ProviderRegistry
 from ..generation.cloud_http import CloudHTTPProvider, EchoProvider
 from ..generation.ollama_provider import OllamaProvider
-from .api import registry_routes, search_routes, health_routes, generate_routes
-from .lifespan import lifespan, env_truthy
+from ..retrieval.fts5 import Indexer
+from .api import generate_routes, health_routes, registry_routes, search_routes
+from .lifespan import env_truthy, lifespan
 
 _logger = logging.getLogger(__name__)
 
@@ -65,8 +65,9 @@ def create_app() -> FastAPI:
     if env_truthy("KE_BOARD_ENABLED", default=True):
         try:
             from .api import board_routes
+
             app.include_router(board_routes.router, prefix="/board", tags=["board"])
-        except Exception:  # noqa: BLE001 — board must never break core boot
+        except Exception:
             _logger.exception("agent board failed to mount; continuing without it")
 
     # Static dashboard (served at /ui)

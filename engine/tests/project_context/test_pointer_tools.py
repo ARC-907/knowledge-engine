@@ -8,8 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from knowledge_engine.project_context import db as pddb
-from knowledge_engine.project_context import pointers
+from knowledge_engine.project_context import db as pddb, pointers
 from knowledge_engine.project_context.hashing import content_hash
 from knowledge_engine.project_context.mcp_tools import base, pointer_tools
 
@@ -64,8 +63,7 @@ def _seed_project_db(path: Path) -> tuple[object, str]:
         ),
     )
     conn.execute(
-        "INSERT INTO project_doc_bodies (record_id, searchable_body, raw_body) "
-        "VALUES (?, ?, NULL)",
+        "INSERT INTO project_doc_bodies (record_id, searchable_body, raw_body) VALUES (?, ?, NULL)",
         (RECORD_ID, BODY_TEXT),
     )
     conn.commit()
@@ -132,9 +130,7 @@ def test_tool_defs_shape() -> None:
 def test_resolve_pointer_returns_summary(seeded) -> None:
     tmp_path, conn, uri = seeded
     ctx = _make_ctx(tmp_path, conn)
-    result = pointer_tools.dispatch(
-        "project_context.resolve_pointer", {"uri": uri}, ctx
-    )
+    result = pointer_tools.dispatch("project_context.resolve_pointer", {"uri": uri}, ctx)
     payload = _payload(result)
     assert payload["record_id"] == RECORD_ID
     assert payload["pointer_id"] == uri
@@ -170,9 +166,7 @@ def test_resolve_pointer_not_found(seeded) -> None:
     tmp_path, conn, _uri = seeded
     ctx = _make_ctx(tmp_path, conn)
     missing = pointers.format_pointer("doc", PROJECT_FP, BRANCH_FP, "rec_missing")
-    result = pointer_tools.dispatch(
-        "project_context.resolve_pointer", {"uri": missing}, ctx
-    )
+    result = pointer_tools.dispatch("project_context.resolve_pointer", {"uri": missing}, ctx)
     payload = _payload(result)
     assert payload["status"] == "not_found"
 
@@ -203,9 +197,7 @@ def test_validate_pointer_valid_grammar_missing_record(seeded) -> None:
     tmp_path, conn, _uri = seeded
     ctx = _make_ctx(tmp_path, conn)
     missing = pointers.format_pointer("doc", PROJECT_FP, BRANCH_FP, "rec_missing")
-    result = pointer_tools.dispatch(
-        "project_context.validate_pointer", {"uri": missing}, ctx
-    )
+    result = pointer_tools.dispatch("project_context.validate_pointer", {"uri": missing}, ctx)
     payload = _payload(result)
     assert payload["valid"] is True
     assert payload["exists"] is False
@@ -214,9 +206,7 @@ def test_validate_pointer_valid_grammar_missing_record(seeded) -> None:
 def test_validate_pointer_existing(seeded) -> None:
     tmp_path, conn, uri = seeded
     ctx = _make_ctx(tmp_path, conn)
-    result = pointer_tools.dispatch(
-        "project_context.validate_pointer", {"uri": uri}, ctx
-    )
+    result = pointer_tools.dispatch("project_context.validate_pointer", {"uri": uri}, ctx)
     payload = _payload(result)
     assert payload["valid"] is True
     assert payload["exists"] is True
@@ -235,9 +225,7 @@ def test_list_pointers(seeded) -> None:
 def test_pointer_backrefs_empty(seeded) -> None:
     tmp_path, conn, uri = seeded
     ctx = _make_ctx(tmp_path, conn)
-    result = pointer_tools.dispatch(
-        "project_context.pointer_backrefs", {"pointer_id": uri}, ctx
-    )
+    result = pointer_tools.dispatch("project_context.pointer_backrefs", {"pointer_id": uri}, ctx)
     payload = _payload(result)
     assert payload == []
 

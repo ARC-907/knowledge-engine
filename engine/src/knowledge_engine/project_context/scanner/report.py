@@ -28,10 +28,12 @@ from ..models import Candidate, ScanReport
 # Importing the detector modules triggers their ``@register_detector`` side
 # effects, so ``iter_detectors`` returns a populated registry regardless of
 # whether the caller imported them first. (Re-registration is idempotent.)
-from . import comments as _comments  # noqa: F401
-from . import docstrings as _docstrings  # noqa: F401
-from . import logs as _logs  # noqa: F401
-from . import markdown as _markdown  # noqa: F401
+from . import (
+    comments as _comments,  # noqa: F401
+    docstrings as _docstrings,  # noqa: F401
+    logs as _logs,  # noqa: F401
+    markdown as _markdown,  # noqa: F401
+)
 from .base import iter_detectors
 from .discovery import run_detectors
 
@@ -64,7 +66,7 @@ def _git_available(root: Path, cfg) -> bool:
     """Return whether git context is available for ``root`` (never raises)."""
     try:
         return git_context.collect(root, cfg) is not None
-    except Exception:  # noqa: BLE001 - git is optional; absence must not break a report
+    except Exception:
         logger.debug("git_context.collect failed during report scan", exc_info=True)
         return False
 
@@ -88,8 +90,7 @@ def _recommended_actions(
 
     if not cfg.scanner.enabled:
         actions.append(
-            f"enable scanner.ingest to store {total} candidate(s) "
-            "(set cfg.scanner.enabled=True)"
+            f"enable scanner.ingest to store {total} candidate(s) (set cfg.scanner.enabled=True)"
         )
     else:
         actions.append(f"run scanner ingest to store {total} candidate(s)")
@@ -106,9 +107,7 @@ def _recommended_actions(
         actions.append(f"{log_total} log file(s) discovered for log ingestion")
 
     if not git_available:
-        actions.append(
-            "git context unavailable; commit/branch lineage will be omitted"
-        )
+        actions.append("git context unavailable; commit/branch lineage will be omitted")
 
     return tuple(actions)
 
@@ -117,9 +116,9 @@ def _notes(candidates: list[Candidate], cfg, git_available: bool) -> tuple[str, 
     """Build informational notes describing the scan and its configuration."""
     by_detector = Counter(c.detector for c in candidates)
     total_bytes = sum(c.est_bytes for c in candidates)
-    detector_summary = ", ".join(
-        f"{name}={count}" for name, count in sorted(by_detector.items())
-    ) or "none"
+    detector_summary = (
+        ", ".join(f"{name}={count}" for name, count in sorted(by_detector.items())) or "none"
+    )
     return (
         f"scanned candidates by detector: {detector_summary}",
         f"estimated total source bytes: {total_bytes}",

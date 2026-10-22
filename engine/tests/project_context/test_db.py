@@ -12,9 +12,7 @@ def test_registry_only_migration(tmp_path: Path) -> None:
     n = apply_migrations(conn, only_prefixes=("001_",))
     assert n == 1
     assert schema_version(conn) == 1
-    tables = {r["name"] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )}
+    tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "projects" in tables
     assert "branches" in tables
     # Project tables must NOT be present in the registry DB.
@@ -25,11 +23,18 @@ def test_project_migrations(tmp_path: Path) -> None:
     conn = connect(tmp_path / "proj.sqlite")
     n = apply_migrations(conn, only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_"))
     assert n == 6
-    names = {r["name"] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
-    )}
-    for expected in ("project_docs", "project_docs_fts", "test_runs",
-                     "doc_pointers", "git_context", "doc_embeddings"):
+    names = {
+        r["name"]
+        for r in conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")
+    }
+    for expected in (
+        "project_docs",
+        "project_docs_fts",
+        "test_runs",
+        "doc_pointers",
+        "git_context",
+        "doc_embeddings",
+    ):
         assert expected in names
 
 

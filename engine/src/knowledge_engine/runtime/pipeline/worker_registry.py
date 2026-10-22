@@ -13,14 +13,14 @@ Named `worker_registry` to disambiguate from the corpus registry at
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..foundation import config, db
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ── Registration ───────────────────────────────────────────
@@ -70,9 +70,19 @@ def register_worker(
             last_heartbeat=excluded.last_heartbeat, config_json=excluded.config_json
         """,
         (
-            node_id, hostname, tailscale_ip, display_name, model, role,
-            json.dumps(capabilities), ollama_endpoint, ollama_model, max_concurrent,
-            now, now, json.dumps(node_cfg),
+            node_id,
+            hostname,
+            tailscale_ip,
+            display_name,
+            model,
+            role,
+            json.dumps(capabilities),
+            ollama_endpoint,
+            ollama_model,
+            max_concurrent,
+            now,
+            now,
+            json.dumps(node_cfg),
         ),
     )
     conn.commit()
@@ -130,8 +140,12 @@ def send_heartbeat(
             status = 'online', last_heartbeat = ?, current_tasks = ?,
             resources_json = COALESCE(?, resources_json)
            WHERE node_id = ?""",
-        (now, json.dumps(current_tasks or []),
-         json.dumps(resources) if resources else None, node_id),
+        (
+            now,
+            json.dumps(current_tasks or []),
+            json.dumps(resources) if resources else None,
+            node_id,
+        ),
     )
     conn.commit()
     return get_worker(node_id)
@@ -146,7 +160,7 @@ def check_heartbeat(node_id: str) -> str | None:
 def get_expired_workers(timeout_seconds: int = 180) -> list[str]:
     """Return node IDs of workers whose heartbeat has expired."""
     expired = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     for w in list_workers(online_only=True):
         last = w.get("last_heartbeat")

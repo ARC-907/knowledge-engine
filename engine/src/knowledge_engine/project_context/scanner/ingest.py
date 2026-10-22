@@ -20,19 +20,21 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from .. import ingest as pipeline
-from .. import schema
+from .. import ingest as pipeline, schema
 from ..config import ProjectContextConfig
 from ..models import Candidate
-from . import base, discovery
 
 # Importing the detector modules registers them with ``base``'s registry via
 # their ``@register_detector`` decorators; ``base.iter_detectors()`` then
 # returns one live instance of each.
-from . import comments as _comments  # noqa: F401
-from . import docstrings as _docstrings  # noqa: F401
-from . import logs as _logs  # noqa: F401
-from . import markdown as _markdown  # noqa: F401
+from . import (
+    base,
+    comments as _comments,  # noqa: F401
+    discovery,
+    docstrings as _docstrings,  # noqa: F401
+    logs as _logs,  # noqa: F401
+    markdown as _markdown,  # noqa: F401
+)
 from .validators import preflight
 
 
@@ -102,9 +104,7 @@ def run(
     """
     preflight("ingest", cfg, registry_conn, project_fp, branch_fp)
 
-    run_id = pipeline.begin_run(
-        project_conn, registry_conn, project_fp, branch_fp, "ingest"
-    )
+    run_id = pipeline.begin_run(project_conn, registry_conn, project_fp, branch_fp, "ingest")
 
     stats = {
         "candidates": 0,

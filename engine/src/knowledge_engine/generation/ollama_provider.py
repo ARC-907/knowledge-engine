@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import os
+
 import httpx
 
-from .base import Provider, GenerationRequest, GenerationResponse
+from .base import GenerationRequest, GenerationResponse, Provider
 
 
 class OllamaProvider(Provider):
     name = "ollama"
 
     def __init__(self, base_url: str | None = None, model: str | None = None):
-        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
+        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip(
+            "/"
+        )
         self.model = model or os.getenv("OLLAMA_MODEL", "llama3.2")
         self._timeout = float(os.getenv("OLLAMA_TIMEOUT", "30"))
 
@@ -38,6 +41,8 @@ class OllamaProvider(Provider):
             text=data.get("response", ""),
             provider=self.name,
             model=model,
-            usage={"eval_count": data.get("eval_count"), "prompt_eval_count": data.get("prompt_eval_count")},
+            usage={
+                "eval_count": data.get("eval_count"),
+                "prompt_eval_count": data.get("prompt_eval_count"),
+            },
         )
-

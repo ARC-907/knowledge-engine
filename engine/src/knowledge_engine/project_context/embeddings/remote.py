@@ -31,12 +31,10 @@ class RemoteProvider(EmbeddingProvider):
     be used by accident.
     """
 
-    def __init__(self, cfg: "ProjectContextConfig") -> None:
+    def __init__(self, cfg: ProjectContextConfig) -> None:
         emb = getattr(cfg, "embeddings", None)
         if emb is None or not getattr(emb, "allow_remote_provider", False):
-            raise RuntimeError(
-                "RemoteProvider is disabled: set embeddings.allow_remote_provider"
-            )
+            raise RuntimeError("RemoteProvider is disabled: set embeddings.allow_remote_provider")
         self._endpoint = str(getattr(emb, "url", "") or "").strip().rstrip("/")
         self._model = str(getattr(emb, "model", "") or "").strip()
         self._dim = int(getattr(emb, "dim", 0) or 0)

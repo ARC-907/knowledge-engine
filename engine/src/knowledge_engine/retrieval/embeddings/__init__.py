@@ -9,19 +9,19 @@ sensible for a local Ollama install.
 """
 
 from .build import (
+    blob_to_embedding,
     build_index,
-    show_stats,
-    get_embedding,
     cosine_similarity,
     embedding_to_blob,
-    blob_to_embedding,
+    get_embedding,
+    show_stats,
 )
 
 __all__ = [
+    "blob_to_embedding",
     "build_index",
-    "show_stats",
-    "get_embedding",
     "cosine_similarity",
     "embedding_to_blob",
-    "blob_to_embedding",
+    "get_embedding",
+    "show_stats",
 ]
