@@ -1,0 +1,64 @@
+# Keep the build context small and free of local state and secrets.
+# The image only needs engine/ (pyproject.toml, uv.lock, README.md, LICENSE,
+# src/); everything else is excluded or harmless.
+
+# VCS and CI metadata
+.git
+.github
+.gitattributes
+.git-blame-ignore-revs
+.pre-commit-config.yaml
+
+# Virtual environments
+**/.venv
+**/venv
+**/env
+
+# Caches and coverage output
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.hypothesis
+**/.coverage
+**/.coverage.*
+**/coverage.xml
+**/htmlcov
+
+# Build artifacts
+**/dist
+**/build
+**/*.egg-info
+
+# Runtime data and state (never bake local indexes or databases into an image)
+**/.knowledge-engine
+**/data
+**/state
+**/logs
+**/*.log
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/watchdog.pid
+
+# Secrets
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+**/secrets
+**/board-master-key.txt
+
+# Editor / OS files
+.vscode
+.idea
+.obsidian
+**/.DS_Store
+**/Thumbs.db
+**/desktop.ini
+
+# Container definitions themselves
+Dockerfile
+.dockerignore
+compose.yaml

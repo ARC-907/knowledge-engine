@@ -1,0 +1,40 @@
+# Docker Compose definition for a single local knowledge-engine server.
+#
+#   docker compose up -d --build
+#   docker compose exec knowledge-engine knowledge-engine reindex
+#   curl http://127.0.0.1:9210/health
+#
+# The corpus in ./corpus is mounted read-only. Indexes, registry cache, and
+# agent-board databases persist in the named volume `ke-data`. See
+# 01-user-docs/DEPLOYMENT.md ("Docker") for details.
+
+services:
+  knowledge-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: knowledge-engine:local
+    ports:
+      # Loopback only. The engine has no built-in authentication; put a
+      # reverse proxy with auth/TLS in front before exposing it further.
+      - "127.0.0.1:9210:9210"
+    volumes:
+      # Read-only corpus. Drop ":ro" if you want registry edits made through
+      # the dashboard/API or `knowledge-engine bootstrap` written back to
+      # ./corpus/registry.json.
+      - ./corpus:/data/corpus:ro
+      - ke-data:/data/.knowledge-engine
+    environment:
+      KE_HOME: /data
+      KE_CORPUS_ROOT: /data/corpus
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  ke-data:
