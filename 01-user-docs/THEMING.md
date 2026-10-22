@@ -1,12 +1,12 @@
 # Theming the Dashboard
 
 The Knowledge-Engine dashboard is deliberately a **single HTML file** —
-`ui/index.html`. There is no build step, no framework toolchain, no
+`engine/src/knowledge_engine/server/static/index.html`. There is no build step, no framework toolchain, no
 `node_modules`. That makes it trivial to restyle, fork, or replace.
 
 ## How the dashboard is built
 
-`ui/index.html` is one self-contained file:
+`engine/src/knowledge_engine/server/static/index.html` is one self-contained file:
 
 - **Tailwind CSS** — pulled from a CDN (`cdn.tailwindcss.com`). All styling is
   Tailwind utility classes in the markup.
@@ -17,8 +17,9 @@ The Knowledge-Engine dashboard is deliberately a **single HTML file** —
   `/registry/{id}/toggle`). Anything that speaks those endpoints can replace
   it.
 
-The engine serves `ui/` as static files at `/ui/` (see `app.py`). Edit the
-file, refresh the browser — that's the whole loop.
+The engine serves `engine/src/knowledge_engine/server/static/` (shipped inside the package) as static files at
+`/ui/` (see `server/app.py`). Edit the file, refresh the browser — that's the
+whole loop.
 
 ## Recolouring (the quick win)
 
@@ -63,11 +64,11 @@ load needs internet**. For a fully offline dashboard:
 
 1. Download `alpinejs` and the Tailwind standalone build (or a precompiled
    Tailwind CSS file).
-2. Drop them into `ui/` alongside `index.html`.
+2. Drop them into `engine/src/knowledge_engine/server/static/` alongside `index.html`.
 3. Change the two `<script>`/`<link>` tags from CDN URLs to local paths
    (`./alpine.min.js`, `./tailwind.css`).
 
-Because the engine serves the whole `ui/` directory statically, any local
+Because the engine serves the whole `static/` directory, any local
 asset you add there is served at `/ui/<filename>` automatically.
 
 ## Building a different dashboard entirely
@@ -83,7 +84,7 @@ Vue, Svelte, or plain-JS dashboard, you can — point it at the same endpoints:
 | `POST /search/reindex` | Rebuild the index |
 | `PATCH /registry/{id}/toggle` | Enable/disable an entry |
 
-Build it however you like and either serve it from `ui/` or host it separately
+Build it however you like and either serve it from `server/static/` or host it separately
 and point it at the engine's URL. The full route list is in
 [ARCHITECTURE.md](../ARCHITECTURE.md).
 

@@ -8,7 +8,7 @@ subtree is self-contained and can be lifted into its own repo without changes.
 - `src/knowledge_engine/` — core package
   - `cli.py` — `knowledge-engine` CLI entrypoint; `app.py` / `mcp_server.py` — compat shims
   - `core/` — env config + path resolver (`KE_HOME`, `KE_CORPUS_ROOT`, `KE_DATA_DIR`), corpus registry (source of truth + SQLite mirror), watchdog auto-register
-  - `server/` — FastAPI app factory + HTTP route modules (`api/`)
+  - `server/` — FastAPI app factory + HTTP route modules (`api/`) + packaged dashboard (`static/`, served at `/ui/`)
   - `mcp/` — JSON-RPC 2.0 MCP stdio server
   - `generation/` — provider abstraction (echo / cloud HTTP / Ollama)
   - `retrieval/` — FTS5 indexer (`fts5.py`) + optional bge-m3 embeddings

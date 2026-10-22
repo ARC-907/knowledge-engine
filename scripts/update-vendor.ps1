@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'
 
 $repoRoot   = Split-Path -Parent $PSScriptRoot
-$vendorRoot = Join-Path $repoRoot 'ui/vendor'
+$vendorRoot = Join-Path $repoRoot 'engine/src/knowledge_engine/server/static/vendor'
 
 # Pinned versions + expected SHA384 (base64) of the upstream bundle.
 $assets = @(
