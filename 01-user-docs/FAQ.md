@@ -56,9 +56,8 @@ anywhere Python runs. [DEPLOYMENT.md](DEPLOYMENT.md) covers running it as a
 long-lived service, exposing it on a LAN, and the hardening you must add before
 exposing it to the internet (reverse proxy, TLS, authentication).
 
-A Docker Compose template is not part of v1.0 — it's on the roadmap. The engine
-is a standard Python package, so containerizing it yourself is straightforward
-if you want to.
+A `Dockerfile` and a `compose.yaml` ship at the repository root — see the
+Docker section of [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## How big a corpus can it handle?
 
@@ -107,8 +106,7 @@ it's open-source software — read the code, open an issue, or fork it.
 
 ## Will there be updates?
 
-The roadmap includes a Docker Compose template and in-app multi-user
-authentication. Versioning follows semver across the engine package, MCP
+The roadmap includes in-app multi-user authentication. Versioning follows semver across the engine package, MCP
 protocol, and registry schema — see [CHANGELOG.md](../02-dev-docs/CHANGELOG.md).
 
 ## Something's broken / behaving oddly
