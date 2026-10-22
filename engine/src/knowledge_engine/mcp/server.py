@@ -126,9 +126,11 @@ class Server:
 
     def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if name == "search":
-            results = self.indexer.search(args["query"], limit=int(args.get("limit", 10)))
-            if args.get("kind"):
-                results = [r for r in results if r.get("entry_kind") == args["kind"]]
+            # The kind filter runs inside the query (before LIMIT) so a filtered
+            # search still returns up to `limit` hits of that kind.
+            results = self.indexer.search(
+                args["query"], limit=int(args.get("limit", 10)), kind=args.get("kind") or None
+            )
             return {"content": [{"type": "text", "text": json.dumps(results, indent=2)}]}
         if name == "registry_list":
             entries = self.registry.list(
