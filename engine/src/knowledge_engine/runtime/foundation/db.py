@@ -714,10 +714,9 @@ def acquire_sweeper_lease(holder: str, ttl_seconds: int = 120) -> bool:
 
     # Decide whether to steal.
     if row is not None:
-        try:
-            current = json.loads(row["value"])
-            cur_expires = current.get("expires_at", "")
-        except (json.JSONDecodeError, TypeError, KeyError):
+        current = _parse_lease(row["value"])
+        cur_expires = current.get("expires_at")
+        if not isinstance(cur_expires, str):
             cur_expires = ""
         if current.get("holder") == holder and cur_expires > now:
             # Already ours; renew.
@@ -740,14 +739,27 @@ def release_sweeper_lease(holder: str) -> None:
     row = conn.execute("SELECT value FROM kv_store WHERE key = 'board.sweeper_lease'").fetchone()
     if row is None:
         return
-    try:
-        current = json.loads(row["value"])
-        if current.get("holder") != holder:
-            return
-    except (json.JSONDecodeError, TypeError):
+    if _parse_lease(row["value"]).get("holder") != holder:
         return
     conn.execute("DELETE FROM kv_store WHERE key = 'board.sweeper_lease'")
     conn.commit()
+
+
+def _parse_lease(raw: object) -> dict[str, Any]:
+    """Decode a stored lease value; anything that is not a JSON object is no lease.
+
+    A corrupt row (hand-edited, truncated write, foreign writer) must not
+    wedge the sweeper: it is logged and treated as absent, so the next
+    ``acquire_sweeper_lease`` overwrites it with a valid lease.
+    """
+    try:
+        parsed = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else None
+    except ValueError:  # JSONDecodeError, or undecodable bytes
+        parsed = None
+    if isinstance(parsed, dict):
+        return parsed
+    _logger.warning("ignoring corrupt board.sweeper_lease value; treating it as no lease")
+    return {}
 
 
 def master_key_lock() -> threading.Lock:
