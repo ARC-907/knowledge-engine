@@ -925,6 +925,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-randomly" },
+    { name = "pytest-repeat" },
     { name = "pytest-xdist" },
     { name = "ruff" },
     { name = "twine" },
@@ -943,6 +944,7 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-randomly" },
+    { name = "pytest-repeat" },
     { name = "pytest-xdist" },
 ]
 
@@ -967,6 +969,7 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=6.0" },
     { name = "pytest-randomly", specifier = ">=3.16" },
+    { name = "pytest-repeat", specifier = ">=0.9.3" },
     { name = "pytest-xdist", specifier = ">=3.6" },
     { name = "ruff", specifier = ">=0.14" },
     { name = "twine", specifier = ">=6.0" },
@@ -985,6 +988,7 @@ test = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=6.0" },
     { name = "pytest-randomly", specifier = ">=3.16" },
+    { name = "pytest-repeat", specifier = ">=0.9.3" },
     { name = "pytest-xdist", specifier = ">=3.6" },
 ]
 
@@ -1468,6 +1472,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/01/3b/6a40e1b9d925651e601e056a97f60d8a1daeddeac03d5609be60cb4362ce/pytest_randomly-5.0.0.tar.gz", hash = "sha256:e9c575a5873ef168ddbe340ed9e97ce9edb4492ccc821e4b2ac6bb1f0ed515d2", size = 8542, upload-time = "2026-09-01T22:34:20.441Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/b4/47e939285caad9a623d021512912ac08dc92a467ad075d179f43729d2934/pytest_randomly-5.0.0-py3-none-any.whl", hash = "sha256:8a0d4703115c0c25b38b6e129fc16b1947b9643ff26a41bc1d185d7e5a7689c1", size = 8920, upload-time = "2026-09-01T22:34:19.227Z" },
+]
+
+[[package]]
+name = "pytest-repeat"
+version = "0.9.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/80/d4/69e9dbb9b8266df0b157c72be32083403c412990af15c7c15f7a3fd1b142/pytest_repeat-0.9.4.tar.gz", hash = "sha256:d92ac14dfaa6ffcfe6917e5d16f0c9bc82380c135b03c2a5f412d2637f224485", size = 6488, upload-time = "2025-04-07T14:59:53.077Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/73/d4/8b706b81b07b43081bd68a2c0359fe895b74bf664b20aca8005d2bb3be71/pytest_repeat-0.9.4-py3-none-any.whl", hash = "sha256:c1738b4e412a6f3b3b9e0b8b29fcd7a423e50f87381ad9307ef6f5a8601139f3", size = 4180, upload-time = "2025-04-07T14:59:51.492Z" },
 ]
 
 [[package]]

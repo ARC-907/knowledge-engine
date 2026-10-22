@@ -10,7 +10,9 @@ Background loop that keeps the board healthy:
 
 Runs as a daemon thread inside the FastAPI process when
 `board_config.sweeper_enabled=1`. Standalone mode (`service.py`) runs the
-same loop on its own.
+same loop on its own. The `KE_BOARD_SWEEPER` env var, when set, overrides
+the persisted flag at boot (`0`/`false`/`no`/`off` keep the thread from
+starting; any other value starts it).
 
 Concurrency: multiple sweepers (embedded + standalone, or multi-worker
 uvicorn) coordinate via a singleton lease row in `kv_store`
@@ -38,7 +40,12 @@ from . import scopes, store
 
 _logger = logging.getLogger(__name__)
 
+SWEEPER_ENV = "KE_BOARD_SWEEPER"
+_FALSY = frozenset({"0", "false", "no", "off", ""})
+
 _thread: threading.Thread | None = None
+# Each sweeper thread gets its own stop event (see start()), so a thread that
+# outlives stop()'s join timeout can never be revived by a later start().
 _stop_event = threading.Event()
 _lock = threading.Lock()
 
@@ -63,15 +70,24 @@ _HOLDER_SUFFIX = uuid.uuid4().hex[:4]
 # ── Lifecycle ──────────────────────────────────────────────────
 
 
+def env_override() -> bool | None:
+    """The `KE_BOARD_SWEEPER` boot override: None when unset, else on/off."""
+    raw = os.environ.get(SWEEPER_ENV)
+    if raw is None:
+        return None
+    return raw.strip().lower() not in _FALSY
+
+
 def start() -> bool:
     """Start the sweeper thread if not already running. Idempotent."""
-    global _thread  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
+    global _thread, _stop_event  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
     with _lock:
         if _thread is not None and _thread.is_alive():
             return False
-        _stop_event.clear()
+        _stop_event = threading.Event()
         _thread = threading.Thread(
             target=_run,
+            args=(_stop_event,),
             name="agent-board-sweeper",
             daemon=True,
         )
@@ -105,6 +121,24 @@ def stop(timeout: float = 5.0) -> bool:
 def is_running() -> bool:
     with _lock:
         return _thread is not None and _thread.is_alive()
+
+
+def reset_for_tests(timeout: float = 5.0) -> None:
+    """Stop the sweeper and drop all module-level state. Test helper.
+
+    Test suites call this between tests so a sweeper started by one app
+    lifespan can never post into (or hold a connection to) the next test's
+    database. A thread that misses the join timeout keeps its own, already
+    set, stop event and exits after its current pass.
+    """
+    global _thread, _stop_event  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
+    stop(timeout=timeout)
+    with _lock:
+        if _thread is not None and _thread.is_alive():
+            _logger.warning("agent-board sweeper did not stop within %.1fs; abandoning it", timeout)
+        _stop_event.set()
+        _thread = None
+        _stop_event = threading.Event()
 
 
 # ── One pass (also exposed for the manual `/board/sweep` endpoint) ─
@@ -243,13 +277,15 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
 # ── Loop body ──────────────────────────────────────────────────
 
 
-def _run() -> None:
-    """The thread target."""
+def _run(stop_event: threading.Event | None = None) -> None:
+    """The thread target. Loops until ``stop_event`` (default: the current one) is set."""
+    if stop_event is None:
+        stop_event = _stop_event
     # Default initialization makes the loop robust to a first-iteration
     # exception in load_config — without it, `interval` would only be
     # bound inside the try block.
     interval = 60
-    while not _stop_event.is_set():
+    while not stop_event.is_set():
         try:
             cfg = store.load_config()
             interval = max(5, int(cfg.get("sweep_interval_s") or 60))
@@ -260,7 +296,7 @@ def _run() -> None:
             interval = max(interval, 60)
         # Sleep in small slices so stop() responds quickly.
         slept = 0.0
-        while slept < interval and not _stop_event.is_set():
+        while slept < interval and not stop_event.is_set():
             time.sleep(0.5)
             slept += 0.5
 
@@ -400,4 +436,12 @@ def _age_hours(iso: str | None) -> float | None:
         return None
 
 
-__all__ = ["is_running", "start", "stop", "sweep_once"]
+__all__ = [
+    "SWEEPER_ENV",
+    "env_override",
+    "is_running",
+    "reset_for_tests",
+    "start",
+    "stop",
+    "sweep_once",
+]

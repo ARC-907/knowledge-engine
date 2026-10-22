@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import os
 from pathlib import Path
 from typing import ClassVar
@@ -11,13 +10,14 @@ from typing import ClassVar
 def _env(corpus: Path, data: Path) -> None:
     """Point the engine at a tmp corpus + tmp data dir + per-test pipeline DB.
 
-    Isolation is achieved entirely through env vars + a unique tmp_path per
-    test, because `foundation.db` resolves the DB path dynamically on every
-    `get_connection()` (see `db.resolve_db_path`). No module surgery is
-    needed: changing `KE_PIPELINE_DB` is enough for the next connection —
-    on any thread — to open the new database. Stopping the sweeper and
-    dropping cached connections keeps a prior test's daemon thread from
-    holding a handle to a tmp file pytest is about to delete.
+    Isolation is achieved through env vars + a unique tmp_path per test,
+    because `runtime.foundation.db` resolves the DB path dynamically on every
+    `get_connection()` (see `db.resolve_db_path`): changing `KE_PIPELINE_DB`
+    is enough for the next connection — on any thread — to open the new
+    database. The autouse fixture in `tests/conftest.py` restores the
+    environment afterwards, stops/clears the sweeper singleton and closes
+    cached connections around every test, and keeps the sweeper off unless a
+    test opts in with `KE_BOARD_SWEEPER=1`.
     """
     corpus.mkdir(parents=True, exist_ok=True)
     data.mkdir(parents=True, exist_ok=True)
@@ -25,22 +25,6 @@ def _env(corpus: Path, data: Path) -> None:
     os.environ["KE_DATA_DIR"] = str(data)
     os.environ["KE_REGISTRY_PATH"] = str(corpus / "registry.json")
     os.environ["KE_PIPELINE_DB"] = str(data / "pipeline.db")
-
-    import sys
-
-    # Stop a sweeper a prior test may have started, so it doesn't keep a
-    # connection open to a tmp DB that's about to be torn down.
-    sweeper_mod = sys.modules.get("knowledge_engine.agent_board.sweeper")
-    if sweeper_mod is not None:
-        with contextlib.suppress(Exception):
-            sweeper_mod.stop(timeout=5.0)
-    # Drop this thread's cached connections so the next get_connection()
-    # opens fresh against the just-set KE_PIPELINE_DB.
-    db_mod = sys.modules.get("knowledge_engine.foundation.db")
-    if db_mod is not None:
-        with contextlib.suppress(Exception):
-            db_mod.close_all()
-            db_mod._FTS_BACKFILLED.clear()  # one-shot backfill guard, per path
 
 
 # ── Schema validation ─────────────────────────────────────────
@@ -1016,6 +1000,8 @@ def test_lifespan_starts_and_stops_cleanly(tmp_path: Path) -> None:
     checks the thread is gone.
     """
     _env(tmp_path / "corpus", tmp_path / "data")
+    # The suite runs with the sweeper off (tests/conftest.py); opt in here.
+    os.environ["KE_BOARD_SWEEPER"] = "1"
 
     from fastapi.testclient import TestClient
 

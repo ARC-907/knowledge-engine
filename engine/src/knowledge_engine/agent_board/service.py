@@ -41,10 +41,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     The sweeper coordinates with any embedded sweeper running in the
     main engine via the `board.sweeper_lease` row in `kv_store` so the
-    two never both run a pass.
+    two never both run a pass. `KE_BOARD_SWEEPER=0` skips it, matching the
+    embedded engine's lifespan.
     """
     try:
-        kb_sweeper.start()
+        if kb_sweeper.env_override() is False:
+            _logger.info("standalone sweeper disabled by %s", kb_sweeper.SWEEPER_ENV)
+        else:
+            kb_sweeper.start()
     except Exception:
         _logger.exception("standalone sweeper failed to start")
     try:
