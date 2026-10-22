@@ -67,7 +67,8 @@ def classify_task(
     if endpoint is None:
         endpoint = CLASSIFIER_ENDPOINT_DEFAULT
 
-    assert isinstance(endpoint, str)
+    if not isinstance(endpoint, str):
+        raise RuntimeError(f"classifier endpoint must be a string, got {type(endpoint).__name__}")
     if not endpoint.endswith("/api/generate"):
         endpoint = endpoint.rstrip("/") + "/api/generate"
 
@@ -93,12 +94,12 @@ def classify_task(
     ).encode()
 
     try:
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310  # URL comes from operator config
             endpoint,
             data=payload,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310  # URL comes from operator config
             raw = json.loads(resp.read())
 
         response_text = raw.get("response", "")

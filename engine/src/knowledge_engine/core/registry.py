@@ -139,7 +139,7 @@ class Registry:
 
     def upsert(self, entry: RegistryEntry) -> dict[str, Any]:
         bucket = _KIND_TO_BUCKET[entry.kind]
-        rows = self._data.setdefault(bucket, [])
+        rows: list[dict[str, Any]] = self._data.setdefault(bucket, [])
         payload = asdict(entry)
         payload["last_updated"] = time.time()
         for i, row in enumerate(rows):

@@ -205,8 +205,8 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
                 cfg,
                 project_conn,
                 ctx.registry_conn(),
-                project_fp=project_fp,
-                branch_fp=branch_fp,
+                project_fp=project_fp,  # type: ignore[arg-type]  # may be None: run() trusts callers (pre-existing gap)
+                branch_fp=branch_fp,  # type: ignore[arg-type]  # may be None: run() trusts callers (pre-existing gap)
             )
         except GateError as exc:
             return status_result("not_permitted", reason=str(exc))
@@ -227,7 +227,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
             str(ctx.root),
             cfg,
             project_conn,
-            project_fp=project_fp,
+            project_fp=project_fp,  # type: ignore[arg-type]  # may be None: run() trusts callers (pre-existing gap)
             branch_fp=branch_fp,
         )
         return text_result(plan)
@@ -250,7 +250,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
             str(ctx.root),
             cfg,
             project_conn,
-            project_fp=project_fp,
+            project_fp=project_fp,  # type: ignore[arg-type]  # may be None: run() trusts callers (pre-existing gap)
             branch_fp=branch_fp,
             confirm=bool(args.get("confirm", False)),
             registry_conn=ctx.registry_conn(),

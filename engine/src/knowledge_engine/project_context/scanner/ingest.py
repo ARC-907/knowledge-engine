@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from .. import ingest as pipeline, schema
 from ..config import ProjectContextConfig
@@ -106,7 +107,7 @@ def run(
 
     run_id = pipeline.begin_run(project_conn, registry_conn, project_fp, branch_fp, "ingest")
 
-    stats = {
+    stats: dict[str, Any] = {
         "candidates": 0,
         "ingested": 0,
         "skipped": 0,

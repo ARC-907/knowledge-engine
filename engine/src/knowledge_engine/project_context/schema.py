@@ -100,7 +100,7 @@ PENDING = "pending"
 INGESTION_STATES = frozenset({INGESTED, SKIPPED_DEDUPE, REJECTED, PENDING})
 
 # ── Test/build classifications ───────────────────────────────────────
-PASS = "pass"
+PASS = "pass"  # noqa: S105  # test-run classification status, not a credential
 FAIL = "fail"
 ERROR = "error"
 UNKNOWN = "unknown"

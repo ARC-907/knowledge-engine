@@ -12,12 +12,13 @@ from .base import GenerationRequest, GenerationResponse, Provider
 class OllamaProvider(Provider):
     name = "ollama"
 
-    def __init__(self, base_url: str | None = None, model: str | None = None):
-        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip(
-            "/"
-        )
-        self.model = model or os.getenv("OLLAMA_MODEL", "llama3.2")
-        self._timeout = float(os.getenv("OLLAMA_TIMEOUT", "30"))
+    def __init__(self, base_url: str | None = None, model: str | None = None) -> None:
+        # os.environ.get (not os.getenv) so mypy infers ``str`` under the ``or`` context.
+        self.base_url = (
+            base_url or os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+        ).rstrip("/")
+        self.model = model or os.environ.get("OLLAMA_MODEL", "llama3.2")
+        self._timeout = float(os.environ.get("OLLAMA_TIMEOUT", "30"))
 
     def available(self) -> bool:
         try:

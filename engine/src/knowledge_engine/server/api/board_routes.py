@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
@@ -188,7 +188,7 @@ def _require_key(req: Request, resource_id: str = "*", permission: str = "write"
     # via require_key_for_post=1 + an additional gate if you want to
     # require keys for loopback too.
     peer = _peer_address(req)
-    if peer is not None and (peer == _LOCALHOST_V4 or peer == _LOCALHOST_V6):
+    if peer is not None and peer in (_LOCALHOST_V4, _LOCALHOST_V6):
         return
     raw = req.headers.get("X-Board-Key", "").strip()
     if not raw:
@@ -292,7 +292,7 @@ def get_message(req: Request, message_id: str, scope: str | None = Query(None)) 
 @router.post("/messages", status_code=201)
 def post_message(
     req: Request,
-    payload: dict[str, Any] = Body(...),
+    payload: Annotated[dict[str, Any], Body()],
     scope: str | None = Query(None),
 ) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="write")
@@ -310,7 +310,7 @@ def post_message(
 def ack_message(
     req: Request,
     message_id: str,
-    payload: dict[str, Any] = Body(...),
+    payload: Annotated[dict[str, Any], Body()],
     scope: str | None = Query(None),
 ) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="write")
@@ -410,7 +410,7 @@ def list_keys(req: Request) -> list[dict[str, Any]]:
 
 
 @router.post("/keys", status_code=201)
-def create_key(req: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+def create_key(req: Request, payload: Annotated[dict[str, Any], Body()]) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="admin")
     name = str(payload.get("display_name") or "").strip()
     if not name:
@@ -477,7 +477,7 @@ def delete_key(req: Request, key_id: str) -> dict[str, Any]:
 def grant_permission(
     req: Request,
     key_id: str,
-    payload: dict[str, Any] = Body(...),
+    payload: Annotated[dict[str, Any], Body()],
 ) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="admin")
     try:
@@ -517,7 +517,7 @@ def list_providers(req: Request) -> dict[str, Any]:
 
 
 @router.post("/providers", status_code=201)
-def register_provider(req: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+def register_provider(req: Request, payload: Annotated[dict[str, Any], Body()]) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="admin")
     provider = str(payload.get("provider") or "").strip()
     if not provider:
@@ -572,7 +572,7 @@ def get_config(req: Request, scope: str | None = Query(None)) -> dict[str, Any]:
 @router.patch("/config")
 def patch_config(
     req: Request,
-    payload: dict[str, Any] = Body(...),
+    payload: Annotated[dict[str, Any], Body()],
     scope: str | None = Query(None),
 ) -> dict[str, Any]:
     _require_key(req, resource_id="*", permission="admin")

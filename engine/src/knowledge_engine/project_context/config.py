@@ -15,14 +15,10 @@ conservative default baked into the dataclass, so a partial file is always valid
 from __future__ import annotations
 
 import os
+import tomllib
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, get_type_hints
-
-try:  # Python 3.11+
-    import tomllib as _toml
-except ModuleNotFoundError:  # pragma: no cover - exercised on 3.10 only
-    import tomli as _toml  # type: ignore[no-redefined]
 
 CONFIG_FILENAME = "knowledge-engine.toml"
 
@@ -172,6 +168,7 @@ def _build(dc_type: type, data: dict[str, Any]) -> Any:
         value = data[f.name]
         ftype = hints.get(f.name)
         if is_dataclass(ftype) and isinstance(value, dict):
+            # is_dataclass() narrows to "instance | type"; type hints only hold classes.
             kwargs[f.name] = _build(ftype, value)  # type: ignore[arg-type]
         else:
             kwargs[f.name] = value
@@ -187,8 +184,8 @@ def load_config(start: Path | None = None, path: Path | None = None) -> ProjectC
     cfg_path = path or find_config_file(start)
     if cfg_path is None or not Path(cfg_path).is_file():
         return ProjectContextConfig()
-    with open(cfg_path, "rb") as fh:
-        doc = _toml.load(fh)
+    with Path(cfg_path).open("rb") as fh:
+        doc = tomllib.load(fh)
     table = doc.get("project_context", {})
     if not isinstance(table, dict):
         return ProjectContextConfig()

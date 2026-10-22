@@ -94,7 +94,7 @@ def register_provider(
         (key_id, provider, display_name, env_var, notes),
     )
     conn.commit()
-    return get_provider(key_id)  # type: ignore[return-value]
+    return get_provider(key_id)  # type: ignore[return-value]  # row was just written, so the read is not None
 
 
 def get_provider(key_id: str) -> dict[str, Any] | None:

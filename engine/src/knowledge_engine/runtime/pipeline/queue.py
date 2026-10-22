@@ -133,7 +133,7 @@ def create_task(
         "task_created", task_id=task_id, detail=f"{task_type} for {chapter_key}", conn=conn
     )
 
-    return read_task(task_id)  # type: ignore[return-value]
+    return read_task(task_id)  # type: ignore[return-value]  # row was just written, so the read is not None
 
 
 def read_task(task_id: str) -> dict[str, Any] | None:
@@ -228,7 +228,7 @@ def transition_task(
     updates["audit_trail"] = _json(audit)
 
     set_clause = ", ".join(f"{k} = ?" for k in updates)
-    values = list(updates.values()) + [task_id, old_state]
+    values = [*updates.values(), task_id, old_state]
     result = conn.execute(f"UPDATE tasks SET {set_clause} WHERE task_id = ? AND status = ?", values)
     conn.commit()
     if result.rowcount == 0:
@@ -241,7 +241,7 @@ def transition_task(
         detail=f"{old_state} -> {new_state}",
         conn=conn,
     )
-    return read_task(task_id)  # type: ignore[return-value]
+    return read_task(task_id)  # type: ignore[return-value]  # row was just written, so the read is not None
 
 
 # ── Claim / Lease ──────────────────────────────────────────

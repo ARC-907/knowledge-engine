@@ -10,6 +10,7 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from types import ModuleType
 
 from fastapi import FastAPI
 
@@ -31,7 +32,8 @@ def _board_sweeper_should_run() -> bool:
     skip the sweeper in a specific deployment without touching the DB.
     """
     try:
-        from ..agent_board import store as board_store
+        # Optional subsystem, imported lazily so a broken board never blocks boot.
+        from ..agent_board import store as board_store  # noqa: PLC0415
 
         cfg = board_store.load_config()
     except Exception:
@@ -51,13 +53,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try/except so a board failure can never block the lean core's
     boot or shutdown.
     """
-    board_sweeper = None
+    board_sweeper: ModuleType | None = None
     if env_truthy("KE_BOARD_ENABLED", default=True):
         try:
-            from ..agent_board import sweeper as board_sweeper
+            # Optional subsystem, imported lazily so a broken board never blocks boot.
+            from ..agent_board import sweeper as _sweeper  # noqa: PLC0415
 
+            board_sweeper = _sweeper
             if _board_sweeper_should_run():
-                board_sweeper.start()
+                _sweeper.start()
         except Exception:
             _logger.exception("board sweeper failed to start; continuing")
             board_sweeper = None

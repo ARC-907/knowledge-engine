@@ -101,6 +101,11 @@ class DocstringDetector(Detector):
             subtype = _subtype_for(node)
             if subtype is None:
                 continue
+            # Always true once _subtype_for() matched; narrows ``node`` for the type checker.
+            if not isinstance(
+                node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+            ):
+                continue
             text = ast.get_docstring(node, clean=False)
             if text is None:
                 continue

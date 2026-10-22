@@ -12,21 +12,24 @@ pipe long check-ins without quoting headaches.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import os
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 # Windows consoles default to cp1252; em-dashes, arrows, and emoji in agent
 # bodies otherwise raise UnicodeEncodeError on a read pass.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-except Exception:  # pragma: no cover
-    pass
+with contextlib.suppress(Exception):  # pragma: no cover
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if isinstance(sys.stderr, io.TextIOWrapper):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 def _base_url(arg_url: str | None) -> str:
@@ -43,22 +46,21 @@ def _resolve_body(raw: str) -> str:
     if raw == "-":
         return sys.stdin.read().strip()
     if raw.startswith("@"):
-        with open(raw[1:], encoding="utf-8") as f:
-            return f.read().strip()
+        return Path(raw[1:]).read_text(encoding="utf-8").strip()
     return raw
 
 
 def _get(url: str, key: str | None = None) -> Any:
-    req = urllib.request.Request(url, method="GET")
+    req = urllib.request.Request(url, method="GET")  # noqa: S310  # URL comes from operator config
     if key:
         req.add_header("X-Board-Key", key)
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # URL comes from operator config
         return json.loads(resp.read().decode("utf-8"))
 
 
 def _post(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310  # URL comes from operator config
         url,
         data=data,
         method="POST",
@@ -66,13 +68,13 @@ def _post(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
     )
     if key:
         req.add_header("X-Board-Key", key)
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # URL comes from operator config
         return json.loads(resp.read().decode("utf-8"))
 
 
 def _patch(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310  # URL comes from operator config
         url,
         data=data,
         method="PATCH",
@@ -80,15 +82,15 @@ def _patch(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
     )
     if key:
         req.add_header("X-Board-Key", key)
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # URL comes from operator config
         return json.loads(resp.read().decode("utf-8"))
 
 
 def _delete(url: str, key: str | None = None) -> Any:
-    req = urllib.request.Request(url, method="DELETE")
+    req = urllib.request.Request(url, method="DELETE")  # noqa: S310  # URL comes from operator config
     if key:
         req.add_header("X-Board-Key", key)
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # URL comes from operator config
         body = resp.read().decode("utf-8")
         return json.loads(body) if body else {"ok": True}
 
@@ -155,8 +157,8 @@ def cmd_read(args, base: str) -> int:
         params["product_id"] = args.product_id
     if args.sender:
         params["sender_node_id"] = args.sender
-    if _scope_of(args):
-        params["scope"] = _scope_of(args)
+    if scope := _scope_of(args):
+        params["scope"] = scope
     params["limit"] = str(args.limit)
     qs = urllib.parse.urlencode(params)
     url = f"{base}/board/messages?{qs}"
@@ -232,8 +234,8 @@ def cmd_thread(args, base: str) -> int:
     params: dict[str, str] = {}
     if args.limit:
         params["limit"] = str(args.limit)
-    if _scope_of(args):
-        params["scope"] = _scope_of(args)
+    if scope := _scope_of(args):
+        params["scope"] = scope
     url = f"{base}/board/threads/{quoted}"
     if params:
         url += "?" + urllib.parse.urlencode(params)
@@ -265,8 +267,8 @@ def cmd_digest(args, base: str) -> int:
         params["since"] = args.since
     if args.max_messages:
         params["max_messages"] = str(args.max_messages)
-    if _scope_of(args):
-        params["scope"] = _scope_of(args)
+    if scope := _scope_of(args):
+        params["scope"] = scope
     qs = urllib.parse.urlencode(params)
     url = f"{base}/board/digest" + (f"?{qs}" if qs else "")
     print(json.dumps(_get(url), indent=2))

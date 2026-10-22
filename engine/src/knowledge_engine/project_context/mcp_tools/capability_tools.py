@@ -87,7 +87,8 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
         return text_result(health)
 
     if name == "project_context.explain_available_tools":
-        from . import collect_tools
+        # Lazy: the package __init__ imports this module (import cycle).
+        from . import collect_tools  # noqa: PLC0415
 
         defs, _ = collect_tools(cfg)
         groups: dict[str, list[str]] = {}

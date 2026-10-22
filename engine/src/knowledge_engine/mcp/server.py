@@ -11,24 +11,31 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from .. import __version__
 from ..core.config import Config
 from ..core.registry import Registry
 from ..project_context.config import load_config as load_pd_config
-from ..project_context.mcp_tools import collect_tools as collect_pd_tools
+from ..project_context.mcp_tools import DispatchFn, collect_tools as collect_pd_tools
 from ..project_context.mcp_tools.base import ToolContext
 from ..project_context.paths import resolve_project_root
 from ..retrieval.fts5 import Indexer
 
+if TYPE_CHECKING:
+    from ..agent_board.mcp_tools.base import BoardContext
+
 # Agent board MCP tool group — discovered via the parallel auto-collect pattern.
+# Optional: when it cannot be imported the server runs without the board tools.
+collect_board_tools: Callable[[], tuple[list[dict[str, Any]], dict[str, DispatchFn]]] | None
+BoardContextCls: type[BoardContext] | None
 try:
     from ..agent_board.mcp_tools import collect_tools as collect_board_tools
-    from ..agent_board.mcp_tools.base import BoardContext
+    from ..agent_board.mcp_tools.base import BoardContext as BoardContextCls
 except ImportError:
-    collect_board_tools = None  # type: ignore[assignment]
-    BoardContext = None  # type: ignore[assignment]
+    collect_board_tools = None
+    BoardContextCls = None
 
 
 PROTOCOL_VERSION = "2024-11-05"
@@ -89,13 +96,13 @@ TOOLS = [
 
 
 class Server:
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = Config.from_env()
         self.registry = Registry(self.config.registry_path, self.config.data_dir / "registry.db")
         self.indexer = Indexer(self.config, self.registry)
         # ── Project-docs subsystem (optional, off unless configured) ──
         self.pd_tools: list[dict[str, Any]] = []
-        self.pd_dispatch: dict[str, Any] = {}
+        self.pd_dispatch: dict[str, DispatchFn] = {}
         self.pd_ctx: ToolContext | None = None
         try:
             pd_cfg = load_pd_config()
@@ -107,13 +114,13 @@ class Server:
 
         # ── Agent board subsystem (optional, off unless module imports) ──
         self.board_tools: list[dict[str, Any]] = []
-        self.board_dispatch: dict[str, Any] = {}
+        self.board_dispatch: dict[str, DispatchFn] = {}
         self.board_ctx: BoardContext | None = None
         if collect_board_tools is not None:
             try:
                 self.board_tools, self.board_dispatch = collect_board_tools()
-                if BoardContext is not None:
-                    self.board_ctx = BoardContext.from_config()
+                if BoardContextCls is not None:
+                    self.board_ctx = BoardContextCls.from_config()
             except Exception:
                 self.board_tools, self.board_dispatch, self.board_ctx = [], {}, None
 

@@ -211,7 +211,7 @@ def _seed_runs(project_conn, registry_conn):
         project_fp=_PROJECT_FP,
         branch_fp=_BRANCH_FP,
     )
-    latest = record_test_run(
+    return record_test_run(
         project_conn,
         registry_conn,
         _cfg(),
@@ -222,7 +222,6 @@ def _seed_runs(project_conn, registry_conn):
         project_fp=_PROJECT_FP,
         branch_fp=_BRANCH_FP,
     )
-    return latest
 
 
 def test_history_orders_newest_first(project_conn, registry_conn):

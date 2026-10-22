@@ -21,6 +21,7 @@ block the next sweep window.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -33,7 +34,7 @@ from typing import Any
 
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
-from . import store
+from . import scopes, store
 
 _logger = logging.getLogger(__name__)
 
@@ -51,10 +52,8 @@ def _holder_id() -> str:
     sweep passes (necessary for renewal).
     """
     host = "unknown"
-    try:
+    with contextlib.suppress(OSError):
         host = socket.gethostname()
-    except OSError:
-        pass
     return f"{host}:{os.getpid()}:{_HOLDER_SUFFIX}"
 
 
@@ -66,7 +65,7 @@ _HOLDER_SUFFIX = uuid.uuid4().hex[:4]
 
 def start() -> bool:
     """Start the sweeper thread if not already running. Idempotent."""
-    global _thread
+    global _thread  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
     with _lock:
         if _thread is not None and _thread.is_alive():
             return False
@@ -87,7 +86,7 @@ def stop(timeout: float = 5.0) -> bool:
     Best-effort releases the lease so a peer sweeper can pick up promptly
     instead of waiting for the TTL to expire.
     """
-    global _thread
+    global _thread  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
     with _lock:
         if _thread is None or not _thread.is_alive():
             return True
@@ -99,7 +98,7 @@ def stop(timeout: float = 5.0) -> bool:
     try:
         db.release_sweeper_lease(_holder_id())
     except Exception:
-        pass
+        _logger.debug("releasing the sweeper lease failed; peers wait for TTL", exc_info=True)
     return exited
 
 
@@ -211,8 +210,6 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
     targets.append(default_result)
 
     try:
-        from . import scopes
-
         scope_entries = scopes.list_scopes()
     except Exception:
         _logger.exception("listing scopes failed; swept default only")
@@ -229,7 +226,7 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
             _logger.exception("sweep of scope %s failed; continuing", entry.get("scope"))
             targets.append({"target": f"scope:{entry.get('scope')}", "error": "sweep failed"})
 
-    agg = {
+    return {
         "started_at": started_at,
         "finished_at": _now_iso(),
         "skipped": False,
@@ -241,7 +238,6 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
         "error": next((t["error"] for t in targets if t.get("error")), None),
         "targets": targets,
     }
-    return agg
 
 
 # ── Loop body ──────────────────────────────────────────────────

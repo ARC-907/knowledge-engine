@@ -137,7 +137,7 @@ def generate(
     created_at = _utc_now()
 
     count = 0
-    for (record_id, _body), vector in zip(docs, vectors):
+    for (record_id, _body), vector in zip(docs, vectors, strict=True):
         _store_embedding(project_conn, record_id, provider, vector, created_at)
         count += 1
     project_conn.commit()
@@ -163,6 +163,7 @@ def refresh(
     return generate(
         project_conn,
         provider,
+        # ``**kwargs: object`` is an untyped passthrough; generate() owns the types.
         record_ids=record_ids,  # type: ignore[arg-type]
         model=model,  # type: ignore[arg-type]
     )

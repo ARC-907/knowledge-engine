@@ -24,13 +24,17 @@ Permission levels: `read`, `write`, `invoke`, `admin`.
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from ..core.config import Config
 from ..runtime.foundation import db
+
+_logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "keb_"
 
@@ -365,8 +369,6 @@ def ensure_master_key() -> dict[str, Any] | None:
 
         # Best-effort file write — never raise from bootstrap.
         try:
-            from ..core.config import Config
-
             cfg = Config.from_env()
             key_file = cfg.data_dir / "board-master-key.txt"
             key_file.write_text(
@@ -381,13 +383,15 @@ def ensure_master_key() -> dict[str, Any] | None:
             )
             # Tighten file perms on POSIX so the key isn't world-readable.
             try:
-                import os
-
-                os.chmod(key_file, 0o600)
+                key_file.chmod(0o600)
             except OSError:
-                pass
+                _logger.warning(
+                    "could not restrict permissions on board master key file %s",
+                    key_file,
+                    exc_info=True,
+                )
         except Exception:
-            pass
+            _logger.warning("could not write board master key file", exc_info=True)
 
         return key_data
 

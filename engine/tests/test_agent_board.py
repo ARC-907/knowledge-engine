@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
+from typing import ClassVar
 
 
 def _env(corpus: Path, data: Path) -> None:
@@ -30,19 +32,15 @@ def _env(corpus: Path, data: Path) -> None:
     # connection open to a tmp DB that's about to be torn down.
     sweeper_mod = sys.modules.get("knowledge_engine.agent_board.sweeper")
     if sweeper_mod is not None:
-        try:
+        with contextlib.suppress(Exception):
             sweeper_mod.stop(timeout=5.0)
-        except Exception:
-            pass
     # Drop this thread's cached connections so the next get_connection()
     # opens fresh against the just-set KE_PIPELINE_DB.
     db_mod = sys.modules.get("knowledge_engine.foundation.db")
     if db_mod is not None:
-        try:
+        with contextlib.suppress(Exception):
             db_mod.close_all()
             db_mod._FTS_BACKFILLED.clear()  # one-shot backfill guard, per path
-        except Exception:
-            pass
 
 
 # ── Schema validation ─────────────────────────────────────────
@@ -378,7 +376,7 @@ def test_mcp_board_post_and_read_via_dispatch(tmp_path: Path) -> None:
     from knowledge_engine.agent_board.mcp_tools import collect_tools
     from knowledge_engine.agent_board.mcp_tools.base import BoardContext
 
-    defs, dispatch = collect_tools()
+    _, dispatch = collect_tools()
     ctx = BoardContext.from_config()
     post_result = dispatch["board_post"](
         "board_post",
@@ -441,7 +439,7 @@ def test_trust_gate_untrusted_peer_rejected(tmp_path: Path) -> None:
                 host = "100.64.5.10"
 
             client = _C()
-            headers: dict[str, str] = {}
+            headers: ClassVar[dict[str, str]] = {}
 
         assert _trusted_networks()
         assert _is_trusted_peer(_MockReq()) is False

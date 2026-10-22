@@ -17,7 +17,7 @@ from typing import Any
 try:
     import yaml
 except ImportError:  # pragma: no cover
-    yaml = None  # type: ignore[assignment]
+    yaml = None  # type: ignore[assignment]  # optional dependency; checked before use
 
 # ── Resolve pipeline root from env vars ───────────────────────────────
 PIPELINE_ROOT = Path(os.environ.get("KE_PIPELINE_ROOT", str(Path.cwd() / "pipeline"))).resolve()
@@ -26,7 +26,7 @@ CONFIG_DIR = Path(os.environ.get("KE_CONFIG_DIR", str(PIPELINE_ROOT / "config"))
 # ── Load .env on import (stdlib, no dotenv dependency) ─────
 _env_file = PIPELINE_ROOT / ".env"
 if _env_file.exists():
-    with open(_env_file, encoding="utf-8") as _f:
+    with _env_file.open(encoding="utf-8") as _f:
         for _line in _f:
             _line = _line.strip()
             if not _line or _line.startswith("#") or "=" not in _line:
@@ -46,7 +46,7 @@ def _load_yaml(filename: str) -> dict[str, Any]:
     path = CONFIG_DIR / filename
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
-    with open(path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -58,7 +58,7 @@ def _write_yaml(filename: str, data: dict[str, Any]) -> Path:
         )
     path = CONFIG_DIR / filename
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         yaml.safe_dump(data, f, sort_keys=False, allow_unicode=False)
     return path
 

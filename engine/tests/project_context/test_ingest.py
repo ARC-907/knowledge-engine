@@ -19,7 +19,7 @@ def registry_conn(tmp_path) -> sqlite3.Connection:
 
 @pytest.fixture()
 def project_conn(tmp_path) -> sqlite3.Connection:
-    """A fresh project content DB with the 002_–007_ migrations applied."""
+    """A fresh project content DB with the 002_ through 007_ migrations applied."""
     conn = db.connect(tmp_path / "project.sqlite")
     db.apply_migrations(conn, only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_"))
     return conn

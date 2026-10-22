@@ -127,7 +127,7 @@ def test_pack_unpack_round_trip() -> None:
     assert len(blob) == len(original) * 4
     restored = unpack_vector(blob)
     assert len(restored) == len(original)
-    for a, b in zip(original, restored):
+    for a, b in zip(original, restored, strict=True):
         assert math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-6)
 
 
@@ -145,7 +145,7 @@ def test_stub_vector_round_trips() -> None:
     provider = StubProvider(dim=8)
     [vector] = provider.embed(["round trip"])
     restored = unpack_vector(pack_vector(vector))
-    for a, b in zip(vector, restored):
+    for a, b in zip(vector, restored, strict=True):
         assert math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-6)
 
 

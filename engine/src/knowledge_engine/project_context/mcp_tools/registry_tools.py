@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from .. import fingerprints, registry
+from ..paths import canonical_root
 from .base import ToolContext, status_result, text_result
 
 GROUP = "registry"
@@ -141,8 +142,6 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
         )
 
     if name == "project_context.resolve_fingerprint":
-        from ..paths import canonical_root
-
         croot = canonical_root(root)
         project_fp = fingerprints.project_fp(croot)
         payload: dict[str, Any] = {"project_fp": project_fp}

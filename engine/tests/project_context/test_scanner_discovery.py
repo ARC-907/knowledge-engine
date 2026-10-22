@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -46,7 +45,7 @@ def test_walk_skips_symlink(tmp_path: Path) -> None:
     target.write_text("data", encoding="utf-8")
     link = tmp_path / "link.md"
     try:
-        os.symlink(target, link)
+        link.symlink_to(target)
     except (OSError, NotImplementedError, AttributeError):
         pytest.skip("symlinks not supported on this platform/permission set")
     if not link.is_symlink():

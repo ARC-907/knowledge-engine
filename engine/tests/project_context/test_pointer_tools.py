@@ -88,7 +88,7 @@ class _FixedContext(base.ToolContext):
         super().__init__(cfg=cfg, root=root)
         self._fixed = conn
 
-    def project_conn(self, project_fp=None):  # type: ignore[override]
+    def project_conn(self, project_fp=None):  # type: ignore[override]  # untyped test double
         if project_fp is not None and project_fp != PROJECT_FP:
             return None
         return self._fixed

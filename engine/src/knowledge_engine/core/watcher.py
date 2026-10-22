@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from .config import Config
-from .registry import Registry, RegistryEntry
+from .registry import EntryKind, Registry, RegistryEntry
+
+if TYPE_CHECKING:
+    from watchdog.events import DirCreatedEvent, FileCreatedEvent
+    from watchdog.observers.api import BaseObserver
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +32,12 @@ def slugify(name: str) -> str:
     return s.strip("-")
 
 
-_FOLDER_TO_KIND = {"libraries": "library", "skills": "skill", "kits": "kit", "capabilities": "tool"}
+_FOLDER_TO_KIND: dict[str, EntryKind] = {
+    "libraries": "library",
+    "skills": "skill",
+    "kits": "kit",
+    "capabilities": "tool",
+}
 
 
 def auto_register(
@@ -48,7 +58,7 @@ def auto_register(
             registry.upsert(
                 RegistryEntry(
                     id=entry_id,
-                    kind=kind,  # type: ignore[arg-type]
+                    kind=kind,
                     name=child.name,
                     path=str(child.relative_to(config.corpus_root)).replace("\\", "/"),
                     auto_registered=True,
@@ -61,16 +71,19 @@ def auto_register(
     return added
 
 
-def start_watcher(config: Config, registry: Registry, on_change: Callable[[], None] | None = None):
+def start_watcher(
+    config: Config, registry: Registry, on_change: Callable[[], None] | None = None
+) -> BaseObserver:
     """Start a background watchdog observer. Returns the observer (call .stop() to halt)."""
+    # watchdog is soft-coupled: import it only when a watcher is actually started.
     try:
-        from watchdog.events import FileSystemEventHandler  # type: ignore
-        from watchdog.observers import Observer  # type: ignore
+        from watchdog.events import FileSystemEventHandler  # noqa: PLC0415
+        from watchdog.observers import Observer  # noqa: PLC0415
     except ImportError as e:
         raise RuntimeError("watchdog not installed; pip install watchdog") from e
 
-    class Handler(FileSystemEventHandler):  # type: ignore[misc]
-        def on_created(self, event):  # type: ignore[no-untyped-def]
+    class Handler(FileSystemEventHandler):
+        def on_created(self, event: DirCreatedEvent | FileCreatedEvent) -> None:
             if event.is_directory:
                 auto_register(config, registry, on_change)
 

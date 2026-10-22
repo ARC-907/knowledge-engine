@@ -59,8 +59,7 @@ def slugify_scope(scope: str) -> str:
 
 def scopes_root() -> Path:
     """Directory that holds per-scope DB files (created on demand)."""
-    root = Config.from_env().data_dir / SCOPES_DIRNAME
-    return root
+    return Config.from_env().data_dir / SCOPES_DIRNAME
 
 
 def scope_db_path(scope: str) -> str:

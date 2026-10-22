@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -25,6 +26,8 @@ from pathlib import Path
 from typing import Any
 
 from . import config  # noqa: F401  — ensures .env is loaded before DB path resolves
+
+_logger = logging.getLogger(__name__)
 
 # ── DB path resolution ────────────────────────────────────────────────
 # Resolved DYNAMICALLY on every connection request, not frozen at import.
@@ -537,7 +540,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
     # so snippet() and bm25() work without the messages table being co-located.
     # Bodies are bounded to ~50KB by the post validator, so the extra storage
     # is small.
-    try:
+    with contextlib.suppress(sqlite3.OperationalError):
         conn.executescript("""
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
                 message_id UNINDEXED,
@@ -564,8 +567,6 @@ def _init_schema(conn: sqlite3.Connection) -> None:
                 VALUES (new.message_id, new.channel, COALESCE(new.subject,''), COALESCE(new.body,''));
             END;
         """)
-    except sqlite3.OperationalError:
-        pass
     conn.commit()
     _migrate(conn)
 
@@ -772,10 +773,8 @@ def dict_from_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
     d = dict(row)
     for field in _JSON_FIELDS:
         if field in d and isinstance(d[field], str):
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 d[field] = json.loads(d[field])
-            except (json.JSONDecodeError, TypeError):
-                pass
     return d
 
 
@@ -819,5 +818,5 @@ def close_all() -> None:
             try:
                 conn.close()
             except Exception:
-                pass
+                _logger.debug("closing a thread-local connection failed", exc_info=True)
         _local.connections.clear()

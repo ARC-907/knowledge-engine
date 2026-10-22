@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
+from typing import Any
 
 from .core.config import Config
-from .core.registry import Registry, RegistryEntry
+from .core.registry import EntryKind, Registry, RegistryEntry
 from .retrieval.fts5 import Indexer
 
 BASE_MCP_TOOLS = ["search", "registry_list", "registry_toggle", "registry_get"]
@@ -29,7 +31,7 @@ def _slugify(name: str) -> str:
 def _bootstrap(config: Config, registry: Registry) -> dict[str, int]:
     """Walk corpus/ and register every library/skill/kit/tool folder found."""
     root = config.corpus_root
-    plan = [
+    plan: list[tuple[str, EntryKind]] = [
         ("libraries", "library"),
         ("skills", "skill"),
         ("kits", "kit"),
@@ -60,7 +62,7 @@ def _bootstrap(config: Config, registry: Registry) -> dict[str, int]:
     return counts
 
 
-def _safe_payload(fn, fallback):
+def _safe_payload(fn: Callable[[], dict[str, Any]], fallback: dict[str, Any]) -> dict[str, Any]:
     """Run an optional capability probe without letting it break CLI inventory."""
     try:
         return fn()
@@ -68,7 +70,7 @@ def _safe_payload(fn, fallback):
         return {"status": "error", "error": str(exc), **fallback}
 
 
-def _capability_inventory(config: Config, registry: Registry) -> dict:
+def _capability_inventory(config: Config, registry: Registry) -> dict[str, Any]:
     """Return the runtime capability inventory for humans and agents.
 
     This reports both seeded data and empty-but-available substrates. An empty
@@ -82,7 +84,7 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
         "tools": len(registry.list("tool")),
     }
 
-    def project_context_payload() -> dict:
+    def project_context_payload() -> dict[str, Any]:
         from .project_context.config import load_config as load_pd_config
         from .project_context.mcp_tools import collect_tools as collect_pd_tools
 
@@ -96,7 +98,7 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
             "tools": [tool["name"] for tool in pd_tools],
         }
 
-    def board_payload() -> dict:
+    def board_payload() -> dict[str, Any]:
         from .agent_board import scopes
         from .agent_board.mcp_tools import collect_tools as collect_board_tools
 
@@ -110,7 +112,7 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
             "scopes": known_scopes,
         }
 
-    def hosted_tools_payload() -> dict:
+    def hosted_tools_payload() -> dict[str, Any]:
         from .tool_host import host
 
         hosted = host.list_tools(enabled_only=False)
@@ -128,7 +130,7 @@ def _capability_inventory(config: Config, registry: Registry) -> dict:
             ],
         }
 
-    def sandbox_payload() -> dict:
+    def sandbox_payload() -> dict[str, Any]:
         from .runtime.sandbox import get_sandbox
 
         sandbox = get_sandbox()
@@ -277,7 +279,7 @@ def main() -> int:
 
     if args.cmd == "serve":
         try:
-            import uvicorn  # type: ignore
+            import uvicorn
         except ImportError:
             print("uvicorn not installed; pip install knowledge-engine", file=sys.stderr)
             return 1

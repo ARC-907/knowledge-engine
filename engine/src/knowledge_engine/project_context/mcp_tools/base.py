@@ -15,6 +15,7 @@ registry edits required.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from dataclasses import dataclass, field
@@ -78,7 +79,7 @@ class ToolContext:
         return pdpaths.slugify(row["name"])
 
     def project_conn(self, project_fp: str | None = None) -> sqlite3.Connection | None:
-        """Open (once) a project content DB with migrations 002–007 applied.
+        """Open (once) a project content DB with migrations 002-007 applied.
 
         Returns ``None`` if ``project_fp`` is given but unknown.
         """
@@ -98,9 +99,7 @@ class ToolContext:
     def close(self) -> None:
         for conn in (self._registry, *self._projects.values()):
             if conn is not None:
-                try:
+                with contextlib.suppress(sqlite3.Error):
                     conn.close()
-                except sqlite3.Error:
-                    pass
         self._registry = None
         self._projects.clear()

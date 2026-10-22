@@ -8,6 +8,7 @@ import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ..core.config import Config
 from ..core.registry import Registry
@@ -92,7 +93,7 @@ class Indexer:
             self._conn.commit()
             return counts
 
-    def search(self, query: str, limit: int = 20) -> list[dict]:
+    def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         with self._lock:
             cur = self._conn.cursor()
             try:

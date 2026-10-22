@@ -18,11 +18,13 @@ Env vars:
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import math
 import os
 import sqlite3
+import struct
 import time
 import urllib.request
 from pathlib import Path
@@ -86,7 +88,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
 def _file_hash(path: Path) -> str:
     """Compute a truncated SHA-256 hash of a file's contents."""
     h = hashlib.sha256()
-    with open(path, "rb") as f:
+    with path.open("rb") as f:
         for block in iter(lambda: f.read(8192), b""):
             h.update(block)
     return h.hexdigest()[:16]
@@ -130,31 +132,29 @@ def _chunk_text(text: str, path_rel: str) -> list[dict]:
 def get_embedding(text: str) -> list[float]:
     """Fetch a single embedding from Ollama. Raises on HTTP error."""
     body = json.dumps({"model": EMBED_MODEL, "input": text}).encode()
-    req = urllib.request.Request(f"{OLLAMA_URL}/api/embed", data=body, method="POST")
+    req = urllib.request.Request(f"{OLLAMA_URL}/api/embed", data=body, method="POST")  # noqa: S310  # URL comes from operator config
     req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310  # URL comes from operator config
         data = json.loads(resp.read().decode())
     return data["embeddings"][0]
 
 
 def embedding_to_blob(emb: list[float]) -> bytes:
     """Pack a float list to compact binary (4 bytes per float)."""
-    import struct
-
     return struct.pack(f"{len(emb)}f", *emb)
 
 
 def blob_to_embedding(blob: bytes) -> list[float]:
     """Unpack a binary blob back to a float list."""
-    import struct
-
     n = len(blob) // 4
     return list(struct.unpack(f"{n}f", blob))
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Cosine similarity between two equal-dimension vectors."""
-    dot = sum(x * y for x, y in zip(a, b))
+    # strict=False keeps the historical truncating behaviour: a query embedded with a
+    # different model than the index can differ in dimension, and search must not raise.
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
     if norm_a == 0 or norm_b == 0:
@@ -311,8 +311,6 @@ def show_stats() -> None:
 
 
 def main() -> None:
-    import argparse
-
     parser = argparse.ArgumentParser(description="Build / inspect the corpus embedding index.")
     parser.add_argument("--incremental", action="store_true", help="Only index new/changed files")
     parser.add_argument("--stats", action="store_true", help="Show index statistics and exit")

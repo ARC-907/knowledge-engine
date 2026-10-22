@@ -74,11 +74,11 @@ def _load_plan_items(conn: sqlite3.Connection, plan_id: str) -> list[dict] | Non
 def _atomic_write(path: Path, text: str) -> None:
     """Write ``text`` to ``path`` atomically (temp file, fsync, rename)."""
     tmp = path.with_name(path.name + ".ke-tmp")
-    with open(tmp, "w", encoding="utf-8", newline="") as fh:
+    with tmp.open("w", encoding="utf-8", newline="") as fh:
         fh.write(text)
         fh.flush()
         os.fsync(fh.fileno())
-    os.replace(tmp, path)
+    tmp.replace(path)
 
 
 def _replace_span(text: str, start: int, end: int, stub: str) -> str:
@@ -92,7 +92,7 @@ def _replace_span(text: str, start: int, end: int, stub: str) -> str:
     indent = first[: len(first) - len(first.lstrip())]
     newline = "\r\n" if first.endswith("\r\n") else "\n"
     replacement = f"{indent}{stub}{newline}"
-    return "".join(lines[: start - 1] + [replacement] + lines[end:])
+    return "".join([*lines[: start - 1], replacement, *lines[end:]])
 
 
 def _record_event(

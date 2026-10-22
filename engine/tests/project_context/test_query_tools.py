@@ -88,6 +88,8 @@ def ctx(tmp_path: Path) -> ToolContext:
     ingest.finish_run(project, run_id, {"docs_written": 1})
     project.close()
 
+    # Ad-hoc attributes stashed on the fixture's ToolContext for the tests below;
+    # every ``attr-defined`` ignore in this file refers to them.
     context.record_id = record.record_id  # type: ignore[attr-defined]
     context.branch_fp = branch_fp  # type: ignore[attr-defined]
     return context

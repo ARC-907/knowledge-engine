@@ -30,12 +30,13 @@ def slugify(name: str) -> str:
 def _git_toplevel(start: Path) -> Path | None:
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
+            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607  # fixed argv, git resolved from PATH
             cwd=str(start),
             capture_output=True,
             text=True,
             timeout=5,
             shell=False,
+            check=False,  # returncode is inspected below
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -60,7 +61,7 @@ def resolve_project_root(
     return base
 
 
-def canonical_root(root: Path) -> str:
+def canonical_root(root: Path | str) -> str:
     """A normalized, comparable string form of a project root.
 
     Case-folded on Windows (where the filesystem is case-insensitive) so the

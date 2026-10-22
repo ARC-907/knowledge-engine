@@ -18,7 +18,9 @@ Use `python -m knowledge_engine.agent_board.service` or
 
 from __future__ import annotations
 
+import argparse
 import logging
+import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -59,8 +61,6 @@ def _resolve_cors_origins() -> list[str]:
     permissive CORS for users who need it (and accept the implications);
     a comma-separated list overrides the default explicitly.
     """
-    import os
-
     raw = os.environ.get("KE_BOARD_CORS_ORIGINS", "").strip()
     if not raw:
         return [
@@ -79,7 +79,9 @@ def _resolve_cors_origins() -> list[str]:
 
 def create_standalone_app() -> FastAPI:
     """Build a FastAPI app exposing only the /board/* routes."""
-    from ..server.api import board_routes  # local import — keeps Settings cold-import safe
+    # Local import: keeps Settings cold-import safe and breaks the
+    # agent_board -> server.api.board_routes -> agent_board import cycle.
+    from ..server.api import board_routes  # noqa: PLC0415
 
     app = FastAPI(
         title="Knowledge Engine — Agent Board (standalone)",
@@ -109,9 +111,10 @@ def create_standalone_app() -> FastAPI:
 def serve(host: str = "127.0.0.1", port: int = 11437) -> int:
     """Run the standalone service via uvicorn."""
     try:
-        import uvicorn  # type: ignore
+        # Only needed when actually serving; keeps `import agent_board` light.
+        import uvicorn  # noqa: PLC0415
     except ImportError:
-        print("uvicorn not installed; pip install knowledge-engine", file=sys.stderr)
+        sys.stderr.write("uvicorn not installed; pip install knowledge-engine\n")
         return 1
     uvicorn.run(
         "knowledge_engine.agent_board.service:create_standalone_app",
@@ -124,8 +127,6 @@ def serve(host: str = "127.0.0.1", port: int = 11437) -> int:
 
 def main() -> int:
     """`python -m knowledge_engine.agent_board.service` entry point."""
-    import argparse
-
     p = argparse.ArgumentParser(prog="agent-board-service")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=11437)

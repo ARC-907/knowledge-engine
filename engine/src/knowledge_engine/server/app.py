@@ -64,7 +64,8 @@ def create_app() -> FastAPI:
     # so uvicorn reload / SIGTERM cleanly drains the daemon thread.
     if env_truthy("KE_BOARD_ENABLED", default=True):
         try:
-            from .api import board_routes
+            # Optional subsystem: a broken board must never block the core app.
+            from .api import board_routes  # noqa: PLC0415
 
             app.include_router(board_routes.router, prefix="/board", tags=["board"])
         except Exception:

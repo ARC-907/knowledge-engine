@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .. import schemas, scopes as scopes_mod
 from .base import BoardContext, error_result, store, text_result
 
 GROUP = "board.read"
@@ -196,8 +197,6 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
         )
         return text_result(summary)
     if name == "board_scopes":
-        from .. import scopes as scopes_mod
-
         return text_result(
             {
                 "scopes": scopes_mod.list_scopes(),
@@ -221,8 +220,6 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
         )
     if name == "board_channels":
         cfg = store.load_config()
-        from .. import schemas as schemas
-
         return text_result(
             {
                 "channels": cfg["channels"],
@@ -230,8 +227,6 @@ def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[
             }
         )
     if name == "board_message_types":
-        from .. import schemas as schemas
-
         return text_result(
             {
                 "message_types": list(schemas.MESSAGE_TYPES),

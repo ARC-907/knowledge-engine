@@ -36,13 +36,14 @@ def _run_git(root: Path, args: list[str]) -> str | None:
     an optional capability.
     """
     try:
-        proc = subprocess.run(
-            ["git", *args],
+        proc = subprocess.run(  # noqa: S603  # argv list, no shell; git resolved from PATH
+            ["git", *args],  # noqa: S607  # git resolved from PATH
             cwd=str(root),
             capture_output=True,
             text=True,
             shell=False,
             timeout=_GIT_TIMEOUT,
+            check=False,  # returncode is inspected below
         )
     except (FileNotFoundError, OSError, subprocess.SubprocessError):
         return None

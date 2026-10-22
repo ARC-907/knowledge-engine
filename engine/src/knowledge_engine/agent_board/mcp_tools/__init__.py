@@ -38,8 +38,8 @@ def collect_tools() -> tuple[list[dict], dict[str, DispatchFn]]:
     dispatch: dict[str, DispatchFn] = {}
     for mod in _iter_tool_modules():
         try:
-            group_defs = mod.tools()  # type: ignore[attr-defined]
-            group_dispatch = mod.dispatch  # type: ignore[attr-defined]
+            group_defs = mod.tools()
+            group_dispatch = mod.dispatch
         except AttributeError:
             _logger.warning("skipping malformed tool module: %s", mod.__name__)
             continue
