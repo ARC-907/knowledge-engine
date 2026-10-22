@@ -87,9 +87,7 @@ def test_record_test_run_stores_run_and_sanitized_log(project_conn, registry_con
     assert run.classification == schema.PASS
     assert run.raw_retained == 0
 
-    row = project_conn.execute(
-        "SELECT * FROM test_runs WHERE id = ?", (run.id,)
-    ).fetchone()
+    row = project_conn.execute("SELECT * FROM test_runs WHERE id = ?", (run.id,)).fetchone()
     assert row is not None
     assert row["command"] == "pytest -q"
     assert row["classification"] == schema.PASS
@@ -162,9 +160,7 @@ def test_record_build_log_writes_row(project_conn, registry_conn):
         branch_fp=_BRANCH_FP,
     )
     assert rec.classification == schema.PASS
-    row = project_conn.execute(
-        "SELECT * FROM build_log_records WHERE id = ?", (rec.id,)
-    ).fetchone()
+    row = project_conn.execute("SELECT * FROM build_log_records WHERE id = ?", (rec.id,)).fetchone()
     assert row is not None
     assert row["raw_log"] is None
     assert row["sanitized_log"] == "Build succeeded"
@@ -194,21 +190,38 @@ def test_record_runtime_log_writes_row(project_conn, registry_conn):
 
 def _seed_runs(project_conn, registry_conn):
     record_test_run(
-        project_conn, registry_conn, _cfg(),
-        command="pytest", exit_code=0, started_at="2026-05-30T09:00:00",
-        output="ok", project_fp=_PROJECT_FP, branch_fp=_BRANCH_FP,
+        project_conn,
+        registry_conn,
+        _cfg(),
+        command="pytest",
+        exit_code=0,
+        started_at="2026-05-30T09:00:00",
+        output="ok",
+        project_fp=_PROJECT_FP,
+        branch_fp=_BRANCH_FP,
     )
     record_test_run(
-        project_conn, registry_conn, _cfg(),
-        command="pytest", exit_code=1, started_at="2026-05-30T09:30:00",
-        output="1 failed", project_fp=_PROJECT_FP, branch_fp=_BRANCH_FP,
+        project_conn,
+        registry_conn,
+        _cfg(),
+        command="pytest",
+        exit_code=1,
+        started_at="2026-05-30T09:30:00",
+        output="1 failed",
+        project_fp=_PROJECT_FP,
+        branch_fp=_BRANCH_FP,
     )
-    latest = record_test_run(
-        project_conn, registry_conn, _cfg(),
-        command="pytest", exit_code=0, started_at="2026-05-30T10:00:00",
-        output="2 passed", project_fp=_PROJECT_FP, branch_fp=_BRANCH_FP,
+    return record_test_run(
+        project_conn,
+        registry_conn,
+        _cfg(),
+        command="pytest",
+        exit_code=0,
+        started_at="2026-05-30T10:00:00",
+        output="2 passed",
+        project_fp=_PROJECT_FP,
+        branch_fp=_BRANCH_FP,
     )
-    return latest
 
 
 def test_history_orders_newest_first(project_conn, registry_conn):
@@ -225,9 +238,15 @@ def test_history_orders_newest_first(project_conn, registry_conn):
 def test_history_filters_by_branch(project_conn, registry_conn):
     _seed_runs(project_conn, registry_conn)
     record_test_run(
-        project_conn, registry_conn, _cfg(),
-        command="pytest", exit_code=0, started_at="2026-05-30T12:00:00",
-        output="ok", project_fp=_PROJECT_FP, branch_fp="br_other000000000000",
+        project_conn,
+        registry_conn,
+        _cfg(),
+        command="pytest",
+        exit_code=0,
+        started_at="2026-05-30T12:00:00",
+        output="ok",
+        project_fp=_PROJECT_FP,
+        branch_fp="br_other000000000000",
     )
     only_main = get_test_history(project_conn, branch_fp=_BRANCH_FP)
     assert len(only_main) == 3
@@ -248,10 +267,15 @@ def test_latest_summary_none_when_empty(project_conn):
 
 def test_failure_context_returns_log(project_conn, registry_conn):
     run = record_test_run(
-        project_conn, registry_conn, _cfg(),
-        command="pytest", exit_code=1, started_at="2026-05-30T13:00:00",
+        project_conn,
+        registry_conn,
+        _cfg(),
+        command="pytest",
+        exit_code=1,
+        started_at="2026-05-30T13:00:00",
         output="E   assert False\n1 failed in 0.02s",
-        project_fp=_PROJECT_FP, branch_fp=_BRANCH_FP,
+        project_fp=_PROJECT_FP,
+        branch_fp=_BRANCH_FP,
     )
     ctx = get_failure_context(project_conn, run.id)
     assert ctx["id"] == run.id

@@ -1,0 +1,17 @@
+# Normalize line endings: LF in the repo, platform-appropriate on checkout.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF so cmd.exe / PowerShell parse them.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary / vendored assets
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.min.js -diff
+uv.lock -diff linguist-generated=true

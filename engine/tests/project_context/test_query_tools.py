@@ -15,8 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from knowledge_engine.project_context import db as pddb
-from knowledge_engine.project_context import fingerprints, ingest, paths, schema
+from knowledge_engine.project_context import db as pddb, fingerprints, ingest, paths, schema
 from knowledge_engine.project_context.config import McpCfg, ProjectContextConfig
 from knowledge_engine.project_context.mcp_tools import query_tools
 from knowledge_engine.project_context.mcp_tools.base import ToolContext
@@ -89,6 +88,8 @@ def ctx(tmp_path: Path) -> ToolContext:
     ingest.finish_run(project, run_id, {"docs_written": 1})
     project.close()
 
+    # Ad-hoc attributes stashed on the fixture's ToolContext for the tests below;
+    # every ``attr-defined`` ignore in this file refers to them.
     context.record_id = record.record_id  # type: ignore[attr-defined]
     context.branch_fp = branch_fp  # type: ignore[attr-defined]
     return context
@@ -113,7 +114,9 @@ def test_search_finds_seeded_row(ctx: ToolContext) -> None:
 
 def test_get_record_returns_summary(ctx: ToolContext) -> None:
     out = query_tools.dispatch(
-        "project_context.get_record", {"record_id": ctx.record_id}, ctx  # type: ignore[attr-defined]
+        "project_context.get_record",
+        {"record_id": ctx.record_id},
+        ctx,  # type: ignore[attr-defined]
     )
     payload = _payload(out)
     assert payload["record_id"] == ctx.record_id  # type: ignore[attr-defined]
@@ -127,7 +130,9 @@ def test_get_record_not_found(ctx: ToolContext) -> None:
 
 def test_get_full_content_gated(ctx: ToolContext) -> None:
     out = query_tools.dispatch(
-        "project_context.get_full_content", {"record_id": ctx.record_id}, ctx  # type: ignore[attr-defined]
+        "project_context.get_full_content",
+        {"record_id": ctx.record_id},
+        ctx,  # type: ignore[attr-defined]
     )
     assert _payload(out)["status"] == "not_permitted"
 
@@ -135,7 +140,9 @@ def test_get_full_content_gated(ctx: ToolContext) -> None:
 def test_get_full_content_allowed(ctx: ToolContext) -> None:
     ctx.cfg = replace(ctx.cfg, mcp=McpCfg(enabled=True, allow_full_content=True))
     out = query_tools.dispatch(
-        "project_context.get_full_content", {"record_id": ctx.record_id}, ctx  # type: ignore[attr-defined]
+        "project_context.get_full_content",
+        {"record_id": ctx.record_id},
+        ctx,  # type: ignore[attr-defined]
     )
     payload = _payload(out)
     assert payload["body"] == _BODY

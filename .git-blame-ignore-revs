@@ -1,0 +1,6 @@
+# Commits that are pure formatting / mechanical rewrites. Tell git to skip them:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (The format-sweep commit hash is appended by the PR that introduces it.)
+
+# style: apply ruff format and safe autofixes across the engine (3.0 train, PR 1 format sweep)
+cb7ef8e3d8d5f9e606b1a11f95d49e26e872d1bd

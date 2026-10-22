@@ -80,7 +80,7 @@ class StubProvider(EmbeddingProvider):
         counter = 0
         # Expand the digest deterministically until we have enough components.
         while len(values) < self._dim:
-            seed = f"{counter}:{text}".encode("utf-8")
+            seed = f"{counter}:{text}".encode()
             digest = hashlib.sha256(seed).digest()
             for i in range(0, len(digest), 2):
                 if len(values) >= self._dim:
@@ -92,7 +92,7 @@ class StubProvider(EmbeddingProvider):
         return values[: self._dim]
 
 
-def get_provider(cfg: "ProjectContextConfig") -> EmbeddingProvider | None:
+def get_provider(cfg: ProjectContextConfig) -> EmbeddingProvider | None:
     """Resolve the configured embedding provider, honoring all gates.
 
     Returns ``None`` (it does not raise) when embeddings are disabled or when
@@ -114,7 +114,10 @@ def get_provider(cfg: "ProjectContextConfig") -> EmbeddingProvider | None:
         return StubProvider(dim=int(getattr(emb, "dim", 8) or 8))
 
     if provider in {"ollama", "local"}:
-        from knowledge_engine.project_context.embeddings.local import OllamaProvider
+        # Lazy: local.py subclasses EmbeddingProvider from this module (import cycle).
+        from knowledge_engine.project_context.embeddings.local import (  # noqa: PLC0415
+            OllamaProvider,
+        )
 
         return OllamaProvider(
             model=str(getattr(emb, "model", "") or ""),
@@ -122,7 +125,10 @@ def get_provider(cfg: "ProjectContextConfig") -> EmbeddingProvider | None:
         )
 
     if provider in {"remote", "http"}:
-        from knowledge_engine.project_context.embeddings.remote import RemoteProvider
+        # Lazy: remote.py subclasses EmbeddingProvider from this module (import cycle).
+        from knowledge_engine.project_context.embeddings.remote import (  # noqa: PLC0415
+            RemoteProvider,
+        )
 
         return RemoteProvider(cfg)
 
@@ -156,7 +162,7 @@ def cosine(a: list[float], b: list[float]) -> float:
     dot = 0.0
     norm_a = 0.0
     norm_b = 0.0
-    for x, y in zip(a, b):
+    for x, y in zip(a, b, strict=True):
         dot += x * y
         norm_a += x * x
         norm_b += y * y

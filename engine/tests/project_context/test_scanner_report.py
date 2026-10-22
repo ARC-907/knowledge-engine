@@ -9,9 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from knowledge_engine.project_context import config as _config
-from knowledge_engine.project_context import db as _db
-from knowledge_engine.project_context import schema
+from knowledge_engine.project_context import config as _config, db as _db, schema
 from knowledge_engine.project_context.scanner import report
 
 _PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
@@ -20,9 +18,7 @@ _PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
 def _make_project(tmp_path: Path) -> Path:
     """Create a tiny project with one markdown file and one Python module."""
     (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "guide.md").write_text(
-        "# Guide\n\nHello world.\n", encoding="utf-8"
-    )
+    (tmp_path / "docs" / "guide.md").write_text("# Guide\n\nHello world.\n", encoding="utf-8")
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "mod.py").write_text(
         '"""Module doc."""\n\n\ndef greet():\n'
@@ -57,9 +53,7 @@ def test_report_lists_candidates_including_docstring(tmp_path: Path) -> None:
     assert schema.CATEGORY_DOCSTRING in categories, "expected a docstring candidate"
     assert schema.CATEGORY_DOC in categories, "expected a markdown doc candidate"
 
-    docstring_cands = [
-        c for c in rep.candidates if c.category == schema.CATEGORY_DOCSTRING
-    ]
+    docstring_cands = [c for c in rep.candidates if c.category == schema.CATEGORY_DOCSTRING]
     # Each docstring candidate carries a (start, end) source span.
     assert all(c.span is not None for c in docstring_cands)
 
@@ -80,16 +74,12 @@ def test_report_writes_nothing_to_project_db(tmp_path: Path) -> None:
     cfg = _default_cfg()
     conn = _project_conn(tmp_path)
     try:
-        before = conn.execute(
-            "SELECT COUNT(*) AS c FROM project_docs"
-        ).fetchone()["c"]
+        before = conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
         assert before == 0
 
         report.run(root, cfg, conn=conn)
 
-        after = conn.execute(
-            "SELECT COUNT(*) AS c FROM project_docs"
-        ).fetchone()["c"]
+        after = conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
         assert after == 0, "report mode must not write to the project DB"
     finally:
         conn.close()

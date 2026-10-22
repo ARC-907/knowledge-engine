@@ -86,6 +86,7 @@ def test_app_factory(tmp_path: Path) -> None:
     data.mkdir()
     _env(corpus, data)
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
@@ -128,6 +129,7 @@ def test_search_and_reindex_routes_threadsafe(tmp_path: Path) -> None:
     _env(corpus, data)
 
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
     from knowledge_engine.core.config import Config
     from knowledge_engine.core.registry import Registry, RegistryEntry

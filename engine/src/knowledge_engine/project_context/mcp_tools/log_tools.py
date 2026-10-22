@@ -262,7 +262,7 @@ def _to_dict(row: Any) -> Any:
     if isinstance(row, dict):
         return dict(row)
     if hasattr(row, "keys"):  # sqlite3.Row
-        return {k: row[k] for k in row.keys()}
+        return {k: row[k] for k in row.keys()}  # noqa: SIM118  # iterating a Row yields values
     return row
 
 

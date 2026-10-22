@@ -67,7 +67,8 @@ def classify_task(
     if endpoint is None:
         endpoint = CLASSIFIER_ENDPOINT_DEFAULT
 
-    assert isinstance(endpoint, str)
+    if not isinstance(endpoint, str):
+        raise RuntimeError(f"classifier endpoint must be a string, got {type(endpoint).__name__}")
     if not endpoint.endswith("/api/generate"):
         endpoint = endpoint.rstrip("/") + "/api/generate"
 
@@ -78,25 +79,27 @@ def classify_task(
     if context_hint:
         prompt += f"\n\nAdditional context: {context_hint}"
 
-    payload = json.dumps({
-        "model": model,
-        "prompt": prompt,
-        "system": CLASSIFIER_PROMPT,
-        "stream": False,
-        "options": {
-            "temperature": 0.1,
-            "num_ctx": 2048,
-            "num_predict": 256,
-        },
-    }).encode()
+    payload = json.dumps(
+        {
+            "model": model,
+            "prompt": prompt,
+            "system": CLASSIFIER_PROMPT,
+            "stream": False,
+            "options": {
+                "temperature": 0.1,
+                "num_ctx": 2048,
+                "num_predict": 256,
+            },
+        }
+    ).encode()
 
     try:
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310  # URL comes from operator config
             endpoint,
             data=payload,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310  # URL comes from operator config
             raw = json.loads(resp.read())
 
         response_text = raw.get("response", "")
@@ -120,7 +123,7 @@ def _parse_classification(text: str) -> dict[str, Any]:
     end = text.rfind("}")
     if start != -1 and end > start:
         try:
-            result = json.loads(text[start:end + 1])
+            result = json.loads(text[start : end + 1])
             return _validate_classification(result)
         except json.JSONDecodeError:
             pass

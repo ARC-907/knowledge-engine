@@ -21,6 +21,7 @@ block the next sweep window.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -28,12 +29,12 @@ import socket
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
-from . import store
+from . import scopes, store
 
 _logger = logging.getLogger(__name__)
 
@@ -51,10 +52,8 @@ def _holder_id() -> str:
     sweep passes (necessary for renewal).
     """
     host = "unknown"
-    try:
+    with contextlib.suppress(OSError):
         host = socket.gethostname()
-    except OSError:
-        pass
     return f"{host}:{os.getpid()}:{_HOLDER_SUFFIX}"
 
 
@@ -66,13 +65,15 @@ _HOLDER_SUFFIX = uuid.uuid4().hex[:4]
 
 def start() -> bool:
     """Start the sweeper thread if not already running. Idempotent."""
-    global _thread
+    global _thread  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
     with _lock:
         if _thread is not None and _thread.is_alive():
             return False
         _stop_event.clear()
         _thread = threading.Thread(
-            target=_run, name="agent-board-sweeper", daemon=True,
+            target=_run,
+            name="agent-board-sweeper",
+            daemon=True,
         )
         _thread.start()
         _logger.info("agent-board sweeper started")
@@ -85,7 +86,7 @@ def stop(timeout: float = 5.0) -> bool:
     Best-effort releases the lease so a peer sweeper can pick up promptly
     instead of waiting for the TTL to expire.
     """
-    global _thread
+    global _thread  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
     with _lock:
         if _thread is None or not _thread.is_alive():
             return True
@@ -96,8 +97,8 @@ def stop(timeout: float = 5.0) -> bool:
             _thread = None
     try:
         db.release_sweeper_lease(_holder_id())
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        _logger.debug("releasing the sweeper lease failed; peers wait for TTL", exc_info=True)
     return exited
 
 
@@ -127,21 +128,23 @@ def _sweep_active_db() -> dict[str, Any]:
     try:
         pruned_expired = store.prune_expired()
         pruned_overflow = store.prune_by_count(int(cfg["max_messages_before_prune"]))
-        reminders_emitted = _emit_stale_blocker_reminders(
-            int(cfg["stale_blocker_hours"])
-        )
+        reminders_emitted = _emit_stale_blocker_reminders(int(cfg["stale_blocker_hours"]))
         digests_emitted = _maybe_emit_digests(
-            int(cfg["digest_interval_minutes"]), cfg.get("channels") or [],
+            int(cfg["digest_interval_minutes"]),
+            cfg.get("channels") or [],
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         error = str(exc)
         _logger.exception("agent-board sweep failed")
 
     finished_at = _now_iso()
     store.record_sweep(
-        started_at=started_at, finished_at=finished_at,
-        pruned_expired=pruned_expired, pruned_overflow=pruned_overflow,
-        reminders_emitted=reminders_emitted, digests_emitted=digests_emitted,
+        started_at=started_at,
+        finished_at=finished_at,
+        pruned_expired=pruned_expired,
+        pruned_overflow=pruned_overflow,
+        reminders_emitted=reminders_emitted,
+        digests_emitted=digests_emitted,
         error=error,
     )
     return {
@@ -180,7 +183,7 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
     if not force:
         try:
             have_lease = db.acquire_sweeper_lease(holder, ttl_seconds=lease_ttl)
-        except Exception:  # noqa: BLE001
+        except Exception:
             # If the lease layer itself errors, fall through and run —
             # missing a sweep is worse than a possible double-pass.
             _logger.exception("acquire_sweeper_lease failed; running anyway")
@@ -207,9 +210,8 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
     targets.append(default_result)
 
     try:
-        from . import scopes
         scope_entries = scopes.list_scopes()
-    except Exception:  # noqa: BLE001
+    except Exception:
         _logger.exception("listing scopes failed; swept default only")
         scope_entries = []
 
@@ -220,11 +222,11 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
                 r = _sweep_active_db()
             r["target"] = f"scope:{entry['scope']}"
             targets.append(r)
-        except Exception:  # noqa: BLE001
+        except Exception:
             _logger.exception("sweep of scope %s failed; continuing", entry.get("scope"))
             targets.append({"target": f"scope:{entry.get('scope')}", "error": "sweep failed"})
 
-    agg = {
+    return {
         "started_at": started_at,
         "finished_at": _now_iso(),
         "skipped": False,
@@ -236,7 +238,6 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
         "error": next((t["error"] for t in targets if t.get("error")), None),
         "targets": targets,
     }
-    return agg
 
 
 # ── Loop body ──────────────────────────────────────────────────
@@ -254,7 +255,7 @@ def _run() -> None:
             interval = max(5, int(cfg.get("sweep_interval_s") or 60))
             if cfg.get("sweeper_enabled"):
                 sweep_once()
-        except Exception:  # noqa: BLE001
+        except Exception:
             _logger.exception("sweeper loop error; continuing")
             interval = max(interval, 60)
         # Sleep in small slices so stop() responds quickly.
@@ -297,9 +298,7 @@ def _emit_stale_blocker_reminders(threshold_hours: int) -> int:
         if r["reply_to"]:
             last_per_blocker[r["reply_to"]] = r["last_at"]
 
-    cutoff = (
-        datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
-    ).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(hours=threshold_hours)).isoformat()
     emitted = 0
     for b in blockers:
         last_at = last_per_blocker.get(b["message_id"])
@@ -313,13 +312,15 @@ def _emit_stale_blocker_reminders(threshold_hours: int) -> int:
                 task_id=b.get("task_id"),
                 product_id=b.get("product_id"),
                 subject=f"Stale blocker: {b.get('subject') or b['message_id'][:8]}",
-                body=json.dumps({
-                    "blocker_id": b["message_id"],
-                    "blocker_subject": b.get("subject"),
-                    "blocker_age_hours": _age_hours(b.get("created_at")),
-                    "original_sender": b.get("sender_node_id"),
-                    "task_id": b.get("task_id"),
-                }),
+                body=json.dumps(
+                    {
+                        "blocker_id": b["message_id"],
+                        "blocker_subject": b.get("subject"),
+                        "blocker_age_hours": _age_hours(b.get("created_at")),
+                        "original_sender": b.get("sender_node_id"),
+                        "task_id": b.get("task_id"),
+                    }
+                ),
                 visibility_scope="all",
                 reply_to=b["message_id"],
                 correlation_id=b.get("correlation_id") or b["message_id"],
@@ -327,7 +328,7 @@ def _emit_stale_blocker_reminders(threshold_hours: int) -> int:
                 ttl_hours=threshold_hours * 2,
             )
             emitted += 1
-        except Exception:  # noqa: BLE001
+        except Exception:
             _logger.exception("failed to emit reminder for %s", b["message_id"])
     return emitted
 
@@ -352,9 +353,7 @@ def _maybe_emit_digests(interval_minutes: int, channels: list[str]) -> int:
         if r["channel"]:
             last_digest_per_channel[r["channel"]] = r["last_at"]
 
-    cutoff = (
-        datetime.now(timezone.utc) - timedelta(minutes=interval_minutes)
-    ).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(minutes=interval_minutes)).isoformat()
     emitted = 0
     for channel in channels:
         last = last_digest_per_channel.get(channel)
@@ -379,7 +378,7 @@ def _maybe_emit_digests(interval_minutes: int, channels: list[str]) -> int:
                 ttl_hours=max(interval_minutes // 60 + 1, 24),
             )
             emitted += 1
-        except Exception:  # noqa: BLE001
+        except Exception:
             _logger.exception("failed to emit digest for channel %s", channel)
     return emitted
 
@@ -388,7 +387,7 @@ def _maybe_emit_digests(interval_minutes: int, channels: list[str]) -> int:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _age_hours(iso: str | None) -> float | None:
@@ -396,9 +395,9 @@ def _age_hours(iso: str | None) -> float | None:
         return None
     try:
         then = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        return round((datetime.now(timezone.utc) - then).total_seconds() / 3600, 1)
+        return round((datetime.now(UTC) - then).total_seconds() / 3600, 1)
     except (TypeError, ValueError):
         return None
 
 
-__all__ = ["start", "stop", "is_running", "sweep_once"]
+__all__ = ["is_running", "start", "stop", "sweep_once"]

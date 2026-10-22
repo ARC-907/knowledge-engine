@@ -55,6 +55,7 @@ def test_command_substitution_no_longer_evaluated() -> None:
     the parse path produces 'bash' as first_word (so the rejection path is
     not taken) and that '$(id)' survives as a single literal token."""
     import shlex
+
     argv = shlex.split("bash $(id)", posix=True)
     assert argv[0] == "bash"
     assert argv[1] == "$(id)"  # literal — no shell expansion

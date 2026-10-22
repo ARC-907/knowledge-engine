@@ -31,7 +31,7 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.search",
             "description": "Full-text search the project documentation store; "
-                           "returns ranked summaries (compact, no bodies).",
+            "returns ranked summaries (compact, no bodies).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -49,8 +49,7 @@ def tools(cfg) -> list[dict]:
         },
         {
             "name": "project_context.get_record",
-            "description": "Fetch a single documentation record by id "
-                           "(summary + metadata only).",
+            "description": "Fetch a single documentation record by id (summary + metadata only).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -75,7 +74,7 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.get_full_content",
             "description": "Return a record including its full body. Gated: requires "
-                           "mcp.allow_full_content, else returns not_permitted.",
+            "mcp.allow_full_content, else returns not_permitted.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -175,29 +174,21 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
     if name == "project_context.get_full_content":
         if not ctx.cfg.mcp.allow_full_content:
             return status_result("not_permitted", capability="mcp.allow_full_content")
-        record = pdsearch.get_record(
-            conn, args.get("record_id", ""), mode=RESULT_FULL, cfg=ctx.cfg
-        )
+        record = pdsearch.get_record(conn, args.get("record_id", ""), mode=RESULT_FULL, cfg=ctx.cfg)
         if record is None:
             return status_result("not_found", record_id=args.get("record_id"))
         return text_result(record)
 
     if name == "project_context.search_by_path":
-        rows = pdsearch.search_by_path(
-            conn, args.get("source_path", ""), limit=_limit(args)
-        )
+        rows = pdsearch.search_by_path(conn, args.get("source_path", ""), limit=_limit(args))
         return text_result({"results": rows, "count": len(rows)})
 
     if name == "project_context.search_by_type":
-        rows = pdsearch.search_by_type(
-            conn, args.get("category", ""), limit=_limit(args)
-        )
+        rows = pdsearch.search_by_type(conn, args.get("category", ""), limit=_limit(args))
         return text_result({"results": rows, "count": len(rows)})
 
     if name == "project_context.search_by_branch":
-        rows = pdsearch.search_by_branch(
-            conn, args.get("branch_fp", ""), limit=_limit(args)
-        )
+        rows = pdsearch.search_by_branch(conn, args.get("branch_fp", ""), limit=_limit(args))
         return text_result({"results": rows, "count": len(rows)})
 
     if name == "project_context.search_recent":

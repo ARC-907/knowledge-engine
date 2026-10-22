@@ -317,15 +317,12 @@ def get_failure_context(project_conn: Any, test_run_id: str) -> dict[str, Any]:
         A dict with run metadata plus ``sanitized_log``. Empty dict when the run
         id is unknown.
     """
-    row = project_conn.execute(
-        "SELECT * FROM test_runs WHERE id = ?", (test_run_id,)
-    ).fetchone()
+    row = project_conn.execute("SELECT * FROM test_runs WHERE id = ?", (test_run_id,)).fetchone()
     if row is None:
         return {}
     run = TestRun.from_row(dict(row))
     log_row = project_conn.execute(
-        "SELECT sanitized_log FROM test_log_records WHERE test_run_id = ? "
-        "ORDER BY id ASC LIMIT 1",
+        "SELECT sanitized_log FROM test_log_records WHERE test_run_id = ? ORDER BY id ASC LIMIT 1",
         (test_run_id,),
     ).fetchone()
     sanitized_log = log_row["sanitized_log"] if log_row is not None else ""

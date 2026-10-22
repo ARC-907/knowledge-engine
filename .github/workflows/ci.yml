@@ -4,42 +4,142 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+  UV_LOCKED: "1"
+  UV_PROJECT: engine
+
 jobs:
-  test:
-    name: ruff + pytest (Python ${{ matrix.python-version }})
+  lint:
+    name: lint (ruff, mypy, lockfile)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.11.x"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Lockfile is in sync with pyproject.toml
+        run: uv lock --check
+      - name: Install
+        run: uv sync --all-groups
+      - name: ruff format
+        run: uv run ruff format --check --diff .
+        working-directory: engine
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+        working-directory: engine
+      - name: mypy
+        run: uv run mypy
+        working-directory: engine
+
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    # Windows/macOS run as advisory until a runner history exists; Linux is required.
+    continue-on-error: ${{ matrix.advisory }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
-    defaults:
-      run:
-        working-directory: engine
-
+        os: [ubuntu-latest]
+        python-version: ["3.12", "3.13", "3.14"]
+        advisory: [false]
+        include:
+          - os: windows-latest
+            python-version: "3.13"
+            advisory: true
+          - os: macos-latest
+            python-version: "3.13"
+            advisory: true
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.11.x"
           python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: engine/pyproject.toml
+          enable-cache: true
+      - name: Install
+        run: uv sync --group test
+      - name: pytest
+        # TODO(#4): drop `-p no:randomly` once the agent-board sweeper test isolation
+        # fix lands; until then random ordering can trip test_http_scope_isolation.
+        run: uv run pytest -q -p no:randomly --cov --cov-report=xml:coverage.xml --cov-report=term
+        working-directory: engine
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-xml
+          path: engine/coverage.xml
+          retention-days: 14
 
-      - name: Install engine + dev extras
+  build:
+    name: build (sdist, wheel, install smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.11.x"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Build sdist + wheel
+        run: uv build --out-dir dist
+      - name: Check metadata
+        run: uv run --group build twine check dist/*
+      - name: Wheel ships package data
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-          python -m pip install ruff
+          set -euo pipefail
+          wheel=$(ls dist/*.whl)
+          unzip -l "$wheel" | grep -q 'knowledge_engine/project_context/migrations/001_' \
+            || { echo "::error::wheel is missing project_context/migrations/*.sql"; exit 1; }
+          unzip -l "$wheel" | grep -q 'knowledge_engine/py.typed' \
+            || { echo "::error::wheel is missing py.typed"; exit 1; }
+      - name: Install wheel into a clean environment and smoke-test
+        run: |
+          set -euo pipefail
+          uv venv --python 3.12 /tmp/smoke
+          uv pip install --python /tmp/smoke/bin/python dist/*.whl
+          /tmp/smoke/bin/knowledge-engine --help
+          /tmp/smoke/bin/python - <<'PY'
+          import importlib.metadata as m
+          import knowledge_engine
+          from knowledge_engine.server.app import create_app
+          assert knowledge_engine.__version__ == m.version("knowledge-engine"), knowledge_engine.__version__
+          create_app()
+          print("smoke ok", knowledge_engine.__version__)
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/*
+          retention-days: 14
 
-      - name: Lint (ruff)
-        run: ruff check .
-
-      - name: Test (pytest)
-        run: pytest -q
+  workflows:
+    name: workflow security (zizmor)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1

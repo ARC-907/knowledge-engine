@@ -18,6 +18,7 @@ def _cfg(**ingestion_overrides: object) -> ProjectContextConfig:
     base = ProjectContextConfig()
     if not ingestion_overrides:
         return base
+    # ``**ingestion_overrides`` is object-typed; replace() validates the fields at runtime.
     new_ingestion = dataclasses.replace(base.ingestion, **ingestion_overrides)  # type: ignore[arg-type]
     return dataclasses.replace(base, ingestion=new_ingestion)
 

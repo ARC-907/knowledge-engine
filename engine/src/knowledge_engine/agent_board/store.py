@@ -17,20 +17,27 @@ All functions return plain dicts — no ORM, no models. Cheap to serialize.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import json
 import sqlite3
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
 from . import schemas
+from .scopes import scope_db_path
 
-_F = TypeVar("_F", bound=Callable[..., Any])
+
+class _Scoped[R](Protocol):
+    """Call signature of a store function after ``_scoped`` wrapping."""
+
+    def __call__(self, *args: Any, scope: str | None = None, **kwargs: Any) -> R: ...
 
 
-def _scoped(fn: _F) -> _F:
+def _scoped[R](fn: Callable[..., R]) -> _Scoped[R]:
     """Give a store function an optional keyword-only ``scope=`` argument.
 
     When ``scope`` is supplied, the call runs inside
@@ -48,17 +55,30 @@ def _scoped(fn: _F) -> _F:
     @functools.wraps(fn)
     def wrapper(*args: Any, scope: str | None = None, **kwargs: Any) -> Any:
         if scope:
-            from .scopes import scope_db_path
             with db.using_db(scope_db_path(scope)):
                 return fn(*args, **kwargs)
         return fn(*args, **kwargs)
 
-    return wrapper  # type: ignore[return-value]
+    return wrapper
+
+
+if TYPE_CHECKING:
+    # Static mirror of the wrapping loop at the bottom of this file: the loop
+    # rebinds names through ``globals()``, which type checkers cannot follow, so
+    # each function in ``_SCOPED_FUNCTIONS`` is marked with this decorator to give
+    # callers the ``scope=`` keyword. It is a no-op at runtime.
+    def _accepts_scope[R](fn: Callable[..., R]) -> _Scoped[R]: ...
+
+else:
+
+    def _accepts_scope(fn):
+        return fn
 
 
 # ── Config (singleton row) ─────────────────────────────────────
 
 
+@_accepts_scope
 def load_config() -> dict[str, Any]:
     """Return the current board_config singleton as a dict."""
     conn = db.get_connection()
@@ -76,20 +96,29 @@ def load_config() -> dict[str, Any]:
     return cfg
 
 
-_CONFIG_INT_FIELDS = frozenset({
-    "engine_port", "standalone_port", "sweep_interval_s",
-    "stale_blocker_hours", "digest_interval_minutes",
-    "max_messages_before_prune", "default_ttl_hours",
-    "sweeper_enabled", "require_key_for_post",
-})
+_CONFIG_INT_FIELDS = frozenset(
+    {
+        "engine_port",
+        "standalone_port",
+        "sweep_interval_s",
+        "stale_blocker_hours",
+        "digest_interval_minutes",
+        "max_messages_before_prune",
+        "default_ttl_hours",
+        "sweeper_enabled",
+        "require_key_for_post",
+    }
+)
 
 
+@_accepts_scope
 def update_config(patch: dict[str, Any]) -> dict[str, Any]:
     """Apply a partial update to board_config. Returns the new state."""
     if not patch:
         return load_config()
     conn = db.get_connection()
-    sets, params = [], []
+    sets: list[str] = []
+    params: list[Any] = []
     for key, value in patch.items():
         if key == "channels":
             sets.append("channels_json = ?")
@@ -115,6 +144,7 @@ def update_config(patch: dict[str, Any]) -> dict[str, Any]:
 # ── Post / Read facades ────────────────────────────────────────
 
 
+@_accepts_scope
 def post_with_validation(payload: dict[str, Any]) -> dict[str, Any]:
     """Schema-validate then post. Returns the created message or raises.
 
@@ -146,10 +176,12 @@ def post_with_validation(payload: dict[str, Any]) -> dict[str, Any]:
     return msg or {}
 
 
+@_accepts_scope
 def read(message_id: str) -> dict[str, Any] | None:
     return mb.read_message(message_id)
 
 
+@_accepts_scope
 def poll(
     since: str | None = None,
     channel: str | None = None,
@@ -160,12 +192,17 @@ def poll(
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     return mb.poll_messages(
-        since=since, task_id=task_id, product_id=product_id,
-        message_type=message_type, sender_node_id=sender_node_id,
-        limit=limit, channel=channel,
+        since=since,
+        task_id=task_id,
+        product_id=product_id,
+        message_type=message_type,
+        sender_node_id=sender_node_id,
+        limit=limit,
+        channel=channel,
     )
 
 
+@_accepts_scope
 def relevant_for(
     node_id: str,
     role: str | None = None,
@@ -174,14 +211,18 @@ def relevant_for(
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     return mb.get_relevant_messages(
-        node_id=node_id, role=role, current_task_ids=current_task_ids,
-        since=since, limit=limit,
+        node_id=node_id,
+        role=role,
+        current_task_ids=current_task_ids,
+        since=since,
+        limit=limit,
     )
 
 
 # ── Threading ──────────────────────────────────────────────────
 
 
+@_accepts_scope
 def thread_messages(
     correlation_id: str | None = None,
     thread_id: str | None = None,
@@ -226,6 +267,7 @@ def _fts5_quote(query: str) -> str:
     return '"' + query.replace('"', '""') + '"'
 
 
+@_accepts_scope
 def search_messages(
     query: str,
     channel: str | None = None,
@@ -315,6 +357,7 @@ _SWEEPER_NODE_ID = "board-sweeper"
 _DIGEST_SELF_TYPES = frozenset({"digest"})
 
 
+@_accepts_scope
 def digest(
     channel: str | None = None,
     since: str | None = None,
@@ -342,7 +385,8 @@ def digest(
     msgs = poll(since=since, channel=channel, limit=max_messages)
     if not include_sweeper_posts:
         msgs = [
-            m for m in msgs
+            m
+            for m in msgs
             if not (
                 m.get("sender_node_id") == _SWEEPER_NODE_ID
                 and m.get("message_type") in _DIGEST_SELF_TYPES
@@ -370,18 +414,19 @@ def digest(
         if corr:
             by_thread[corr] = by_thread.get(corr, 0) + 1
         if msg.get("requires_ack") and not _has_ack(msg):
-            open_blockers.append({
-                "message_id": msg.get("message_id"),
-                "subject": msg.get("subject"),
-                "task_id": msg.get("task_id"),
-                "from": msg.get("sender_node_id"),
-                "at": msg.get("created_at"),
-            })
+            open_blockers.append(
+                {
+                    "message_id": msg.get("message_id"),
+                    "subject": msg.get("subject"),
+                    "task_id": msg.get("task_id"),
+                    "from": msg.get("sender_node_id"),
+                    "at": msg.get("created_at"),
+                }
+            )
 
     top_senders = sorted(by_sender.items(), key=lambda kv: kv[1], reverse=True)[:5]
     busy_threads = [
-        {"correlation_id": cid, "count": cnt}
-        for cid, cnt in by_thread.items() if cnt >= 3
+        {"correlation_id": cid, "count": cnt} for cid, cnt in by_thread.items() if cnt >= 3
     ]
 
     return {
@@ -399,11 +444,10 @@ def digest(
 # ── Sweeper inputs ─────────────────────────────────────────────
 
 
+@_accepts_scope
 def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
     """Blockers that are requires_ack=1, unacked, and older than threshold."""
-    cutoff = (
-        datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
-    ).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(hours=threshold_hours)).isoformat()
     conn = db.get_connection()
     rows = conn.execute(
         """SELECT * FROM messages
@@ -416,6 +460,7 @@ def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
     return db.rows_to_dicts(rows)
 
 
+@_accepts_scope
 def ack_message(message_id: str, acker: str) -> dict[str, Any] | None:
     """Append `acker` to ack_by JSON list. Returns the updated message.
 
@@ -449,10 +494,8 @@ def ack_message(message_id: str, acker: str) -> dict[str, Any] | None:
         )
         conn.execute("COMMIT")
     except sqlite3.Error:
-        try:
+        with contextlib.suppress(sqlite3.Error):
             conn.execute("ROLLBACK")
-        except sqlite3.Error:
-            pass
         raise
     return mb.read_message(message_id)
 
@@ -460,6 +503,7 @@ def ack_message(message_id: str, acker: str) -> dict[str, Any] | None:
 # ── Stats ──────────────────────────────────────────────────────
 
 
+@_accepts_scope
 def channel_stats() -> list[dict[str, Any]]:
     """Per-channel counts for the dashboard."""
     conn = db.get_connection()
@@ -477,6 +521,7 @@ def channel_stats() -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+@_accepts_scope
 def type_stats(channel: str | None = None) -> list[dict[str, Any]]:
     """Per-message-type counts, optionally scoped to a channel."""
     conn = db.get_connection()
@@ -495,6 +540,7 @@ def type_stats(channel: str | None = None) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+@_accepts_scope
 def total_count() -> int:
     return mb.message_count()
 
@@ -502,10 +548,12 @@ def total_count() -> int:
 # ── Maintenance passthroughs ───────────────────────────────────
 
 
+@_accepts_scope
 def prune_expired() -> int:
     return mb.prune_expired()
 
 
+@_accepts_scope
 def prune_by_count(max_messages: int) -> int:
     return mb.prune_by_count(max_messages)
 
@@ -527,9 +575,13 @@ def record_sweep(
             reminders_emitted, digests_emitted, error
         ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (
-            started_at, finished_at,
-            pruned_expired, pruned_overflow,
-            reminders_emitted, digests_emitted, error,
+            started_at,
+            finished_at,
+            pruned_expired,
+            pruned_overflow,
+            reminders_emitted,
+            digests_emitted,
+            error,
         ),
     )
     conn.commit()
@@ -537,9 +589,7 @@ def record_sweep(
 
 def last_sweep() -> dict[str, Any] | None:
     conn = db.get_connection()
-    row = conn.execute(
-        "SELECT * FROM board_sweeps ORDER BY started_at DESC LIMIT 1"
-    ).fetchone()
+    row = conn.execute("SELECT * FROM board_sweeps ORDER BY started_at DESC LIMIT 1").fetchone()
     return dict(row) if row else None
 
 
@@ -556,7 +606,7 @@ def _has_ack(msg: dict[str, Any]) -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ── Scope wrapping ─────────────────────────────────────────────
@@ -565,14 +615,25 @@ def _now_iso() -> str:
 # stay scope-agnostic and internal cross-calls (digest→poll, post→load_config)
 # inherit the active scope context instead of re-routing. Pure-maintenance
 # helpers used only by the sweeper (`record_sweep`, `last_sweep`) are left
-# unwrapped — the sweeper sets the scope context itself.
+# unwrapped — the sweeper sets the scope context itself. Keep this tuple in
+# sync with the ``@_accepts_scope`` markers above (typing only).
 _SCOPED_FUNCTIONS = (
-    "load_config", "update_config",
-    "post_with_validation", "read", "poll", "relevant_for",
-    "thread_messages", "search_messages",
-    "digest", "get_unacked_blockers", "ack_message",
-    "channel_stats", "type_stats", "total_count",
-    "prune_expired", "prune_by_count",
+    "load_config",
+    "update_config",
+    "post_with_validation",
+    "read",
+    "poll",
+    "relevant_for",
+    "thread_messages",
+    "search_messages",
+    "digest",
+    "get_unacked_blockers",
+    "ack_message",
+    "channel_stats",
+    "type_stats",
+    "total_count",
+    "prune_expired",
+    "prune_by_count",
 )
 for _name in _SCOPED_FUNCTIONS:
     globals()[_name] = _scoped(globals()[_name])
@@ -581,11 +642,22 @@ del _name
 
 # Convenience re-exports for callers that want flat imports.
 __all__ = [
-    "load_config", "update_config",
-    "post_with_validation", "read", "poll", "relevant_for",
-    "thread_messages", "search_messages",
-    "digest", "get_unacked_blockers", "ack_message",
-    "channel_stats", "type_stats", "total_count",
-    "prune_expired", "prune_by_count",
-    "record_sweep", "last_sweep",
+    "ack_message",
+    "channel_stats",
+    "digest",
+    "get_unacked_blockers",
+    "last_sweep",
+    "load_config",
+    "poll",
+    "post_with_validation",
+    "prune_by_count",
+    "prune_expired",
+    "read",
+    "record_sweep",
+    "relevant_for",
+    "search_messages",
+    "thread_messages",
+    "total_count",
+    "type_stats",
+    "update_config",
 ]

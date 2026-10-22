@@ -19,7 +19,9 @@ class SandboxResult:
 class NoopSandbox:
     name = "noop"
 
-    def run(self, command: list[str], stdin: str | None = None, timeout: float = 30.0) -> SandboxResult:
+    def run(
+        self, command: list[str], stdin: str | None = None, timeout: float = 30.0
+    ) -> SandboxResult:
         return SandboxResult(stdout="", stderr="noop sandbox \u2014 not configured", returncode=127)
 
 

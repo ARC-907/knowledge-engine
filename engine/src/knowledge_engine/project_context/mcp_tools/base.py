@@ -15,16 +15,15 @@ registry edits required.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .. import db as pddb, paths as pdpaths
 from ..config import ProjectContextConfig
-from .. import db as pddb
-from .. import paths as pdpaths
-
 
 # ── MCP result envelopes ─────────────────────────────────────────────
 
@@ -70,15 +69,17 @@ class ToolContext:
         """Resolve the on-disk slug for a project fingerprint (or current root)."""
         if project_fp is None:
             return pdpaths.slugify(self.root.name)
-        row = self.registry_conn().execute(
-            "SELECT name FROM projects WHERE project_fp=?", (project_fp,)
-        ).fetchone()
+        row = (
+            self.registry_conn()
+            .execute("SELECT name FROM projects WHERE project_fp=?", (project_fp,))
+            .fetchone()
+        )
         if row is None:
             return None
         return pdpaths.slugify(row["name"])
 
     def project_conn(self, project_fp: str | None = None) -> sqlite3.Connection | None:
-        """Open (once) a project content DB with migrations 002–007 applied.
+        """Open (once) a project content DB with migrations 002-007 applied.
 
         Returns ``None`` if ``project_fp`` is given but unknown.
         """
@@ -98,9 +99,7 @@ class ToolContext:
     def close(self) -> None:
         for conn in (self._registry, *self._projects.values()):
             if conn is not None:
-                try:
+                with contextlib.suppress(sqlite3.Error):
                     conn.close()
-                except sqlite3.Error:
-                    pass
         self._registry = None
         self._projects.clear()

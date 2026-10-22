@@ -141,8 +141,7 @@ def test_fingerprint_events_logged(registry_conn: sqlite3.Connection) -> None:
     validate_context(registry_conn, pfp, bfp)
 
     kinds = {
-        r["kind"]
-        for r in registry_conn.execute("SELECT kind FROM fingerprint_events").fetchall()
+        r["kind"] for r in registry_conn.execute("SELECT kind FROM fingerprint_events").fetchall()
     }
     assert "project_allocated" in kinds
     assert "branch_allocated" in kinds

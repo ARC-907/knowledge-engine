@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Request
 
 from ... import __version__
@@ -10,12 +12,12 @@ router = APIRouter()
 
 
 @router.get("/health")
-def health() -> dict:
+def health() -> dict[str, Any]:
     return {"status": "ok", "version": __version__}
 
 
 @router.get("/info")
-def info(request: Request) -> dict:
+def info(request: Request) -> dict[str, Any]:
     config = request.app.state.config
     registry = request.app.state.registry
     providers = request.app.state.providers

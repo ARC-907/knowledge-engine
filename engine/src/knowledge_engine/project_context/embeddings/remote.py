@@ -31,12 +31,10 @@ class RemoteProvider(EmbeddingProvider):
     be used by accident.
     """
 
-    def __init__(self, cfg: "ProjectContextConfig") -> None:
+    def __init__(self, cfg: ProjectContextConfig) -> None:
         emb = getattr(cfg, "embeddings", None)
         if emb is None or not getattr(emb, "allow_remote_provider", False):
-            raise RuntimeError(
-                "RemoteProvider is disabled: set embeddings.allow_remote_provider"
-            )
+            raise RuntimeError("RemoteProvider is disabled: set embeddings.allow_remote_provider")
         self._endpoint = str(getattr(emb, "url", "") or "").strip().rstrip("/")
         self._model = str(getattr(emb, "model", "") or "").strip()
         self._dim = int(getattr(emb, "dim", 0) or 0)
@@ -62,14 +60,14 @@ class RemoteProvider(EmbeddingProvider):
     def _embed_one(self, text: str) -> list[float]:
         """POST a single embed request to the remote endpoint."""
         payload = json.dumps({"model": self._model, "input": text}).encode("utf-8")
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310  # URL comes from operator config
             self._endpoint,
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
+            with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:  # noqa: S310  # URL comes from operator config
                 body = response.read().decode("utf-8")
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise RuntimeError(f"Remote embedding request failed: {exc}") from exc

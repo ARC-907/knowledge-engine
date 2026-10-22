@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -19,7 +21,7 @@ class GenIn(BaseModel):
 
 
 @router.post("")
-def generate(payload: GenIn, request: Request) -> dict:
+def generate(payload: GenIn, request: Request) -> dict[str, Any]:
     providers = request.app.state.providers
     provider = providers.select(preferred=payload.provider)
     if provider is None:
@@ -41,4 +43,5 @@ def generate(payload: GenIn, request: Request) -> dict:
 
 @router.get("/providers")
 def list_providers(request: Request) -> list[str]:
-    return request.app.state.providers.list()
+    names: list[str] = request.app.state.providers.list()
+    return names

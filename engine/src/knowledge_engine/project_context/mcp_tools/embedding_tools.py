@@ -24,8 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ..embeddings import index as emb_index
-from ..embeddings import providers as emb_providers
+from ..embeddings import index as emb_index, providers as emb_providers
 from .base import ToolContext, status_result, text_result
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -286,9 +285,7 @@ def _semantic_search(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
         return status_result("not_configured")
     limit = int(args.get("limit") or 10)
     results = emb_index.semantic_search(conn, provider, query, limit=limit)
-    return text_result(
-        {"status": "ok", "query": query, "count": len(results), "results": results}
-    )
+    return text_result({"status": "ok", "query": query, "count": len(results), "results": results})
 
 
 def _similar_records(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
@@ -327,6 +324,4 @@ def _cluster_records(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
         return status_result("unknown_project")
     k = int(args.get("k") or 5)
     clusters = emb_index.cluster_records(conn, k=k)
-    return text_result(
-        {"status": "ok", "k": k, "count": len(clusters), "clusters": clusters}
-    )
+    return text_result({"status": "ok", "k": k, "count": len(clusters), "clusters": clusters})

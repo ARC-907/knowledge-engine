@@ -17,14 +17,12 @@ import mimetypes
 import shlex
 import subprocess
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib import error as urllib_error
-from urllib import request as urllib_request
+from urllib import error as urllib_error, request as urllib_request
 
-from ..runtime.foundation import config
-from ..runtime.foundation import db as db_mod
+from ..runtime.foundation import config, db as db_mod
 
 PIPELINE_ROOT = config.PIPELINE_ROOT
 
@@ -32,7 +30,7 @@ _VALID_KINDS = {"script", "service", "static"}
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _load_tool_host_config() -> dict[str, Any]:
@@ -80,18 +78,28 @@ def register_tool(
             local_path, node_id, tags, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            tool_id, name, kind, description, route,
+            tool_id,
+            name,
+            kind,
+            description,
+            route,
             json.dumps(input_schema or {}),
             json.dumps(output_schema or {}),
-            command, working_dir, timeout_seconds,
-            upstream_url, health_endpoint, local_path,
-            node_id, json.dumps(tags or []),
-            now, now,
+            command,
+            working_dir,
+            timeout_seconds,
+            upstream_url,
+            health_endpoint,
+            local_path,
+            node_id,
+            json.dumps(tags or []),
+            now,
+            now,
         ),
     )
     conn.commit()
     db_mod.log_event("tool_registered", detail=f"{name} ({kind}) at /tools/{route}")
-    return get_tool(tool_id)  # type: ignore[return-value]
+    return get_tool(tool_id)  # type: ignore[return-value]  # row was just written, so the read is not None
 
 
 def get_tool(tool_id_or_name: str) -> dict[str, Any] | None:
@@ -148,9 +156,19 @@ def list_tools(
 def update_tool(tool_id: str, **fields: Any) -> dict[str, Any] | None:
     """Update tool fields."""
     allowed = {
-        "name", "description", "command", "working_dir", "timeout_seconds",
-        "upstream_url", "health_endpoint", "local_path", "node_id",
-        "enabled", "tags", "input_schema", "output_schema",
+        "name",
+        "description",
+        "command",
+        "working_dir",
+        "timeout_seconds",
+        "upstream_url",
+        "health_endpoint",
+        "local_path",
+        "node_id",
+        "enabled",
+        "tags",
+        "input_schema",
+        "output_schema",
     }
     updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
     if not updates:
@@ -164,7 +182,7 @@ def update_tool(tool_id: str, **fields: Any) -> dict[str, Any] | None:
 
     conn = db_mod.get_connection()
     set_clause = ", ".join(f"{k} = ?" for k in updates)
-    values = list(updates.values()) + [tool_id]
+    values = [*updates.values(), tool_id]
     conn.execute(f"UPDATE hosted_tools SET {set_clause} WHERE tool_id = ?", values)
     conn.commit()
     return get_tool(tool_id)
@@ -252,6 +270,7 @@ def invoke_script(
             timeout=timeout,
             cwd=working_dir,
             input=stdin_data,
+            check=False,  # returncode is reported to the caller below
         )
         _record_invocation(tool["tool_id"])
 
@@ -271,7 +290,7 @@ def invoke_script(
         return {"ok": False, "error": f"Script timed out after {timeout}s"}
     except FileNotFoundError as e:
         return {"ok": False, "error": f"Interpreter not found on PATH: {e}"}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
@@ -294,14 +313,14 @@ def proxy_to_service(
     _record_invocation(tool["tool_id"])
 
     try:
-        req = urllib_request.Request(url, data=body, method=method)
+        req = urllib_request.Request(url, data=body, method=method)  # noqa: S310  # URL comes from operator config
         if headers:
             for k, v in headers.items():
                 req.add_header(k, v)
         if body and "Content-Type" not in (headers or {}):
             req.add_header("Content-Type", "application/json")
 
-        with urllib_request.urlopen(req, timeout=tool.get("timeout_seconds", 30)) as resp:
+        with urllib_request.urlopen(req, timeout=tool.get("timeout_seconds", 30)) as resp:  # noqa: S310  # URL comes from operator config
             resp_body = resp.read().decode("utf-8", errors="replace")
             try:
                 return {"ok": True, "status": resp.status, "data": json.loads(resp_body)}
@@ -309,7 +328,7 @@ def proxy_to_service(
                 return {"ok": True, "status": resp.status, "data": resp_body}
     except urllib_error.HTTPError as e:
         return {"ok": False, "status": e.code, "error": e.reason}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
@@ -339,13 +358,14 @@ def serve_static(
     _record_invocation(tool["tool_id"])
 
     if target.is_dir():
-        entries = []
-        for child in sorted(target.iterdir()):
-            entries.append({
+        entries = [
+            {
                 "name": child.name,
                 "is_dir": child.is_dir(),
                 "size": child.stat().st_size if child.is_file() else None,
-            })
+            }
+            for child in sorted(target.iterdir())
+        ]
         return {"ok": True, "type": "directory", "entries": entries}
     else:
         mime, _ = mimetypes.guess_type(str(target))
@@ -374,10 +394,10 @@ def health_check_service(tool: dict[str, Any]) -> dict[str, Any]:
 
     url = upstream.rstrip("/") + health_ep
     try:
-        req = urllib_request.Request(url, method="GET")
-        with urllib_request.urlopen(req, timeout=5) as resp:
+        req = urllib_request.Request(url, method="GET")  # noqa: S310  # URL comes from operator config
+        with urllib_request.urlopen(req, timeout=5) as resp:  # noqa: S310  # URL comes from operator config
             return {"ok": True, "status": resp.status}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
@@ -387,10 +407,12 @@ def health_check_all_services() -> list[dict[str, Any]]:
     results = []
     for t in tools:
         check = health_check_service(t)
-        results.append({
-            "tool_id": t["tool_id"],
-            "name": t["name"],
-            "route": t["route"],
-            **check,
-        })
+        results.append(
+            {
+                "tool_id": t["tool_id"],
+                "name": t["name"],
+                "route": t["route"],
+                **check,
+            }
+        )
     return results

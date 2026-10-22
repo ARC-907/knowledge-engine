@@ -19,25 +19,26 @@ Functions:
 - :func:`similar_records` -- rank stored vectors by cosine to one record.
 - :func:`cluster_records` -- simple greedy grouping of stored vectors.
 """
+
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from . import providers
 
 __all__ = [
+    "cluster_records",
     "generate",
     "refresh",
     "semantic_search",
     "similar_records",
-    "cluster_records",
 ]
 
 
 def _utc_now() -> str:
     """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _provider_model(provider: providers.EmbeddingProvider) -> str:
@@ -70,10 +71,7 @@ def _fetch_docs(
     )
     if record_ids is None:
         cur = conn.execute(base)
-        return [
-            (str(r["record_id"]), str(r["searchable_body"]))
-            for r in cur.fetchall()
-        ]
+        return [(str(r["record_id"]), str(r["searchable_body"])) for r in cur.fetchall()]
 
     pairs: list[tuple[str, str]] = []
     for record_id in record_ids:
@@ -139,7 +137,7 @@ def generate(
     created_at = _utc_now()
 
     count = 0
-    for (record_id, _body), vector in zip(docs, vectors):
+    for (record_id, _body), vector in zip(docs, vectors, strict=True):
         _store_embedding(project_conn, record_id, provider, vector, created_at)
         count += 1
     project_conn.commit()
@@ -165,6 +163,7 @@ def refresh(
     return generate(
         project_conn,
         provider,
+        # ``**kwargs: object`` is an untyped passthrough; generate() owns the types.
         record_ids=record_ids,  # type: ignore[arg-type]
         model=model,  # type: ignore[arg-type]
     )
@@ -184,8 +183,7 @@ def _load_vectors(
         (provider.name, _provider_model(provider)),
     )
     return [
-        (str(row["record_id"]), providers.unpack_vector(row["vector"]))
-        for row in cur.fetchall()
+        (str(row["record_id"]), providers.unpack_vector(row["vector"])) for row in cur.fetchall()
     ]
 
 
@@ -198,14 +196,10 @@ def _summaries_for(
         return {}
     placeholders = ",".join("?" for _ in record_ids)
     cur = conn.execute(
-        "SELECT record_id, summary FROM project_docs "
-        f"WHERE record_id IN ({placeholders})",
+        f"SELECT record_id, summary FROM project_docs WHERE record_id IN ({placeholders})",
         record_ids,
     )
-    return {
-        str(row["record_id"]): str(row["summary"] or "")
-        for row in cur.fetchall()
-    }
+    return {str(row["record_id"]): str(row["summary"] or "") for row in cur.fetchall()}
 
 
 def semantic_search(
@@ -227,17 +221,13 @@ def semantic_search(
         return []
 
     query_vec = provider.embed([query])[0]
-    scored = [
-        (record_id, providers.cosine(query_vec, vector))
-        for record_id, vector in pairs
-    ]
+    scored = [(record_id, providers.cosine(query_vec, vector)) for record_id, vector in pairs]
     scored.sort(key=lambda item: item[1], reverse=True)
     top = scored[: max(0, limit)]
 
     summaries = _summaries_for(project_conn, [rid for rid, _ in top])
     return [
-        {"record_id": rid, "score": score, "summary": summaries.get(rid, "")}
-        for rid, score in top
+        {"record_id": rid, "score": score, "summary": summaries.get(rid, "")} for rid, score in top
     ]
 
 
@@ -264,18 +254,13 @@ def similar_records(
     if target is None:
         return []
 
-    scored = [
-        (rid, providers.cosine(target, vector))
-        for rid, vector in pairs
-        if rid != record_id
-    ]
+    scored = [(rid, providers.cosine(target, vector)) for rid, vector in pairs if rid != record_id]
     scored.sort(key=lambda item: item[1], reverse=True)
     top = scored[: max(0, limit)]
 
     summaries = _summaries_for(project_conn, [rid for rid, _ in top])
     return [
-        {"record_id": rid, "score": score, "summary": summaries.get(rid, "")}
-        for rid, score in top
+        {"record_id": rid, "score": score, "summary": summaries.get(rid, "")} for rid, score in top
     ]
 
 
@@ -293,9 +278,7 @@ def cluster_records(
     pooled. Returns a list of cluster dicts, each with a ``cluster`` index and a
     ``record_ids`` list. Returns an empty list when no vectors are stored.
     """
-    cur = project_conn.execute(
-        "SELECT record_id, vector FROM doc_embeddings ORDER BY record_id"
-    )
+    cur = project_conn.execute("SELECT record_id, vector FROM doc_embeddings ORDER BY record_id")
     rows = cur.fetchall()
     if not rows or k <= 0:
         return []
@@ -328,7 +311,4 @@ def cluster_records(
             )
             clusters[nearest].append(record_id)
 
-    return [
-        {"cluster": idx, "record_ids": members}
-        for idx, members in enumerate(clusters)
-    ]
+    return [{"cluster": idx, "record_ids": members} for idx, members in enumerate(clusters)]

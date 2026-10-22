@@ -25,22 +25,41 @@ def test_hashing_deterministic() -> None:
 
 def test_docrecord_roundtrip() -> None:
     rec = DocRecord(
-        record_id="r1", project_fp="proj_x", branch_fp="br_y", category="doc",
-        content_hash="h", created_at="t", updated_at="t", summary="s", source_path="a.md",
+        record_id="r1",
+        project_fp="proj_x",
+        branch_fp="br_y",
+        category="doc",
+        content_hash="h",
+        created_at="t",
+        updated_at="t",
+        summary="s",
+        source_path="a.md",
     )
     rebuilt = DocRecord.from_row(rec.to_row())
     assert rebuilt == rec
 
 
 def test_from_row_ignores_extra_keys() -> None:
-    row = {"id": "t1", "project_fp": "p", "branch_fp": "b", "started_at": "now",
-           "joined_extra": "ignored"}
+    row = {
+        "id": "t1",
+        "project_fp": "p",
+        "branch_fp": "b",
+        "started_at": "now",
+        "joined_extra": "ignored",
+    }
     tr = TestRun.from_row(row)
     assert tr.id == "t1"
     assert tr.classification == "unknown"
 
 
 def test_pointer_roundtrip() -> None:
-    p = Pointer(pointer_id="ptr", record_id="r1", content_hash="h", created_at="t",
-                project_fp="proj_x", branch_fp="br_y", ptype="docstring")
+    p = Pointer(
+        pointer_id="ptr",
+        record_id="r1",
+        content_hash="h",
+        created_at="t",
+        project_fp="proj_x",
+        branch_fp="br_y",
+        ptype="docstring",
+    )
     assert Pointer.from_row(p.to_row()) == p

@@ -54,14 +54,14 @@ class OllamaProvider(EmbeddingProvider):
         """Send a single ``/api/embed`` request and return its float vector."""
         endpoint = f"{self._url}/api/embed"
         payload = json.dumps({"model": self._model, "input": text}).encode("utf-8")
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310  # URL comes from operator config
             endpoint,
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
+            with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:  # noqa: S310  # URL comes from operator config
                 body = response.read().decode("utf-8")
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise RuntimeError(f"Ollama embedding request failed: {exc}") from exc

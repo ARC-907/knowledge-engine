@@ -5,6 +5,7 @@ inserted directly into ``project_docs`` and ``project_doc_bodies`` so the index
 layer can be exercised without the full ingestion pipeline. No network access is
 made: the deterministic :class:`StubProvider` produces all vectors.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -76,9 +77,7 @@ def test_generate_stores_n_vectors(
     written = index.generate(project_conn, provider)
     assert written == 3
 
-    count = project_conn.execute(
-        "SELECT COUNT(*) FROM doc_embeddings"
-    ).fetchone()[0]
+    count = project_conn.execute("SELECT COUNT(*) FROM doc_embeddings").fetchone()[0]
     assert count == 3
 
     row = project_conn.execute(
@@ -103,9 +102,7 @@ def test_generate_subset(
 
     ids = [
         r["record_id"]
-        for r in project_conn.execute(
-            "SELECT record_id FROM doc_embeddings"
-        ).fetchall()
+        for r in project_conn.execute("SELECT record_id FROM doc_embeddings").fetchall()
     ]
     assert ids == ["a"]
 
@@ -128,9 +125,7 @@ def test_refresh_upserts(
     written = index.refresh(project_conn, provider)
     assert written == 1
 
-    count = project_conn.execute(
-        "SELECT COUNT(*) FROM doc_embeddings"
-    ).fetchone()[0]
+    count = project_conn.execute("SELECT COUNT(*) FROM doc_embeddings").fetchone()[0]
     assert count == 1
 
 
@@ -145,9 +140,7 @@ def test_semantic_search_returns_match_first(
 
     index.generate(project_conn, provider)
 
-    results = index.semantic_search(
-        project_conn, provider, "the quick brown fox", limit=3
-    )
+    results = index.semantic_search(project_conn, provider, "the quick brown fox", limit=3)
     assert results
     assert results[0]["record_id"] == "a"
     assert results[0]["summary"] == "fox"
@@ -175,9 +168,7 @@ def test_semantic_search_limit(
         _insert_doc(project_conn, f"r{i}", f"body number {i}")
     index.generate(project_conn, provider)
 
-    results = index.semantic_search(
-        project_conn, provider, "body number 0", limit=2
-    )
+    results = index.semantic_search(project_conn, provider, "body number 0", limit=2)
     assert len(results) == 2
 
 

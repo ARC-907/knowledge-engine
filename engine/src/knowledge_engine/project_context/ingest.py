@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from . import fingerprints, hashing, pointers, sanitize, schema
 from .models import DocRecord
@@ -64,7 +64,7 @@ _DOC_COLUMNS = (
 
 def _utcnow() -> str:
     """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _pointer_type(category: str) -> str:
@@ -73,11 +73,7 @@ def _pointer_type(category: str) -> str:
     Docstring records use the ``docstring`` pointer profile; everything else
     uses the generic ``doc`` profile.
     """
-    return (
-        schema.POINTER_DOCSTRING
-        if category == schema.CATEGORY_DOCSTRING
-        else schema.POINTER_DOC
-    )
+    return schema.POINTER_DOCSTRING if category == schema.CATEGORY_DOCSTRING else schema.POINTER_DOC
 
 
 def begin_run(
@@ -260,9 +256,7 @@ def ingest_record(
 
     # --- write doc + body + provenance + FTS ------------------------------
     record_id = uuid.uuid4().hex
-    pointer_id = pointers.format_pointer(
-        _pointer_type(category), project_fp, branch_fp, record_id
-    )
+    pointer_id = pointers.format_pointer(_pointer_type(category), project_fp, branch_fp, record_id)
     retain_raw = bool(cfg.ingestion.retain_raw_content)
     record = DocRecord(
         record_id=record_id,
@@ -290,8 +284,7 @@ def ingest_record(
 
     raw_body = text if retain_raw else None
     project_conn.execute(
-        "INSERT INTO project_doc_bodies (record_id, searchable_body, raw_body) "
-        "VALUES (?, ?, ?)",
+        "INSERT INTO project_doc_bodies (record_id, searchable_body, raw_body) VALUES (?, ?, ?)",
         (record_id, clean_text, raw_body),
     )
     project_conn.execute(

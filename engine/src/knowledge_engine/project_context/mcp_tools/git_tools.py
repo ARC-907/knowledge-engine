@@ -26,8 +26,7 @@ import subprocess
 from dataclasses import asdict
 from typing import Any
 
-from .. import git_context as gitctx
-from .. import search as pdsearch
+from .. import git_context as gitctx, search as pdsearch
 from .base import ToolContext, status_result, text_result
 
 GROUP = "git"
@@ -42,14 +41,14 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.git_context",
             "description": "Report the current git context for the project root "
-                           "(branch, commit, dirty state, sanitized remote hash). "
-                           "Returns status 'disabled' when git is off.",
+            "(branch, commit, dirty state, sanitized remote hash). "
+            "Returns status 'disabled' when git is off.",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
             "name": "project_context.search_by_commit",
             "description": "List project-context records ingested at a specific git "
-                           "commit, newest first.",
+            "commit, newest first.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -65,7 +64,7 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.get_branch_lineage",
             "description": "Describe the lineage of the current branch relative to "
-                           "a base ref (merge-base, ahead/behind counts).",
+            "a base ref (merge-base, ahead/behind counts).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -76,7 +75,7 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.get_change_context",
             "description": "Summarize a single commit: subject, files changed, and "
-                           "insertion/deletion counts (numstat).",
+            "insertion/deletion counts (numstat).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -87,7 +86,7 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.explain_file_history",
             "description": "List recent commits that touched a given file path "
-                           "(hash + subject), most recent first.",
+            "(hash + subject), most recent first.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -100,8 +99,8 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.search_by_diff",
             "description": "Summarize the diff between two refs (files changed, "
-                           "insertions, deletions). Requires git diff summaries to "
-                           "be enabled; otherwise returns status 'disabled'.",
+            "insertions, deletions). Requires git diff summaries to "
+            "be enabled; otherwise returns status 'disabled'.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -121,13 +120,14 @@ def _run_git(root, args: list[str]) -> str | None:
     fails, or it times out. Never raises for the common failure modes.
     """
     try:
-        proc = subprocess.run(
-            ["git", *args],
+        proc = subprocess.run(  # noqa: S603  # argv list, no shell; git resolved from PATH
+            ["git", *args],  # noqa: S607  # git resolved from PATH
             cwd=str(root),
             capture_output=True,
             text=True,
             shell=False,
             timeout=_GIT_TIMEOUT,
+            check=False,  # returncode is inspected below
         )
     except (FileNotFoundError, OSError, subprocess.SubprocessError):
         return None

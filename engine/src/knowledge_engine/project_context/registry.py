@@ -14,10 +14,12 @@ Branch detection is delegated to the optional ``git_context`` module; when that
 module is unavailable, git is disabled by config, or the binary is missing, this
 module degrades gracefully to the configured default branch rather than raising.
 """
+
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from types import ModuleType
 
 from . import fingerprints
 from .paths import canonical_root
@@ -41,9 +43,7 @@ def register_project(
     """
     resolved_name = name if name is not None else Path(root).name
     croot = canonical_root(root)
-    project_fp = fingerprints.ensure_project(
-        conn, croot, resolved_name, override=fingerprint
-    )
+    project_fp = fingerprints.ensure_project(conn, croot, resolved_name, override=fingerprint)
     row = conn.execute(
         "SELECT name, root_path FROM projects WHERE project_fp = ?",
         (project_fp,),
@@ -61,8 +61,7 @@ def list_projects(conn: sqlite3.Connection) -> list[dict]:
     Each entry is ``{"project_fp", "name", "root_path", "created_at"}``.
     """
     cur = conn.execute(
-        "SELECT project_fp, name, root_path, created_at "
-        "FROM projects ORDER BY name, project_fp"
+        "SELECT project_fp, name, root_path, created_at FROM projects ORDER BY name, project_fp"
     )
     return [
         {
@@ -133,14 +132,17 @@ def _detect_branch(root: str, cfg) -> tuple[str, bool]:
         return default_branch, False
 
     try:
-        from . import git_context
+        # Optional module, resolved at call time so tests can stub the package attribute.
+        from . import git_context  # noqa: PLC0415
     except ImportError:
         return default_branch, False
 
-    if git_context is None:
+    # The package attribute may be stubbed to None to simulate an absent module.
+    git_mod: ModuleType | None = git_context
+    if git_mod is None:
         return default_branch, False
 
-    collect = getattr(git_context, "collect", None)
+    collect = getattr(git_mod, "collect", None)
     if collect is None:
         return default_branch, False
 

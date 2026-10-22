@@ -10,27 +10,50 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..foundation import config, db
 
 VALID_STATES = [
-    "queued", "claimed", "running", "blocked",
-    "awaiting_cloud", "complete", "failed", "archived",
+    "queued",
+    "claimed",
+    "running",
+    "blocked",
+    "awaiting_cloud",
+    "complete",
+    "failed",
+    "archived",
 ]
 
 VALID_TASK_TYPES = [
-    "discovery", "retrieval", "normalize", "catalog",
-    "cluster", "conflict_scan", "synthesis_request", "audit",
+    "discovery",
+    "retrieval",
+    "normalize",
+    "catalog",
+    "cluster",
+    "conflict_scan",
+    "synthesis_request",
+    "audit",
 ]
 
 # Columns allowed in extra_fields to prevent SQL column-name injection.
-_ALLOWED_EXTRA_COLUMNS = frozenset({
-    "notes", "meta_json", "input_json", "output_artifacts",
-    "depends_on", "assigned_capability", "source_policy", "audit_trail",
-    "retry_count", "failure_reason", "target_path", "chapter_key",
-})
+_ALLOWED_EXTRA_COLUMNS = frozenset(
+    {
+        "notes",
+        "meta_json",
+        "input_json",
+        "output_artifacts",
+        "depends_on",
+        "assigned_capability",
+        "source_policy",
+        "audit_trail",
+        "retry_count",
+        "failure_reason",
+        "target_path",
+        "chapter_key",
+    }
+)
 
 
 def _is_valid_task_type(task_type: str) -> bool:
@@ -39,7 +62,7 @@ def _is_valid_task_type(task_type: str) -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _json(obj: Any) -> str:
@@ -71,8 +94,10 @@ def create_task(
     now = _now_iso()
 
     default_policy = {
-        "allow_web": True, "allow_tavily": True,
-        "allow_local_docs": True, "allow_cloud_synthesis": False,
+        "allow_web": True,
+        "allow_tavily": True,
+        "allow_local_docs": True,
+        "allow_cloud_synthesis": False,
     }
     audit = [{"timestamp": now, "event": "created", "worker": None, "detail": None}]
 
@@ -85,19 +110,30 @@ def create_task(
             status, created_at, updated_at, notes, audit_trail
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)""",
         (
-            task_id, task_type, library, target_path, chapter_key, priority,
-            _json(depends_on or []), allowed_layer,
+            task_id,
+            task_type,
+            library,
+            target_path,
+            chapter_key,
+            priority,
+            _json(depends_on or []),
+            allowed_layer,
             _json(assigned_capability or []),
             _json(source_policy or default_policy),
             input_json or "{}",
             meta,
-            now, now, notes, _json(audit),
+            now,
+            now,
+            notes,
+            _json(audit),
         ),
     )
     conn.commit()
-    db.log_event("task_created", task_id=task_id, detail=f"{task_type} for {chapter_key}", conn=conn)
+    db.log_event(
+        "task_created", task_id=task_id, detail=f"{task_type} for {chapter_key}", conn=conn
+    )
 
-    return read_task(task_id)  # type: ignore[return-value]
+    return read_task(task_id)  # type: ignore[return-value]  # row was just written, so the read is not None
 
 
 def read_task(task_id: str) -> dict[str, Any] | None:
@@ -150,9 +186,7 @@ def transition_task(
         lease_sec = policy.get("queue_policy", {}).get("claim_timeout_seconds", 600)
         updates["claimed_at"] = now
         updates["assigned_worker"] = worker
-        updates["lease_expires_at"] = (
-            datetime.now(timezone.utc) + timedelta(seconds=lease_sec)
-        ).isoformat()
+        updates["lease_expires_at"] = (datetime.now(UTC) + timedelta(seconds=lease_sec)).isoformat()
     elif new_state == "running":
         updates["started_at"] = now
     elif new_state in ("complete", "failed"):
@@ -168,7 +202,13 @@ def transition_task(
         for k, v in extra_fields.items():
             if k not in _ALLOWED_EXTRA_COLUMNS:
                 continue  # Skip unknown columns to prevent injection
-            if k in ("output_artifacts", "depends_on", "assigned_capability", "source_policy", "audit_trail"):
+            if k in (
+                "output_artifacts",
+                "depends_on",
+                "assigned_capability",
+                "source_policy",
+                "audit_trail",
+            ):
                 updates[k] = _json(v)
             else:
                 updates[k] = v
@@ -177,21 +217,31 @@ def transition_task(
     audit = task.get("audit_trail", [])
     if not isinstance(audit, list):
         audit = []
-    audit.append({"timestamp": now, "event": f"{old_state} -> {new_state}", "worker": worker, "detail": detail})
+    audit.append(
+        {
+            "timestamp": now,
+            "event": f"{old_state} -> {new_state}",
+            "worker": worker,
+            "detail": detail,
+        }
+    )
     updates["audit_trail"] = _json(audit)
 
     set_clause = ", ".join(f"{k} = ?" for k in updates)
-    values = list(updates.values()) + [task_id, old_state]
+    values = [*updates.values(), task_id, old_state]
     result = conn.execute(f"UPDATE tasks SET {set_clause} WHERE task_id = ? AND status = ?", values)
     conn.commit()
     if result.rowcount == 0:
         raise ValueError(f"Task {task_id} state changed during transition (expected {old_state})")
 
     db.log_event(
-        "task_transition", task_id=task_id,
-        node_id=worker, detail=f"{old_state} -> {new_state}", conn=conn,
+        "task_transition",
+        task_id=task_id,
+        node_id=worker,
+        detail=f"{old_state} -> {new_state}",
+        conn=conn,
     )
-    return read_task(task_id)  # type: ignore[return-value]
+    return read_task(task_id)  # type: ignore[return-value]  # row was just written, so the read is not None
 
 
 # ── Claim / Lease ──────────────────────────────────────────
@@ -239,7 +289,7 @@ def claim_task(
 def release_expired_claims(timeout_seconds: int | None = None) -> list[str]:
     """Release tasks whose lease has expired back to queued."""
     released = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     conn = db.get_connection()
     rows = conn.execute(
@@ -256,7 +306,8 @@ def release_expired_claims(timeout_seconds: int | None = None) -> list[str]:
         lease_time = datetime.fromisoformat(lease_str)
         if now > lease_time:
             transition_task(
-                task["task_id"], "queued",
+                task["task_id"],
+                "queued",
                 detail=f"Lease expired (was held by {task.get('assigned_worker', '?')})",
             )
             released.append(task["task_id"])
@@ -273,7 +324,8 @@ def get_queue_summary() -> dict[str, int]:
     summary = {}
     for state in VALID_STATES:
         row = conn.execute(
-            "SELECT COUNT(*) as cnt FROM tasks WHERE status = ?", (state,),
+            "SELECT COUNT(*) as cnt FROM tasks WHERE status = ?",
+            (state,),
         ).fetchone()
         summary[state] = row["cnt"] if row else 0
     return summary

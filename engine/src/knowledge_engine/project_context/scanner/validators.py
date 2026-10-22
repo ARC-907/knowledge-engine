@@ -33,9 +33,7 @@ def preflight(mode, cfg, conn=None, project_fp=None, branch_fp=None) -> None:
     _ = (conn, project_fp, branch_fp)
 
     if mode not in schema.SCAN_MODES:
-        raise GateError(
-            f"unknown scan mode {mode!r}; expected one of {sorted(schema.SCAN_MODES)}"
-        )
+        raise GateError(f"unknown scan mode {mode!r}; expected one of {sorted(schema.SCAN_MODES)}")
 
     if mode == schema.MODE_REPORT:
         # Read-only: always permitted.
@@ -46,22 +44,19 @@ def preflight(mode, cfg, conn=None, project_fp=None, branch_fp=None) -> None:
     if mode == schema.MODE_INGEST:
         if not scanner.enabled:
             raise GateError(
-                "scan mode 'ingest' requires cfg.scanner.enabled=True "
-                "(scanner is disabled)"
+                "scan mode 'ingest' requires cfg.scanner.enabled=True (scanner is disabled)"
             )
         return
 
     if mode == schema.MODE_POINTER_APPLY:
         if not scanner.enabled:
             raise GateError(
-                "scan mode 'pointer_apply' requires cfg.scanner.enabled=True "
-                "(scanner is disabled)"
+                "scan mode 'pointer_apply' requires cfg.scanner.enabled=True (scanner is disabled)"
             )
         pointer = scanner.pointer_replacement
         if not pointer.enabled:
             raise GateError(
-                "scan mode 'pointer_apply' requires "
-                "cfg.scanner.pointer_replacement.enabled=True"
+                "scan mode 'pointer_apply' requires cfg.scanner.pointer_replacement.enabled=True"
             )
         if not pointer.allow_source_mutation:
             raise GateError(
@@ -69,9 +64,7 @@ def preflight(mode, cfg, conn=None, project_fp=None, branch_fp=None) -> None:
                 "cfg.scanner.pointer_replacement.allow_source_mutation=True"
             )
         if scanner.dry_run:
-            raise GateError(
-                "scan mode 'pointer_apply' requires cfg.scanner.dry_run=False"
-            )
+            raise GateError("scan mode 'pointer_apply' requires cfg.scanner.dry_run=False")
         return
 
     # MODE_POINTER_PLAN / MODE_EMBEDDING: plan-only and enrichment are read-safe
@@ -79,6 +72,5 @@ def preflight(mode, cfg, conn=None, project_fp=None, branch_fp=None) -> None:
     # require cfg.embeddings.enabled). The scanner itself must be enabled.
     if not scanner.enabled:
         raise GateError(
-            f"scan mode {mode!r} requires cfg.scanner.enabled=True "
-            "(scanner is disabled)"
+            f"scan mode {mode!r} requires cfg.scanner.enabled=True (scanner is disabled)"
         )

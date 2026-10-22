@@ -18,8 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import fingerprints
-from .. import registry
+from .. import fingerprints, registry
+from ..paths import canonical_root
 from .base import ToolContext, status_result, text_result
 
 GROUP = "registry"
@@ -31,21 +31,21 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.list_projects",
             "description": "List every project registered in the fingerprint "
-                           "registry (fingerprint, name, root path, created time).",
+            "registry (fingerprint, name, root path, created time).",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
             "name": "project_context.register_project",
             "description": "Register (or idempotently look up) the project at the "
-                           "current root in the registry. Records identity only; "
-                           "writes no user content.",
+            "current root in the registry. Records identity only; "
+            "writes no user content.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
                         "description": "Optional human-facing project name "
-                                       "(defaults to the root directory name).",
+                        "(defaults to the root directory name).",
                     },
                     "fingerprint": {
                         "type": "string",
@@ -57,7 +57,7 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.validate_project",
             "description": "Validate that a project fingerprint exists and report "
-                           "its name and branch count.",
+            "its name and branch count.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -86,15 +86,14 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.resolve_fingerprint",
             "description": "Derive (without registering) the deterministic project "
-                           "and branch fingerprints for the current root and an "
-                           "optional branch name.",
+            "and branch fingerprints for the current root and an "
+            "optional branch name.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "branch": {
                         "type": "string",
-                        "description": "Optional branch name to derive a branch "
-                                       "fingerprint for.",
+                        "description": "Optional branch name to derive a branch fingerprint for.",
                     }
                 },
             },
@@ -102,8 +101,8 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.current_context",
             "description": "Resolve and register the current project + branch "
-                           "context for the active root (project_fp, branch, "
-                           "branch_fp, git availability).",
+            "context for the active root (project_fp, branch, "
+            "branch_fp, git availability).",
             "inputSchema": {"type": "object", "properties": {}},
         },
     ]
@@ -138,11 +137,11 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
         project_fp = args.get("project_fp")
         if not project_fp:
             return status_result("invalid_arguments", detail="project_fp is required")
-        return text_result({"project_fp": project_fp,
-                            "branches": registry.list_branches(conn, project_fp)})
+        return text_result(
+            {"project_fp": project_fp, "branches": registry.list_branches(conn, project_fp)}
+        )
 
     if name == "project_context.resolve_fingerprint":
-        from ..paths import canonical_root
         croot = canonical_root(root)
         project_fp = fingerprints.project_fp(croot)
         payload: dict[str, Any] = {"project_fp": project_fp}

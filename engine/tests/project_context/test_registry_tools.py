@@ -122,14 +122,10 @@ def test_list_branches_after_context(ctx: ToolContext) -> None:
 
 def test_resolve_fingerprint_is_deterministic_and_no_write(ctx: ToolContext) -> None:
     first = _payload(
-        registry_tools.dispatch(
-            "project_context.resolve_fingerprint", {"branch": "main"}, ctx
-        )
+        registry_tools.dispatch("project_context.resolve_fingerprint", {"branch": "main"}, ctx)
     )
     second = _payload(
-        registry_tools.dispatch(
-            "project_context.resolve_fingerprint", {"branch": "main"}, ctx
-        )
+        registry_tools.dispatch("project_context.resolve_fingerprint", {"branch": "main"}, ctx)
     )
     assert first == second
     assert first["project_fp"].startswith("proj_")

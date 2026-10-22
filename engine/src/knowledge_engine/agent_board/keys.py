@@ -24,30 +24,45 @@ Permission levels: `read`, `write`, `invoke`, `admin`.
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from ..core.config import Config
 from ..runtime.foundation import db
+
+_logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "keb_"
 
-VALID_RESOURCE_TYPES: frozenset[str] = frozenset({
-    "provider", "board", "tool", "model", "endpoint",
-})
+VALID_RESOURCE_TYPES: frozenset[str] = frozenset(
+    {
+        "provider",
+        "board",
+        "tool",
+        "model",
+        "endpoint",
+    }
+)
 
-VALID_PERMISSIONS: frozenset[str] = frozenset({
-    "read", "write", "invoke", "admin",
-})
+VALID_PERMISSIONS: frozenset[str] = frozenset(
+    {
+        "read",
+        "write",
+        "invoke",
+        "admin",
+    }
+)
 
 
 # ── Raw key generation + hashing ───────────────────────────────
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _hash_key(raw_key: str) -> str:
@@ -82,8 +97,15 @@ def create_key(
             created_at, updated_at, expires_at, notes)
            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)""",
         (
-            key_id, key_hash, display_name, created_by,
-            1 if is_master else 0, now, now, expires_at, notes,
+            key_id,
+            key_hash,
+            display_name,
+            created_by,
+            1 if is_master else 0,
+            now,
+            now,
+            expires_at,
+            notes,
         ),
     )
     conn.commit()
@@ -127,9 +149,7 @@ def verify_key(raw_key: str) -> dict[str, Any] | None:
 
 def get_key(key_id: str) -> dict[str, Any] | None:
     conn = db.get_connection()
-    row = conn.execute(
-        "SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)).fetchone()
     return db.dict_from_row(row)
 
 
@@ -190,9 +210,7 @@ def toggle_key(key_id: str) -> dict[str, Any] | None:
     enabled master exists, is always allowed.
     """
     conn = db.get_connection()
-    row = conn.execute(
-        "SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)).fetchone()
     if row is None:
         return None
     # Refuse if this toggle would zero enabled masters. Re-enabling a
@@ -207,9 +225,7 @@ def toggle_key(key_id: str) -> dict[str, Any] | None:
         (new_state, _now_iso(), key_id),
     )
     conn.commit()
-    updated = conn.execute(
-        "SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)
-    ).fetchone()
+    updated = conn.execute("SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)).fetchone()
     return db.dict_from_row(updated)
 
 
@@ -267,9 +283,7 @@ def grant_permission(
 
 def revoke_permission(perm_id: str) -> bool:
     conn = db.get_connection()
-    cursor = conn.execute(
-        "DELETE FROM agent_key_permissions WHERE perm_id = ?", (perm_id,)
-    )
+    cursor = conn.execute("DELETE FROM agent_key_permissions WHERE perm_id = ?", (perm_id,))
     conn.commit()
     return cursor.rowcount > 0
 
@@ -355,7 +369,6 @@ def ensure_master_key() -> dict[str, Any] | None:
 
         # Best-effort file write — never raise from bootstrap.
         try:
-            from ..core.config import Config
             cfg = Config.from_env()
             key_file = cfg.data_dir / "board-master-key.txt"
             key_file.write_text(
@@ -370,12 +383,15 @@ def ensure_master_key() -> dict[str, Any] | None:
             )
             # Tighten file perms on POSIX so the key isn't world-readable.
             try:
-                import os
-                os.chmod(key_file, 0o600)
+                key_file.chmod(0o600)
             except OSError:
-                pass
+                _logger.warning(
+                    "could not restrict permissions on board master key file %s",
+                    key_file,
+                    exc_info=True,
+                )
         except Exception:
-            pass
+            _logger.warning("could not write board master key file", exc_info=True)
 
         return key_data
 
@@ -390,10 +406,21 @@ def get_key_summary(key_id: str) -> dict[str, Any] | None:
 
 
 __all__ = [
-    "KEY_PREFIX", "VALID_RESOURCE_TYPES", "VALID_PERMISSIONS",
+    "KEY_PREFIX",
+    "VALID_PERMISSIONS",
+    "VALID_RESOURCE_TYPES",
     "LastMasterKeyError",
-    "generate_key", "create_key", "verify_key", "get_key",
-    "list_keys", "toggle_key", "delete_key",
-    "grant_permission", "revoke_permission", "list_permissions",
-    "check_permission", "ensure_master_key", "get_key_summary",
+    "check_permission",
+    "create_key",
+    "delete_key",
+    "ensure_master_key",
+    "generate_key",
+    "get_key",
+    "get_key_summary",
+    "grant_permission",
+    "list_keys",
+    "list_permissions",
+    "revoke_permission",
+    "toggle_key",
+    "verify_key",
 ]

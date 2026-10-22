@@ -8,15 +8,17 @@ reads and partial projections.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, fields
-from typing import Any, Mapping
+from typing import Any, ClassVar
 
 
 def _from_mapping(cls: type, row: Mapping[str, Any]) -> Any:
     """Build a dataclass from a mapping, ignoring unknown keys and defaulting
     anything absent."""
     names = {f.name for f in fields(cls)}
-    return cls(**{k: row[k] for k in row.keys() if k in names})
+    # ``.keys()`` is required: rows may be sqlite3.Row, whose iteration yields values.
+    return cls(**{k: row[k] for k in row.keys() if k in names})  # noqa: SIM118
 
 
 @dataclass
@@ -49,7 +51,7 @@ class DocRecord:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "DocRecord":
+    def from_row(cls, row: Mapping[str, Any]) -> DocRecord:
         return _from_mapping(cls, row)
 
 
@@ -68,12 +70,15 @@ class IngestionRun:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "IngestionRun":
+    def from_row(cls, row: Mapping[str, Any]) -> IngestionRun:
         return _from_mapping(cls, row)
 
 
 @dataclass
 class TestRun:
+    # Prevent pytest from collecting the TestRun *dataclass* as a test class.
+    __test__: ClassVar[bool] = False
+
     id: str
     project_fp: str
     branch_fp: str
@@ -94,12 +99,8 @@ class TestRun:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "TestRun":
+    def from_row(cls, row: Mapping[str, Any]) -> TestRun:
         return _from_mapping(cls, row)
-
-
-# Prevent pytest from collecting the TestRun *dataclass* as a test class.
-TestRun.__test__ = False
 
 
 @dataclass
@@ -125,7 +126,7 @@ class LogRecord:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "LogRecord":
+    def from_row(cls, row: Mapping[str, Any]) -> LogRecord:
         return _from_mapping(cls, row)
 
 
@@ -147,7 +148,7 @@ class Pointer:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "Pointer":
+    def from_row(cls, row: Mapping[str, Any]) -> Pointer:
         return _from_mapping(cls, row)
 
 

@@ -76,11 +76,7 @@ def test_markdown_detector_skips_devlog_when_gate_off(tmp_path: Path) -> None:
 
 def test_docstring_detector_finds_function_span(tmp_path: Path) -> None:
     """Docstring detector finds a function docstring with a line span."""
-    source = (
-        "def foo():\n"
-        '    """Function docstring here."""\n'
-        "    return 1\n"
-    )
+    source = 'def foo():\n    """Function docstring here."""\n    return 1\n'
     _write(tmp_path, "pkg/mod.py", source)
 
     cfg = _cfg(include_docstrings=True)

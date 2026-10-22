@@ -21,25 +21,25 @@ def tools(cfg) -> list[dict]:
         {
             "name": "project_context.capabilities",
             "description": "Report which project-context capabilities are enabled "
-                           "(scanner, pointers, git, embeddings, mutation, raw logs).",
+            "(scanner, pointers, git, embeddings, mutation, raw logs).",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
             "name": "project_context.config_status",
             "description": "Return the effective project-context configuration "
-                           "(safe, non-secret fields only).",
+            "(safe, non-secret fields only).",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
             "name": "project_context.healthcheck",
             "description": "Check that the fingerprint registry and project DBs "
-                           "are reachable and report basic counts.",
+            "are reachable and report basic counts.",
             "inputSchema": {"type": "object", "properties": {}},
         },
         {
             "name": "project_context.explain_available_tools",
             "description": "List all project-context MCP tools grouped by capability, "
-                           "with each group's enablement state.",
+            "with each group's enablement state.",
             "inputSchema": {"type": "object", "properties": {}},
         },
     ]
@@ -81,20 +81,27 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
             row = reg.execute("SELECT COUNT(*) AS c FROM projects").fetchone()
             health["registry"] = "ok"
             health["project_count"] = int(row["c"]) if row else 0
-        except Exception as exc:  # noqa: BLE001 - health must never raise
+        except Exception as exc:
             health["registry"] = "error"
             health["error"] = str(exc)
         return text_result(health)
 
     if name == "project_context.explain_available_tools":
-        from . import collect_tools
+        # Lazy: the package __init__ imports this module (import cycle).
+        from . import collect_tools  # noqa: PLC0415
+
         defs, _ = collect_tools(cfg)
         groups: dict[str, list[str]] = {}
         for tool in defs:
             grp = tool["name"].split(".")[-1].split("_")[0] if "." in tool["name"] else "other"
             groups.setdefault(grp, []).append(tool["name"])
         return text_result(
-            {"capabilities": _capabilities(cfg), "groups": groups, "tools": defs, "count": len(defs)}
+            {
+                "capabilities": _capabilities(cfg),
+                "groups": groups,
+                "tools": defs,
+                "count": len(defs),
+            }
         )
 
     return text_result({"status": "unknown_tool", "name": name})

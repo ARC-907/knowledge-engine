@@ -68,9 +68,7 @@ def test_get_provider_returns_stub_when_configured() -> None:
 def test_get_provider_returns_ollama_for_real_config() -> None:
     from knowledge_engine.project_context.embeddings.local import OllamaProvider
 
-    cfg = ProjectContextConfig(
-        embeddings=EmbeddingsCfg(enabled=True, provider="ollama")
-    )
+    cfg = ProjectContextConfig(embeddings=EmbeddingsCfg(enabled=True, provider="ollama"))
     provider = get_provider(cfg)
     assert isinstance(provider, OllamaProvider)
 
@@ -129,7 +127,7 @@ def test_pack_unpack_round_trip() -> None:
     assert len(blob) == len(original) * 4
     restored = unpack_vector(blob)
     assert len(restored) == len(original)
-    for a, b in zip(original, restored):
+    for a, b in zip(original, restored, strict=True):
         assert math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-6)
 
 
@@ -147,7 +145,7 @@ def test_stub_vector_round_trips() -> None:
     provider = StubProvider(dim=8)
     [vector] = provider.embed(["round trip"])
     restored = unpack_vector(pack_vector(vector))
-    for a, b in zip(vector, restored):
+    for a, b in zip(vector, restored, strict=True):
         assert math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-6)
 
 
@@ -233,9 +231,7 @@ def test_remote_disabled_by_default() -> None:
     from knowledge_engine.project_context.embeddings.remote import RemoteProvider
 
     with pytest.raises(RuntimeError):
-        RemoteProvider(
-            _cfg(enabled=True, provider="remote", allow_remote_provider=False)
-        )
+        RemoteProvider(_cfg(enabled=True, provider="remote", allow_remote_provider=False))
 
 
 def test_remote_disabled_for_real_default_config() -> None:
@@ -262,6 +258,4 @@ def test_remote_allowed_constructs() -> None:
 
 def test_get_provider_remote_blocked_when_not_allowed() -> None:
     with pytest.raises(RuntimeError):
-        get_provider(
-            _cfg(enabled=True, provider="remote", allow_remote_provider=False)
-        )
+        get_provider(_cfg(enabled=True, provider="remote", allow_remote_provider=False))

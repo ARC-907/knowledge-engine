@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import ClassVar
 
 from .. import schema
 from ..models import Candidate
@@ -86,7 +87,7 @@ class LogDetector(Detector):
     category = schema.CATEGORY_TEST_LOG
 
     #: Mapping from log category to its discovery-config attribute name.
-    _GATE_ATTRS = {
+    _GATE_ATTRS: ClassVar[dict[str, str]] = {
         schema.CATEGORY_TEST_LOG: "include_test_logs",
         schema.CATEGORY_BUILD_LOG: "include_build_logs",
         schema.CATEGORY_RUNTIME_LOG: "include_runtime_logs",

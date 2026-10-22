@@ -17,7 +17,8 @@ from __future__ import annotations
 import importlib
 import logging
 import pkgutil
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 _logger = logging.getLogger(__name__)
 
@@ -37,8 +38,8 @@ def collect_tools() -> tuple[list[dict], dict[str, DispatchFn]]:
     dispatch: dict[str, DispatchFn] = {}
     for mod in _iter_tool_modules():
         try:
-            group_defs = mod.tools()  # type: ignore[attr-defined]
-            group_dispatch = mod.dispatch  # type: ignore[attr-defined]
+            group_defs = mod.tools()
+            group_dispatch = mod.dispatch
         except AttributeError:
             _logger.warning("skipping malformed tool module: %s", mod.__name__)
             continue
@@ -48,4 +49,4 @@ def collect_tools() -> tuple[list[dict], dict[str, DispatchFn]]:
     return defs, dispatch
 
 
-__all__ = ["collect_tools", "DispatchFn"]
+__all__ = ["DispatchFn", "collect_tools"]

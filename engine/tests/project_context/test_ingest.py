@@ -19,11 +19,9 @@ def registry_conn(tmp_path) -> sqlite3.Connection:
 
 @pytest.fixture()
 def project_conn(tmp_path) -> sqlite3.Connection:
-    """A fresh project content DB with the 002_–007_ migrations applied."""
+    """A fresh project content DB with the 002_ through 007_ migrations applied."""
     conn = db.connect(tmp_path / "project.sqlite")
-    db.apply_migrations(
-        conn, only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_")
-    )
+    db.apply_migrations(conn, only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_"))
     return conn
 
 
@@ -118,9 +116,7 @@ def test_reingest_identical_skips_dedupe(
 
     count = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
     assert count == 1
-    fts_count = project_conn.execute(
-        "SELECT COUNT(*) AS c FROM project_docs_fts"
-    ).fetchone()["c"]
+    fts_count = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs_fts").fetchone()["c"]
     assert fts_count == 1
 
 
@@ -199,13 +195,9 @@ def test_rejected_secret_stores_no_body_no_fts(
     # Metadata row exists, but no body and no FTS entry.
     docs = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
     assert docs == 1
-    bodies = project_conn.execute(
-        "SELECT COUNT(*) AS c FROM project_doc_bodies"
-    ).fetchone()["c"]
+    bodies = project_conn.execute("SELECT COUNT(*) AS c FROM project_doc_bodies").fetchone()["c"]
     assert bodies == 0
-    fts = project_conn.execute(
-        "SELECT COUNT(*) AS c FROM project_docs_fts"
-    ).fetchone()["c"]
+    fts = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs_fts").fetchone()["c"]
     assert fts == 0
 
 
@@ -216,9 +208,7 @@ def test_begin_and_finish_run(
 ) -> None:
     pfp, bfp = context
 
-    run_id = ingest.begin_run(
-        project_conn, registry_conn, pfp, bfp, schema.MODE_INGEST
-    )
+    run_id = ingest.begin_run(project_conn, registry_conn, pfp, bfp, schema.MODE_INGEST)
     assert run_id.startswith("run_")
 
     row = project_conn.execute(
@@ -228,9 +218,7 @@ def test_begin_and_finish_run(
     assert row["status"] == schema.PENDING
     assert row["mode"] == schema.MODE_INGEST
 
-    ingest.finish_run(
-        project_conn, run_id, {"docs_seen": 3, "docs_written": 2}, status="completed"
-    )
+    ingest.finish_run(project_conn, run_id, {"docs_seen": 3, "docs_written": 2}, status="completed")
     row = project_conn.execute(
         "SELECT * FROM project_doc_ingestion_runs WHERE ingestion_run_id = ?",
         (run_id,),

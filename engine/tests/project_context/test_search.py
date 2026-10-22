@@ -148,16 +148,12 @@ class TestSearch:
 
     def test_full_mode_gate_false(self, project_conn):
         _insert(project_conn, record_id="r1", body="secret body text")
-        results = search.search(
-            project_conn, "secret", mode=RESULT_FULL, cfg=_gated_cfg()
-        )
+        results = search.search(project_conn, "secret", mode=RESULT_FULL, cfg=_gated_cfg())
         assert results[0]["body_status"] == "not_permitted"
 
     def test_full_mode_gate_true_returns_body(self, project_conn):
         _insert(project_conn, record_id="r1", body="secret body text")
-        results = search.search(
-            project_conn, "secret", mode=RESULT_FULL, cfg=_full_cfg()
-        )
+        results = search.search(project_conn, "secret", mode=RESULT_FULL, cfg=_full_cfg())
         assert results[0]["body"] == "secret body text"
         assert "body_status" not in results[0]
 

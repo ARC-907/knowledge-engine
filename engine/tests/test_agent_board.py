@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
+from typing import ClassVar
 
 
 def _env(corpus: Path, data: Path) -> None:
@@ -25,23 +27,20 @@ def _env(corpus: Path, data: Path) -> None:
     os.environ["KE_PIPELINE_DB"] = str(data / "pipeline.db")
 
     import sys
+
     # Stop a sweeper a prior test may have started, so it doesn't keep a
     # connection open to a tmp DB that's about to be torn down.
     sweeper_mod = sys.modules.get("knowledge_engine.agent_board.sweeper")
     if sweeper_mod is not None:
-        try:
+        with contextlib.suppress(Exception):
             sweeper_mod.stop(timeout=5.0)
-        except Exception:
-            pass
     # Drop this thread's cached connections so the next get_connection()
     # opens fresh against the just-set KE_PIPELINE_DB.
     db_mod = sys.modules.get("knowledge_engine.foundation.db")
     if db_mod is not None:
-        try:
+        with contextlib.suppress(Exception):
             db_mod.close_all()
             db_mod._FTS_BACKFILLED.clear()  # one-shot backfill guard, per path
-        except Exception:
-            pass
 
 
 # ── Schema validation ─────────────────────────────────────────
@@ -51,12 +50,14 @@ def test_schemas_validate_minimal(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import schemas
 
-    draft, errors = schemas.validate({
-        "channel": "ops",
-        "message_type": "claim",
-        "sender_node_id": "branch-x",
-        "body": "claim it",
-    })
+    draft, errors = schemas.validate(
+        {
+            "channel": "ops",
+            "message_type": "claim",
+            "sender_node_id": "branch-x",
+            "body": "claim it",
+        }
+    )
     assert errors == []
     assert draft is not None
     assert draft.channel == "ops"
@@ -80,12 +81,14 @@ def test_schemas_unknown_channel(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import schemas
 
-    draft, errors = schemas.validate({
-        "channel": "made-up-channel",
-        "message_type": "claim",
-        "sender_node_id": "x",
-        "body": "y",
-    })
+    draft, errors = schemas.validate(
+        {
+            "channel": "made-up-channel",
+            "message_type": "claim",
+            "sender_node_id": "x",
+            "body": "y",
+        }
+    )
     assert draft is None
     assert any("channel" in e for e in errors)
 
@@ -97,12 +100,14 @@ def test_store_post_and_poll_roundtrip(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import store
 
-    msg = store.post_with_validation({
-        "channel": "ops",
-        "message_type": "claim",
-        "sender_node_id": "branch-x",
-        "body": "claim it",
-    })
+    msg = store.post_with_validation(
+        {
+            "channel": "ops",
+            "message_type": "claim",
+            "sender_node_id": "branch-x",
+            "body": "claim it",
+        }
+    )
     assert msg["message_id"]
     polled = store.poll(channel="ops", limit=10)
     assert any(m["message_id"] == msg["message_id"] for m in polled)
@@ -110,9 +115,10 @@ def test_store_post_and_poll_roundtrip(tmp_path: Path) -> None:
 
 def test_store_validation_raises(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
+    import pytest
+
     from knowledge_engine.agent_board import store
 
-    import pytest
     with pytest.raises(ValueError):
         store.post_with_validation({"channel": "ops"})
 
@@ -121,20 +127,24 @@ def test_store_fts_search(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import store
 
-    store.post_with_validation({
-        "channel": "research",
-        "message_type": "research_finding",
-        "sender_node_id": "branch-x",
-        "subject": "found a fox",
-        "body": "the quick brown fox jumps over the lazy dog",
-    })
-    store.post_with_validation({
-        "channel": "research",
-        "message_type": "research_finding",
-        "sender_node_id": "branch-y",
-        "subject": "different",
-        "body": "no animals here",
-    })
+    store.post_with_validation(
+        {
+            "channel": "research",
+            "message_type": "research_finding",
+            "sender_node_id": "branch-x",
+            "subject": "found a fox",
+            "body": "the quick brown fox jumps over the lazy dog",
+        }
+    )
+    store.post_with_validation(
+        {
+            "channel": "research",
+            "message_type": "research_finding",
+            "sender_node_id": "branch-y",
+            "subject": "different",
+            "body": "no animals here",
+        }
+    )
     hits = store.search_messages("fox", channel="research")
     assert hits
     assert any("fox" in (h.get("body") or "").lower() for h in hits)
@@ -145,19 +155,23 @@ def test_store_digest_summarizes(tmp_path: Path) -> None:
     from knowledge_engine.agent_board import store
 
     for i in range(5):
-        store.post_with_validation({
+        store.post_with_validation(
+            {
+                "channel": "ops",
+                "message_type": "status_update",
+                "sender_node_id": f"branch-{i % 2}",
+                "body": f"update {i}",
+            }
+        )
+    store.post_with_validation(
+        {
             "channel": "ops",
-            "message_type": "status_update",
-            "sender_node_id": f"branch-{i % 2}",
-            "body": f"update {i}",
-        })
-    store.post_with_validation({
-        "channel": "ops",
-        "message_type": "blocker",
-        "sender_node_id": "branch-x",
-        "body": "stuck",
-        "requires_ack": True,
-    })
+            "message_type": "blocker",
+            "sender_node_id": "branch-x",
+            "body": "stuck",
+            "requires_ack": True,
+        }
+    )
     d = store.digest(channel="ops")
     assert d["scanned"] >= 6
     assert d["counts_by_type"].get("status_update") == 5
@@ -173,25 +187,28 @@ def test_store_ack_records_acker(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import store
 
-    msg = store.post_with_validation({
-        "channel": "ops",
-        "message_type": "blocker",
-        "sender_node_id": "branch-x",
-        "body": "stuck",
-        "requires_ack": True,
-    })
+    msg = store.post_with_validation(
+        {
+            "channel": "ops",
+            "message_type": "blocker",
+            "sender_node_id": "branch-x",
+            "body": "stuck",
+            "requires_ack": True,
+        }
+    )
     updated = store.ack_message(msg["message_id"], "branch-y")
     assert updated is not None
     ack = updated.get("ack_by")
     if isinstance(ack, str):
         import json
+
         ack = json.loads(ack)
     assert "branch-y" in ack
 
 
 def test_sweeper_one_pass_records_sweep_row(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import sweeper, store
+    from knowledge_engine.agent_board import store, sweeper
 
     # No data — sweep should still record a clean pass.
     result = sweeper.sweep_once()
@@ -240,6 +257,7 @@ def test_keys_invalid_resource_type_rejected(tmp_path: Path) -> None:
 
     created = keys.create_key("test-key")
     import pytest
+
     with pytest.raises(ValueError):
         keys.grant_permission(created["key_id"], "calendar_layer", "*", "read")
 
@@ -266,6 +284,7 @@ def test_board_http_status_and_post(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
 
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
@@ -276,12 +295,15 @@ def test_board_http_status_and_post(tmp_path: Path) -> None:
         assert body["service"] == "knowledge-engine-board"
         assert "ops" in body["config"]["channels"]
 
-        r = client.post("/board/messages", json={
-            "channel": "ops",
-            "message_type": "status_update",
-            "sender_node_id": "test-branch",
-            "body": "hello board",
-        })
+        r = client.post(
+            "/board/messages",
+            json={
+                "channel": "ops",
+                "message_type": "status_update",
+                "sender_node_id": "test-branch",
+                "body": "hello board",
+            },
+        )
         assert r.status_code == 201
         msg = r.json()
         assert msg["channel"] == "ops"
@@ -296,6 +318,7 @@ def test_board_http_rejects_invalid_payload(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
 
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
@@ -309,17 +332,21 @@ def test_board_http_search_route(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
 
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
     with TestClient(app) as client:
-        client.post("/board/messages", json={
-            "channel": "research",
-            "message_type": "research_finding",
-            "sender_node_id": "t",
-            "subject": "a fox",
-            "body": "the quick brown fox",
-        })
+        client.post(
+            "/board/messages",
+            json={
+                "channel": "research",
+                "message_type": "research_finding",
+                "sender_node_id": "t",
+                "subject": "a fox",
+                "body": "the quick brown fox",
+            },
+        )
         r = client.get("/board/search", params={"q": "fox"})
         assert r.status_code == 200
         assert r.json()
@@ -349,14 +376,18 @@ def test_mcp_board_post_and_read_via_dispatch(tmp_path: Path) -> None:
     from knowledge_engine.agent_board.mcp_tools import collect_tools
     from knowledge_engine.agent_board.mcp_tools.base import BoardContext
 
-    defs, dispatch = collect_tools()
+    _, dispatch = collect_tools()
     ctx = BoardContext.from_config()
-    post_result = dispatch["board_post"]("board_post", {
-        "channel": "ops",
-        "message_type": "claim",
-        "sender_node_id": "t",
-        "body": "claim",
-    }, ctx)
+    post_result = dispatch["board_post"](
+        "board_post",
+        {
+            "channel": "ops",
+            "message_type": "claim",
+            "sender_node_id": "t",
+            "body": "claim",
+        },
+        ctx,
+    )
     assert post_result["content"][0]["type"] == "text"
 
     read_result = dispatch["board_read"]("board_read", {"channel": "ops", "limit": 5}, ctx)
@@ -371,6 +402,7 @@ def test_trust_gate_loopback_and_tailscale(tmp_path: Path) -> None:
     # Default trusted set is loopback + Tailscale CGNAT.
     os.environ.pop("KE_BOARD_TRUSTED_CIDRS", None)
     from knowledge_engine.server.api.board_routes import _trusted_networks
+
     nets = _trusted_networks()
     assert any(str(n) == "127.0.0.1/32" for n in nets)
     assert any(str(n) == "::1/128" for n in nets)
@@ -382,6 +414,7 @@ def test_trust_gate_env_override(tmp_path: Path) -> None:
     os.environ["KE_BOARD_TRUSTED_CIDRS"] = "10.0.0.0/8, 127.0.0.1/32"
     try:
         from knowledge_engine.server.api.board_routes import _trusted_networks
+
         nets = _trusted_networks()
         # Override replaces the default — Tailscale is no longer trusted.
         assert any(str(n) == "10.0.0.0/8" for n in nets)
@@ -397,14 +430,16 @@ def test_trust_gate_untrusted_peer_rejected(tmp_path: Path) -> None:
     os.environ["KE_BOARD_TRUSTED_CIDRS"] = "127.0.0.1/32,::1/128"
     try:
         from knowledge_engine.server.api.board_routes import (
-            _is_trusted_peer, _trusted_networks,
+            _is_trusted_peer,
+            _trusted_networks,
         )
 
         class _MockReq:
             class _C:
                 host = "100.64.5.10"
+
             client = _C()
-            headers: dict[str, str] = {}
+            headers: ClassVar[dict[str, str]] = {}
 
         assert _trusted_networks()
         assert _is_trusted_peer(_MockReq()) is False
@@ -416,6 +451,7 @@ def test_trust_proxy_off_by_default(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     os.environ.pop("KE_TRUST_PROXY", None)
     from knowledge_engine.server.api.board_routes import _trust_proxy_enabled
+
     assert _trust_proxy_enabled() is False
 
 
@@ -424,6 +460,7 @@ def test_trust_proxy_opt_in(tmp_path: Path) -> None:
     os.environ["KE_TRUST_PROXY"] = "1"
     try:
         from knowledge_engine.server.api.board_routes import _trust_proxy_enabled
+
         assert _trust_proxy_enabled() is True
     finally:
         os.environ.pop("KE_TRUST_PROXY", None)
@@ -435,17 +472,20 @@ def test_trust_proxy_opt_in(tmp_path: Path) -> None:
 def test_ack_message_concurrent_appends(tmp_path: Path) -> None:
     """Two threads acking the same message must both land — no clobber."""
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import store
     import concurrent.futures
     import json
 
-    msg = store.post_with_validation({
-        "channel": "ops",
-        "message_type": "blocker",
-        "sender_node_id": "branch-x",
-        "body": "stuck",
-        "requires_ack": True,
-    })
+    from knowledge_engine.agent_board import store
+
+    msg = store.post_with_validation(
+        {
+            "channel": "ops",
+            "message_type": "blocker",
+            "sender_node_id": "branch-x",
+            "body": "stuck",
+            "requires_ack": True,
+        }
+    )
 
     def _ack(name: str) -> None:
         store.ack_message(msg["message_id"], name)
@@ -463,16 +503,19 @@ def test_ack_message_concurrent_appends(tmp_path: Path) -> None:
 
 def test_ack_message_idempotent_same_acker(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import store
     import json
 
-    msg = store.post_with_validation({
-        "channel": "ops",
-        "message_type": "blocker",
-        "sender_node_id": "branch-x",
-        "body": "stuck",
-        "requires_ack": True,
-    })
+    from knowledge_engine.agent_board import store
+
+    msg = store.post_with_validation(
+        {
+            "channel": "ops",
+            "message_type": "blocker",
+            "sender_node_id": "branch-x",
+            "body": "stuck",
+            "requires_ack": True,
+        }
+    )
     store.ack_message(msg["message_id"], "same")
     store.ack_message(msg["message_id"], "same")
     final = store.read(msg["message_id"])
@@ -498,9 +541,10 @@ def test_master_key_bootstrap_unique(tmp_path: Path) -> None:
 def test_master_key_bootstrap_concurrent(tmp_path: Path) -> None:
     """Concurrent ensure_master_key calls produce at most one master."""
     _env(tmp_path / "corpus", tmp_path / "data")
+    import concurrent.futures
+
     from knowledge_engine.agent_board import keys
     from knowledge_engine.runtime.foundation import db as fdb
-    import concurrent.futures
 
     results: list[dict | None] = []
 
@@ -528,13 +572,15 @@ def test_per_field_length_caps_reject_overlong_subject(tmp_path: Path) -> None:
     from knowledge_engine.agent_board import schemas
 
     long_subj = "x" * (schemas.MAX_LEN_SUBJECT + 1)
-    draft, errors = schemas.validate({
-        "channel": "ops",
-        "message_type": "claim",
-        "sender_node_id": "branch-x",
-        "subject": long_subj,
-        "body": "body",
-    })
+    draft, errors = schemas.validate(
+        {
+            "channel": "ops",
+            "message_type": "claim",
+            "sender_node_id": "branch-x",
+            "subject": long_subj,
+            "body": "body",
+        }
+    )
     assert draft is None
     assert any("subject too long" in e for e in errors)
 
@@ -543,13 +589,15 @@ def test_ttl_hard_cap(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import schemas
 
-    draft, errors = schemas.validate({
-        "channel": "ops",
-        "message_type": "claim",
-        "sender_node_id": "branch-x",
-        "body": "body",
-        "ttl_hours": schemas.MAX_TTL_HOURS + 1,
-    })
+    draft, errors = schemas.validate(
+        {
+            "channel": "ops",
+            "message_type": "claim",
+            "sender_node_id": "branch-x",
+            "body": "body",
+            "ttl_hours": schemas.MAX_TTL_HOURS + 1,
+        }
+    )
     assert draft is None
     assert any("ttl_hours too large" in e for e in errors)
 
@@ -558,6 +606,7 @@ def test_http_request_body_size_cap(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
 
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
@@ -567,8 +616,12 @@ def test_http_request_body_size_cap(tmp_path: Path) -> None:
         # rejects before parsing the body.
         r = client.post(
             "/board/messages",
-            json={"channel": "ops", "message_type": "claim",
-                  "sender_node_id": "t", "body": oversized_body},
+            json={
+                "channel": "ops",
+                "message_type": "claim",
+                "sender_node_id": "t",
+                "body": oversized_body,
+            },
             headers={"Content-Length": str(2_000_000)},
         )
         assert r.status_code == 413, r.text
@@ -620,17 +673,20 @@ def test_sweep_once_force_bypasses_lease(tmp_path: Path) -> None:
 def test_stale_blocker_threshold_clamped(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import store, sweeper
+
     # Set the threshold to 0 — sweeper should still clamp to >= 1.
     store.update_config({"stale_blocker_hours": 0})
     # Post a blocker, then sweep; should NOT immediately emit a reminder
     # because clamp(1) means blocker must be at least 1h old.
-    store.post_with_validation({
-        "channel": "ops",
-        "message_type": "blocker",
-        "sender_node_id": "branch-x",
-        "body": "stuck",
-        "requires_ack": True,
-    })
+    store.post_with_validation(
+        {
+            "channel": "ops",
+            "message_type": "blocker",
+            "sender_node_id": "branch-x",
+            "body": "stuck",
+            "requires_ack": True,
+        }
+    )
     result = sweeper.sweep_once(force=True)
     assert result["reminders_emitted"] == 0
 
@@ -646,6 +702,7 @@ def test_http_status_route_rejects_untrusted(tmp_path: Path) -> None:
     os.environ["KE_BOARD_TRUSTED_CIDRS"] = "10.0.0.0/8"
     try:
         from fastapi.testclient import TestClient
+
         from knowledge_engine.app import create_app
 
         app = create_app()
@@ -665,21 +722,25 @@ def test_prune_by_count_preserves_unacked_blockers(tmp_path: Path) -> None:
     from knowledge_engine.runtime.pipeline import message_board as mb
 
     # Post 1 unacked blocker first (oldest).
-    blocker = store.post_with_validation({
-        "channel": "ops",
-        "message_type": "blocker",
-        "sender_node_id": "branch-x",
-        "body": "stuck",
-        "requires_ack": True,
-    })
+    blocker = store.post_with_validation(
+        {
+            "channel": "ops",
+            "message_type": "blocker",
+            "sender_node_id": "branch-x",
+            "body": "stuck",
+            "requires_ack": True,
+        }
+    )
     # Then many normal posts — total exceeds cap.
     for i in range(20):
-        store.post_with_validation({
-            "channel": "ops",
-            "message_type": "status_update",
-            "sender_node_id": "branch-y",
-            "body": f"u{i}",
-        })
+        store.post_with_validation(
+            {
+                "channel": "ops",
+                "message_type": "status_update",
+                "sender_node_id": "branch-y",
+                "body": f"u{i}",
+            }
+        )
 
     # Prune down hard. The unacked blocker must survive.
     mb.prune_by_count(max_messages=5)
@@ -700,13 +761,15 @@ def test_fts5_search_handles_user_parens(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import store
 
-    store.post_with_validation({
-        "channel": "research",
-        "message_type": "research_finding",
-        "sender_node_id": "t",
-        "subject": "auth flow",
-        "body": "fixed the foo (bar) bug in the auth flow",
-    })
+    store.post_with_validation(
+        {
+            "channel": "research",
+            "message_type": "research_finding",
+            "sender_node_id": "t",
+            "subject": "auth flow",
+            "body": "fixed the foo (bar) bug in the auth flow",
+        }
+    )
     # Query containing unescaped FTS5 grouping characters.
     hits = store.search_messages("foo (bar)")
     assert hits  # at least one match — must not raise
@@ -718,13 +781,15 @@ def test_fts5_search_preserves_power_user_operators(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import store
 
-    store.post_with_validation({
-        "channel": "research",
-        "message_type": "research_finding",
-        "sender_node_id": "t",
-        "subject": "authentication overhaul",
-        "body": "rewrote the authenticator",
-    })
+    store.post_with_validation(
+        {
+            "channel": "research",
+            "message_type": "research_finding",
+            "sender_node_id": "t",
+            "subject": "authentication overhaul",
+            "body": "rewrote the authenticator",
+        }
+    )
     hits = store.search_messages("authent*")
     assert hits
     assert any("authent" in (h.get("body", "") + h.get("subject", "")).lower() for h in hits)
@@ -735,12 +800,14 @@ def test_fts5_search_handles_quoted_query(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from knowledge_engine.agent_board import store
 
-    store.post_with_validation({
-        "channel": "research",
-        "message_type": "research_finding",
-        "sender_node_id": "t",
-        "body": 'he said "hello" and left',
-    })
+    store.post_with_validation(
+        {
+            "channel": "research",
+            "message_type": "research_finding",
+            "sender_node_id": "t",
+            "body": 'he said "hello" and left',
+        }
+    )
     hits = store.search_messages('"hello')  # malformed phrase
     # Must not raise; on the retry path it matches as a literal phrase.
     # (May return zero hits depending on tokenization — the must is "no exception".)
@@ -796,8 +863,9 @@ def test_cli_thread_positional_still_works(tmp_path: Path) -> None:
 def test_toggle_refuses_last_enabled_master(tmp_path: Path) -> None:
     """Disabling the sole enabled master would lock the operator out."""
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import keys
     import pytest
+
+    from knowledge_engine.agent_board import keys
 
     master = keys.ensure_master_key()
     assert master is not None
@@ -807,8 +875,9 @@ def test_toggle_refuses_last_enabled_master(tmp_path: Path) -> None:
 
 def test_delete_refuses_last_enabled_master(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import keys
     import pytest
+
+    from knowledge_engine.agent_board import keys
 
     master = keys.ensure_master_key()
     assert master is not None
@@ -850,8 +919,9 @@ def test_http_toggle_last_master_returns_409(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
 
     from fastapi.testclient import TestClient
-    from knowledge_engine.app import create_app
+
     from knowledge_engine.agent_board import keys
+    from knowledge_engine.app import create_app
 
     master = keys.ensure_master_key()
     assert master is not None
@@ -868,8 +938,9 @@ def test_http_delete_last_master_returns_409(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
 
     from fastapi.testclient import TestClient
-    from knowledge_engine.app import create_app
+
     from knowledge_engine.agent_board import keys
+    from knowledge_engine.app import create_app
 
     master = keys.ensure_master_key()
     assert master is not None
@@ -891,13 +962,12 @@ def test_db_path_resolves_dynamically_per_request(tmp_path: Path) -> None:
     """
     _env(tmp_path / "corpus", tmp_path / "data")
     import os
+
     from knowledge_engine.runtime.foundation import db as fdb
 
     first_path = fdb.resolve_db_path()
     conn1 = fdb.get_connection()
-    conn1.execute(
-        "INSERT INTO kv_store(key, value, updated_at) VALUES ('probe', 'a', 'now')"
-    )
+    conn1.execute("INSERT INTO kv_store(key, value, updated_at) VALUES ('probe', 'a', 'now')")
     conn1.commit()
 
     # Point the env var at a second DB file and confirm resolution follows.
@@ -948,8 +1018,9 @@ def test_lifespan_starts_and_stops_cleanly(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
 
     from fastapi.testclient import TestClient
-    from knowledge_engine.app import create_app
+
     from knowledge_engine.agent_board import sweeper
+    from knowledge_engine.app import create_app
 
     app = create_app()
     with TestClient(app) as client:
@@ -968,8 +1039,9 @@ def test_lifespan_starts_and_stops_cleanly(tmp_path: Path) -> None:
 
 def test_slugify_scope_rejects_traversal(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import scopes
     import pytest
+
+    from knowledge_engine.agent_board import scopes
 
     assert scopes.slugify_scope("Branch/Feat-Auth") == "branch-feat-auth"
     assert scopes.slugify_scope("../../etc/passwd") == "etc-passwd"
@@ -1020,8 +1092,12 @@ def test_store_scope_search_isolation(tmp_path: Path) -> None:
     from knowledge_engine.agent_board import store
 
     store.post_with_validation(
-        {"channel": "research", "message_type": "research_finding",
-         "sender_node_id": "n", "body": "the quick brown fox in A"},
+        {
+            "channel": "research",
+            "message_type": "research_finding",
+            "sender_node_id": "n",
+            "body": "the quick brown fox in A",
+        },
         scope="proj-a",
     )
     a_hits = store.search_messages("fox", scope="proj-a")
@@ -1046,7 +1122,7 @@ def test_store_scope_config_independent(tmp_path: Path) -> None:
 
 def test_list_scopes_discovers_created(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.agent_board import store, scopes
+    from knowledge_engine.agent_board import scopes, store
 
     store.post_with_validation(
         {"channel": "ops", "message_type": "claim", "sender_node_id": "n", "body": "x"},
@@ -1062,8 +1138,8 @@ def test_list_scopes_discovers_created(tmp_path: Path) -> None:
 
 def test_using_db_context_manager_routes_and_restores(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
-    from knowledge_engine.runtime.foundation import db as fdb
     from knowledge_engine.agent_board import scopes
+    from knowledge_engine.runtime.foundation import db as fdb
 
     assert fdb.active_scope_db_path() is None
     target = scopes.scope_db_path("proj-a")
@@ -1076,14 +1152,20 @@ def test_using_db_context_manager_routes_and_restores(tmp_path: Path) -> None:
 def test_http_scope_isolation(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
     with TestClient(app) as client:
-        r = client.post("/board/messages?scope=proj-a", json={
-            "channel": "ops", "message_type": "claim",
-            "sender_node_id": "n", "body": "scoped A",
-        })
+        r = client.post(
+            "/board/messages?scope=proj-a",
+            json={
+                "channel": "ops",
+                "message_type": "claim",
+                "sender_node_id": "n",
+                "body": "scoped A",
+            },
+        )
         assert r.status_code == 201, r.text
 
         a = client.get("/board/messages", params={"channel": "ops", "scope": "proj-a"}).json()
@@ -1100,14 +1182,21 @@ def test_http_scope_isolation(tmp_path: Path) -> None:
 def test_http_post_scope_in_body(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
     with TestClient(app) as client:
-        r = client.post("/board/messages", json={
-            "channel": "ops", "message_type": "claim",
-            "sender_node_id": "n", "body": "body-scoped", "scope": "proj-x",
-        })
+        r = client.post(
+            "/board/messages",
+            json={
+                "channel": "ops",
+                "message_type": "claim",
+                "sender_node_id": "n",
+                "body": "body-scoped",
+                "scope": "proj-x",
+            },
+        )
         assert r.status_code == 201, r.text
         # `scope` must not have leaked into the stored message fields.
         assert "scope" not in r.json()
@@ -1117,19 +1206,27 @@ def test_http_post_scope_in_body(tmp_path: Path) -> None:
 
 def test_mcp_scope_isolation_and_board_scopes_tool(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
+    import json as _json
+
     from knowledge_engine.agent_board.mcp_tools import collect_tools
     from knowledge_engine.agent_board.mcp_tools.base import BoardContext
-    import json as _json
 
     defs, dispatch = collect_tools()
     names = {d["name"] for d in defs}
     assert "board_scopes" in names
     ctx = BoardContext.from_config()
 
-    dispatch["board_post"]("board_post", {
-        "channel": "ops", "message_type": "claim",
-        "sender_node_id": "n", "body": "mcp A", "scope": "proj-a",
-    }, ctx)
+    dispatch["board_post"](
+        "board_post",
+        {
+            "channel": "ops",
+            "message_type": "claim",
+            "sender_node_id": "n",
+            "body": "mcp A",
+            "scope": "proj-a",
+        },
+        ctx,
+    )
 
     a_env = dispatch["board_read"]("board_read", {"channel": "ops", "scope": "proj-a"}, ctx)
     b_env = dispatch["board_read"]("board_read", {"channel": "ops", "scope": "proj-b"}, ctx)
@@ -1210,6 +1307,7 @@ def test_http_both_vaults_empty_on_fresh_install(tmp_path: Path) -> None:
     """GET /board/keys and /board/providers both empty on a fresh engine."""
     _env(tmp_path / "corpus", tmp_path / "data")
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
@@ -1233,7 +1331,9 @@ def test_provider_register_reports_env_set_without_leaking_secret(tmp_path: Path
     os.environ.pop("KE_TEST_PROVIDER_VAR", None)
 
     binding = providers.register_provider(
-        provider="anthropic", env_var="KE_TEST_PROVIDER_VAR", display_name="test",
+        provider="anthropic",
+        env_var="KE_TEST_PROVIDER_VAR",
+        display_name="test",
     )
     assert binding["provider"] == "anthropic"
     assert binding["env_var"] == "KE_TEST_PROVIDER_VAR"
@@ -1296,6 +1396,7 @@ def test_provider_default_env_var_hints(tmp_path: Path) -> None:
 def test_provider_register_rejects_bad_input(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     import pytest
+
     from knowledge_engine.agent_board import provider_registry as providers
 
     with pytest.raises(ValueError):
@@ -1307,14 +1408,19 @@ def test_provider_register_rejects_bad_input(tmp_path: Path) -> None:
 def test_http_provider_register_and_remove(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     app = create_app()
     with TestClient(app) as client:
-        r = client.post("/board/providers", json={
-            "provider": "anthropic", "env_var": "KE_ANTHROPIC_API_KEY",
-            "display_name": "primary",
-        })
+        r = client.post(
+            "/board/providers",
+            json={
+                "provider": "anthropic",
+                "env_var": "KE_ANTHROPIC_API_KEY",
+                "display_name": "primary",
+            },
+        )
         assert r.status_code == 201, r.text
         binding = r.json()
         assert binding["provider"] == "anthropic"

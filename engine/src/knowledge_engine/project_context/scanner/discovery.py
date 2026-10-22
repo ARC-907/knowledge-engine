@@ -137,7 +137,7 @@ def run_detectors(root, cfg, detectors) -> list[Candidate]:
     for detector in detectors:
         try:
             found = list(detector.discover(root, cfg))
-        except Exception:  # noqa: BLE001 - isolate a single detector's failure
+        except Exception:
             logger.exception(
                 "detector %s failed during discovery",
                 getattr(detector, "name", detector),

@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any
 
 from ..core.config import Config
 from ..core.registry import Registry
@@ -74,7 +75,8 @@ class Indexer:
                     files: Iterable[Path] = [entry_root]
                 else:
                     files = (
-                        p for p in entry_root.rglob("*")
+                        p
+                        for p in entry_root.rglob("*")
                         if p.is_file() and p.suffix.lower() in TEXT_SUFFIXES
                     )
                 for path in files:
@@ -91,7 +93,7 @@ class Indexer:
             self._conn.commit()
             return counts
 
-    def search(self, query: str, limit: int = 20) -> list[dict]:
+    def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         with self._lock:
             cur = self._conn.cursor()
             try:

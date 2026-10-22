@@ -48,34 +48,58 @@ DEFAULT_CHANNELS: tuple[str, ...] = (
 # types under "other".
 MESSAGE_TYPES: tuple[str, ...] = (
     # Lifecycle
-    "claim", "release", "status_update", "blocker", "ack",
-    "handoff_notice", "synthesis_ready", "human_attention_required",
+    "claim",
+    "release",
+    "status_update",
+    "blocker",
+    "ack",
+    "handoff_notice",
+    "synthesis_ready",
+    "human_attention_required",
     # Coordination
-    "node_health", "policy_notice", "system_command",
+    "node_health",
+    "policy_notice",
+    "system_command",
     # Sweeper output
-    "reminder", "digest", "tool_health_alert",
+    "reminder",
+    "digest",
+    "tool_health_alert",
     # Research workflow
-    "research_finding", "research_question", "citation_proposed",
+    "research_finding",
+    "research_question",
+    "citation_proposed",
     # Project workflow
-    "plan_proposed", "plan_approved", "decision_recorded", "risk_flagged",
+    "plan_proposed",
+    "plan_approved",
+    "decision_recorded",
+    "risk_flagged",
     # Worktree / branch coordination
-    "branch_ready", "merge_proposed", "conflict_flagged", "rebase_recommended",
+    "branch_ready",
+    "merge_proposed",
+    "conflict_flagged",
+    "rebase_recommended",
     # Library workflow
-    "library_authoring_note", "library_review_requested", "library_published",
+    "library_authoring_note",
+    "library_review_requested",
+    "library_published",
     # Execution / testing
-    "build_started", "build_finished", "deploy_recorded",
-    "test_run", "test_failure", "regression_triage",
+    "build_started",
+    "build_finished",
+    "deploy_recorded",
+    "test_run",
+    "test_failure",
+    "regression_triage",
     # Catch-all
     "chatter",
 )
 
 
 VISIBILITY_SCOPES: tuple[str, ...] = (
-    "all",      # every worker sees it
-    "task",     # only workers on same task_id
+    "all",  # every worker sees it
+    "task",  # only workers on same task_id
     "product",  # only workers on same product_id (library/chapter)
-    "role",     # only workers with matching role
-    "node",     # only the specified target node
+    "role",  # only workers with matching role
+    "node",  # only the specified target node
 )
 
 
@@ -132,7 +156,9 @@ def _check_len(errors: list[str], name: str, value: Any, cap: int) -> None:
         errors.append(f"{name} too long (max {cap} chars)")
 
 
-def validate(draft: dict[str, Any], known_channels: list[str] | None = None) -> tuple[MessageDraft | None, list[str]]:
+def validate(
+    draft: dict[str, Any], known_channels: list[str] | None = None
+) -> tuple[MessageDraft | None, list[str]]:
     """Validate a raw payload. Returns (draft, errors). On error, draft is None.
 
     `known_channels` defaults to DEFAULT_CHANNELS but is normally passed from
@@ -143,10 +169,7 @@ def validate(draft: dict[str, Any], known_channels: list[str] | None = None) -> 
 
     channel = str(draft.get("channel") or "ops").strip()
     if channel not in channels:
-        errors.append(
-            f"channel '{channel}' not in configured set "
-            f"(known: {', '.join(channels)})"
-        )
+        errors.append(f"channel '{channel}' not in configured set (known: {', '.join(channels)})")
     _check_len(errors, "channel", channel, MAX_LEN_CHANNEL)
 
     message_type = str(draft.get("message_type") or "").strip()
@@ -169,9 +192,7 @@ def validate(draft: dict[str, Any], known_channels: list[str] | None = None) -> 
 
     visibility = str(draft.get("visibility_scope") or "all").strip()
     if visibility not in VISIBILITY_SCOPES:
-        errors.append(
-            f"visibility_scope '{visibility}' not in {VISIBILITY_SCOPES}"
-        )
+        errors.append(f"visibility_scope '{visibility}' not in {VISIBILITY_SCOPES}")
 
     # Per-field length caps for the remaining identifier fields.
     sender_role = _opt_str(draft.get("sender_role"))
