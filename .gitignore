@@ -1,23 +1,41 @@
-# --- knowledge-engine (project repo) ---
-# This repo is the engine + dashboard + demo corpus. Internal/publishing
-# material (productization plan, build planning, storefront copy) lives
-# OUTSIDE this repo in ../knowledge-engine-internal/.
+# knowledge-engine — repository ignore rules
+#
+# The repository contains the engine package (engine/), the dashboard, the
+# demo corpus (corpus/), and documentation. Runtime data, local environments,
+# secrets, and generated artifacts are never committed.
 
-# Python (anywhere in the tree)
+# --- Python -----------------------------------------------------------------
 **/__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+**/*.egg-info/
+
+# Virtual environments
 **/.venv/
 **/venv/
 **/env/
-**/*.egg-info/
+engine/.venv/
+
+# Tool caches
 **/.pytest_cache/
 **/.ruff_cache/
 **/.mypy_cache/
+**/.hypothesis/
 
-# State / runtime data
+# Coverage output
+.coverage
+.coverage.*
+coverage.xml
+engine/coverage.xml
+htmlcov/
+
+# --- Runtime data and state -------------------------------------------------
+# Default per-installation data directory (indexes, board databases, project
+# context stores). Created next to the corpus or project being served.
+**/.knowledge-engine/
+
 **/state/
 **/logs/
 **/*.log
@@ -28,75 +46,51 @@
 # Default engine data dir (<KE_HOME>/.knowledge-engine/data) and project-context state
 **/.knowledge-engine/
 
-# Optional-layer state (relative anywhere)
-**/sandbox_nemoclaw/state/
-**/sandbox_nemoclaw/identity/
-**/sandbox_nemoclaw/logs/
-**/sandbox_openclaw/
-**/sandbox_nemoclaw/
-**/vendor/openclaw/
-**/vendor/nemoclaw/
-**/external/openclaw/
-**/external/nemoclaw/
+# Process bookkeeping written by the agent-board watchdog script
+**/watchdog.pid
+
+# Optional-layer runtime state (sandbox / execution adapters, local routing)
+**/sandbox_adapter/state/
+**/sandbox_adapter/identity/
 **/routing_local/data/
 
-# Generated graph artifacts (regenerable)
+# Sanitized sample logs used as test fixtures are tracked on purpose.
+!engine/tests/fixtures/sample_project/logs/
+
+# --- Generated graph artifacts (regenerable) --------------------------------
 **/corpus/.graph/graph.html
 **/corpus/.graph/graph.json
 **/corpus/.graph/GRAPH_REPORT.md
 **/corpus/.graph/native.json
 
-# Secrets
+# --- Secrets ----------------------------------------------------------------
 .env
 .env.*
 !.env.example
 *.key
 *.pem
 **/secrets/
-# Agent board master-key bootstrap file (raw key shown once on first
-# /board/keys/bootstrap-master call; operator copies + deletes).
+# One-time agent-board master key written by the bootstrap endpoint. Copy the
+# key somewhere safe, then delete the file.
 **/board-master-key.txt
 
-# IDE / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Obsidian (workspace-local state, but keep config)
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-.obsidian/cache
-
-# Build / dist artifacts
+# --- Build / distribution artifacts -----------------------------------------
 **/dist/
 **/build/
 
-# === Cruft prevention (added 2026-05-27 by portfolio sweep) ===
-# These patterns are blocked by default because operator-side tooling, IDE
-# config, planning material, and superseded code repeatedly leaked into
-# shipping repos. Provenance of removed-superseded content lives in the
-# ARC-907/products-cloud-archive bundles, NOT in product repos.
-
-# Operator-side / internal planning
-
-# IDE / editor config
+# --- Editors, IDEs, and local tool caches -----------------------------------
+.vscode/
+.idea/
+# Obsidian vault configuration and workspace state
 .obsidian/
-
-# Cloudflare wrangler cache (contains operator email + account ID)
+# Cloudflare Wrangler local cache
 .wrangler/
 
-# Superseded / cold-storage
+# Local scratch and superseded material
 archive/
 legacy/
 
-# Operator dev tooling (repo-root only — anchored so it does NOT catch the
-# engine's knowledge_engine/tools/ Python package)
-/tools/
-pre-publish-grep.ps1
-pre-publish-grep.sh
-audit-fix.ps1
-audit-fix.sh
-
-# OS junk
+# --- OS files ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
 desktop.ini
