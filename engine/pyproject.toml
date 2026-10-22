@@ -1,41 +1,213 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
 
 [project]
 name = "knowledge-engine"
-version = "2.0.0"
-description = "Corpus-agnostic knowledge engine: registry, FTS5 indexer, FastAPI, MCP server."
+version = "3.0.0.dev0"
+description = "Self-hosted, MCP-native knowledge engine: registry, SQLite FTS5 search, FastAPI dashboard, MCP server."
 readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "knowledge-engine contributors" }]
+keywords = ["mcp", "knowledge-base", "full-text-search", "sqlite", "fts5", "fastapi", "markdown", "rag"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Database :: Front-Ends",
+    "Topic :: Text Processing :: Indexing",
+    "Typing :: Typed",
+]
 dependencies = [
-    "fastapi>=0.110",
-    "uvicorn[standard]>=0.27",
-    "pydantic>=2.6",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
     "watchdog>=4.0",
     "jsonschema>=4.21",
     "httpx>=0.27",
-    # project-context TOML config: tomllib is stdlib on 3.11+, backport on 3.10
-    "tomli>=2.0; python_version < '3.11'",
+    "pyyaml>=6.0",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
-local = ["ollama>=0.2"]
-mcp = ["mcp>=1.0"]
+[project.urls]
+Homepage = "https://github.com/ARC-907/knowledge-engine"
+Documentation = "https://github.com/ARC-907/knowledge-engine/tree/main/01-user-docs"
+Changelog = "https://github.com/ARC-907/knowledge-engine/blob/main/02-dev-docs/CHANGELOG.md"
+Issues = "https://github.com/ARC-907/knowledge-engine/issues"
+Source = "https://github.com/ARC-907/knowledge-engine"
 
 [project.scripts]
 knowledge-engine = "knowledge_engine.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+# PEP 735 dependency groups (not installed by end users; `uv sync` installs `dev`).
+[dependency-groups]
+dev = [
+    { include-group = "lint" },
+    { include-group = "test" },
+    { include-group = "build" },
+    "pre-commit>=4.0",
+]
+lint = [
+    "ruff>=0.14",
+    "mypy>=1.14",
+    "types-PyYAML>=6.0",
+    "types-jsonschema>=4.21",
+]
+test = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-randomly>=3.16",
+    "pytest-xdist>=3.6",
+    "hypothesis>=6.100",
+]
+build = [
+    "twine>=6.0",
+]
 
-[tool.setuptools.package-data]
-knowledge_engine = ["project_context/migrations/*.sql"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/knowledge_engine"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/knowledge_engine",
+    "tests",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+# ---------------------------------------------------------------------------
+# Ruff: lint + format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["data"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",           # pyflakes
+    "I",           # isort
+    "UP",          # pyupgrade
+    "B",           # bugbear
+    "SIM",         # simplify
+    "N",           # pep8-naming
+    "RUF",         # ruff-specific
+    "PTH",         # pathlib
+    "PLC", "PLE", "PLW",  # pylint convention/error/warning (PLR is too noisy for this codebase)
+    "ASYNC",       # async pitfalls
+    "S",           # bandit security
+    "T20",         # no stray print() in library code
+    "C4",          # comprehensions
+    "RET",         # return statements
+    "PIE",         # misc lints
+    "PERF",        # performance anti-patterns
+    "LOG", "G",    # logging usage
+]
+ignore = [
+    "E501",    # line length is enforced by the formatter
+    "S608",    # SQL built from internal identifier allowlists; reviewed per site
+    "RET505", "RET506",  # explicit else after return is a readability choice here
+    "PLW2901", # loop variable reassignment is idiomatic in the parsers
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",    # assert is the test idiom
+    "S105", "S106", "S108",  # fake secrets / tmp paths in fixtures
+    "S603", "S607",  # subprocess with fixed argv in tests
+    "PLC0415", # local imports keep fixtures isolated from env
+    "T20",
+]
+"src/knowledge_engine/cli.py" = ["T20", "PLC0415"]
+"src/knowledge_engine/**/cli.py" = ["T20", "PLC0415"]
+"src/knowledge_engine/retrieval/embeddings/*.py" = ["T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["knowledge_engine"]
+combine-as-imports = true
+
+[tool.ruff.lint.pep8-naming]
+classmethod-decorators = ["classmethod", "pydantic.field_validator"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+files = ["src/knowledge_engine"]
+strict = true
+warn_unreachable = true
+pretty = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+
+# Substrate packages are typed incrementally (tightened in later train PRs).
+[[tool.mypy.overrides]]
+module = [
+    "knowledge_engine.project_context.*",
+    "knowledge_engine.agent_board.*",
+    "knowledge_engine.runtime.*",
+    "knowledge_engine.tool_host.*",
+    "knowledge_engine.retrieval.embeddings.*",
+]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_any_generics = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["watchdog.*", "yaml.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest / coverage
+# ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -ra"
 testpaths = ["tests"]
+xfail_strict = true
+filterwarnings = [
+    "error::DeprecationWarning:knowledge_engine.*",
+]
+markers = [
+    "slow: tests that take more than a second",
+    "network: tests that need a live Ollama or HTTP endpoint (skipped in CI)",
+]
+
+[tool.coverage.run]
+source = ["knowledge_engine"]
+branch = true
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 75
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "@overload",
+]

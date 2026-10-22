@@ -22,9 +22,17 @@ an X-Board-Key on non-localhost writes; restrict or extend the trusted
 network set with the `KE_BOARD_TRUSTED_CIDRS` env var.
 """
 
-from . import schemas, scopes, store, keys, provider_registry, sweeper, service, cli  # noqa: F401
+from . import keys, provider_registry, schemas, scopes, service, store, sweeper
+
+# ``cli`` is deliberately not imported here: it reconfigures stdout on import, which
+# must never happen inside the MCP stdio server process. Import it explicitly.
 
 __all__ = [
-    "schemas", "scopes", "store", "keys", "providers", "sweeper", "service", "cli",
+    "keys",
+    "provider_registry",
+    "schemas",
+    "scopes",
+    "service",
+    "store",
+    "sweeper",
 ]
-__version__ = "1.2.0"
