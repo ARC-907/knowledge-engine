@@ -12,12 +12,14 @@ config gates rather than the presence of a repository. The key behaviors:
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from knowledge_engine.project_context import db as pddb
+from knowledge_engine.project_context import db as pddb, git_context
 from knowledge_engine.project_context.config import ProjectContextConfig
 from knowledge_engine.project_context.mcp_tools import git_tools
 from knowledge_engine.project_context.mcp_tools.base import ToolContext
@@ -161,6 +163,158 @@ def test_branch_lineage_not_configured_when_not_repo(tmp_path: Path, monkeypatch
     ctx = _ctx(_enabled_cfg(), tmp_path)
     result = git_tools.dispatch("project_context.get_branch_lineage", {"base": "main"}, ctx)
     assert _payload(result)["status"] == "not_configured"
+
+
+# ── ref validation / option-injection hardening ─────────────────────
+
+_INJECTION = "--output=/tmp/ke-git-injection"
+
+
+class _Recorder:
+    """Stand-in for ``git_context.run_git``: records argv, answers like a repo."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, args, cwd, *, timeout=git_context.GIT_TIMEOUT_SECONDS):
+        argv = list(args)
+        self.calls.append(argv)
+        stdout = {
+            "rev-parse": "true",
+            "merge-base": "a" * 40,
+            "rev-list": "1\t2",
+            "log": "subject line",
+            "show": "3\t1\tsrc/a.py",
+            "diff": "3\t1\tsrc/a.py",
+        }.get(argv[0], "")
+        return subprocess.CompletedProcess(["git", *argv], 0, stdout=stdout, stderr="")
+
+
+def _diff_cfg() -> ProjectContextConfig:
+    cfg = _enabled_cfg()
+    return replace(cfg, git=replace(cfg.git, include_diff_summaries=True))
+
+
+def _ref_calls(rec: _Recorder, ref: str) -> list[list[str]]:
+    return [argv for argv in rec.calls if any(ref in arg for arg in argv)]
+
+
+def _assert_ref_fenced(argv: list[str], ref: str) -> None:
+    """The ref sits after ``--end-of-options`` and before any ``--``."""
+    idx = next(i for i, arg in enumerate(argv) if ref in arg)
+    assert "--end-of-options" in argv[:idx], argv
+    if "--" in argv:
+        assert argv.index("--") > idx, argv
+
+
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("project_context.search_by_diff", {"from_ref": _INJECTION}),
+        ("project_context.search_by_diff", {"from_ref": "HEAD~1", "to_ref": _INJECTION}),
+        ("project_context.get_branch_lineage", {"base": _INJECTION}),
+        ("project_context.get_change_context", {"commit": _INJECTION}),
+        ("project_context.get_change_context", {"commit": "HEAD@{1}"}),
+        ("project_context.get_branch_lineage", {"base": "main..evil"}),
+    ],
+)
+def test_unsafe_refs_rejected_before_git_runs(tmp_path: Path, monkeypatch, tool, args) -> None:
+    rec = _Recorder()
+    monkeypatch.setattr(git_context, "run_git", rec)
+    ctx = _ctx(_diff_cfg(), tmp_path)
+    payload = _payload(git_tools.dispatch(tool, args, ctx))
+    assert payload["status"] == "invalid_args"
+    assert "git ref" in payload["reason"]
+    assert rec.calls == []
+
+
+def test_search_by_diff_valid_refs_are_fenced(tmp_path: Path, monkeypatch) -> None:
+    rec = _Recorder()
+    monkeypatch.setattr(git_context, "run_git", rec)
+    ctx = _ctx(_diff_cfg(), tmp_path)
+    payload = _payload(
+        git_tools.dispatch(
+            "project_context.search_by_diff", {"from_ref": "v1.2.3", "to_ref": "origin/main"}, ctx
+        )
+    )
+    assert payload["files_changed"] == 1
+    assert rec.calls == [
+        ["diff", "--numstat", "--end-of-options", "v1.2.3", "origin/main", "--"],
+    ]
+
+
+def test_branch_lineage_valid_base_is_fenced(tmp_path: Path, monkeypatch) -> None:
+    rec = _Recorder()
+    monkeypatch.setattr(git_context, "run_git", rec)
+    ctx = _ctx(_enabled_cfg(), tmp_path)
+    payload = _payload(
+        git_tools.dispatch("project_context.get_branch_lineage", {"base": "origin/main"}, ctx)
+    )
+    assert payload["base"] == "origin/main"
+    assert (payload["behind"], payload["ahead"]) == (1, 2)
+    calls = _ref_calls(rec, "origin/main")
+    assert [argv[0] for argv in calls] == ["merge-base", "rev-list"]
+    for argv in calls:
+        _assert_ref_fenced(argv, "origin/main")
+
+
+def test_change_context_valid_commit_is_fenced(tmp_path: Path, monkeypatch) -> None:
+    rec = _Recorder()
+    monkeypatch.setattr(git_context, "run_git", rec)
+    ctx = _ctx(_enabled_cfg(), tmp_path)
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    payload = _payload(
+        git_tools.dispatch("project_context.get_change_context", {"commit": sha}, ctx)
+    )
+    assert payload["commit"] == sha
+    assert payload["files_changed"] == 1
+    calls = _ref_calls(rec, sha)
+    assert [argv[0] for argv in calls] == ["log", "show"]
+    for argv in calls:
+        _assert_ref_fenced(argv, sha)
+        assert argv[-1] == "--"
+
+
+def test_explain_file_history_path_follows_double_dash(tmp_path: Path, monkeypatch) -> None:
+    rec = _Recorder()
+    monkeypatch.setattr(git_context, "run_git", rec)
+    ctx = _ctx(_enabled_cfg(), tmp_path)
+    git_tools.dispatch(
+        "project_context.explain_file_history", {"path": "--output=x", "limit": -5}, ctx
+    )
+    log_calls = [argv for argv in rec.calls if argv[0] == "log"]
+    assert log_calls == [["log", "-1", "--format=%H\t%s", "--", "--output=x"]]
+
+
+@pytest.mark.parametrize(
+    "args",
+    [{"path": "a\x00b"}, {"path": "ok.py", "limit": "many"}, {"path": ""}],
+)
+def test_explain_file_history_invalid_args(tmp_path: Path, monkeypatch, args) -> None:
+    rec = _Recorder()
+    monkeypatch.setattr(git_context, "run_git", rec)
+    ctx = _ctx(_enabled_cfg(), tmp_path)
+    payload = _payload(git_tools.dispatch("project_context.explain_file_history", args, ctx))
+    assert payload["status"] == "invalid_args"
+    assert rec.calls == []
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git binary not installed")
+def test_search_by_diff_injection_creates_no_file_real_git(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    ident = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    for argv in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "one"]):
+        subprocess.run(["git", *ident, *argv], cwd=repo, check=True, capture_output=True)
+    target = tmp_path / "pwned.txt"
+    ctx = _ctx(_diff_cfg(), repo)
+    payload = _payload(
+        git_tools.dispatch(
+            "project_context.search_by_diff", {"from_ref": f"--output={target}"}, ctx
+        )
+    )
+    assert payload["status"] == "invalid_args"
+    assert not target.exists()
 
 
 if __name__ == "__main__":  # pragma: no cover

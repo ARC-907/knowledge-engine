@@ -1,11 +1,18 @@
 """Optional git metadata collection for the project-context subsystem.
 
-All git access goes through ``subprocess.run`` with an argv list and
-``shell=False`` (matching the repo's ``host.py`` security posture). Git is
-entirely optional: if the ``git`` binary is missing, the directory is not a
-repository, or ``git.enabled`` is ``False`` in config, every public function
-degrades gracefully — :func:`collect` returns ``None`` and :func:`diff_summary`
-returns an empty :class:`~knowledge_engine.project_context.models.DiffSummary`.
+All git access in the subsystem goes through :func:`run_git` (argv list,
+``shell=False``, bounded timeout), and :func:`git_output` is its gracefully
+degrading wrapper. Git is entirely optional: if the ``git`` binary is missing,
+the directory is not a repository, or ``git.enabled`` is ``False`` in config,
+every public function degrades gracefully — :func:`collect` returns ``None``
+and :func:`diff_summary` returns an empty
+:class:`~knowledge_engine.project_context.models.DiffSummary`.
+
+Refs supplied by callers (for example MCP tool arguments) are untrusted. They
+must pass :func:`validate_ref` before they reach an argv, and every invocation
+that carries one places ``--end-of-options`` before the refs and ``--`` after
+them, so a value such as ``--output=/some/path`` can never be parsed as an
+option.
 
 Privacy: the remote URL is never stored raw. Only a SHA-256 hash of a sanitized
 ``host + path`` (credentials stripped) is recorded, so a project can be matched
@@ -16,45 +23,156 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from .models import DiffSummary, GitContext
 
-# Conservative timeout so a hung/locked repo can never stall ingestion.
-_GIT_TIMEOUT = 10
+logger = logging.getLogger(__name__)
+
+#: Conservative timeout (seconds) so a hung/locked repo can never stall a caller.
+GIT_TIMEOUT_SECONDS: float = 10.0
+
+#: Upper bound on an accepted ref's length; real refs are far shorter.
+MAX_REF_LENGTH = 256
+
+# Characters ``git check-ref-format`` forbids anywhere in a ref name (control
+# characters and whitespace are rejected separately).
+_REF_FORBIDDEN_CHARS = frozenset("~^:?*[\\")
+
+# Trailing ancestry operators accepted after a ref name: ``~``, ``~3``, ``^``, ``^2``.
+_REV_SUFFIX_RE = re.compile(r"(?:[~^][0-9]{0,9})*")
 
 
-def _run_git(root: Path, args: list[str]) -> str | None:
-    """Run ``git <args>`` in ``root`` and return stripped stdout.
+def run_git(
+    args: Sequence[str],
+    cwd: Path,
+    *,
+    timeout: float = GIT_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    """Run ``git <args>`` in ``cwd`` and return the completed process.
+
+    This is the single git runner for the project-context subsystem. The argv
+    is passed as a list with ``shell=False``, so no shell parsing happens, and
+    ``check=False`` leaves the return code to the caller. Callers that pass
+    untrusted refs must run them through :func:`validate_ref` and terminate
+    options with ``--end-of-options`` / ``--`` themselves.
+
+    Raises:
+        FileNotFoundError / OSError: the ``git`` binary could not be started.
+        subprocess.TimeoutExpired: git did not finish within ``timeout`` seconds.
+    """
+    return subprocess.run(  # noqa: S603  # argv list with shell=False; refs are validated by callers
+        ["git", *args],  # noqa: S607  # git is resolved from PATH like any other optional tool
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        shell=False,
+        timeout=timeout,
+        check=False,  # the return code is inspected by the caller
+    )
+
+
+def git_output(
+    cwd: Path | str,
+    args: Sequence[str],
+    *,
+    timeout: float = GIT_TIMEOUT_SECONDS,
+) -> str | None:
+    """Run ``git <args>`` in ``cwd`` and return stripped stdout, or ``None``.
 
     Returns ``None`` if the binary is missing, the command fails (non-zero
-    exit), or it times out. Never raises for the common failure modes; this is
-    an optional capability.
+    exit), or it times out. Never raises for those common failure modes; git
+    is an optional capability.
     """
     try:
-        proc = subprocess.run(  # noqa: S603  # argv list, no shell; git resolved from PATH
-            ["git", *args],  # noqa: S607  # git resolved from PATH
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            shell=False,
-            timeout=_GIT_TIMEOUT,
-            check=False,  # returncode is inspected below
-        )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        proc = run_git(args, Path(cwd), timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.debug("git %s unavailable in %s: %s", _argv_head(args), cwd, exc)
         return None
     if proc.returncode != 0:
+        logger.debug("git %s exited %d in %s", _argv_head(args), proc.returncode, cwd)
         return None
     return proc.stdout.strip()
 
 
+def _argv_head(args: Sequence[str]) -> str:
+    """Return the git subcommand for log lines (never the untrusted arguments)."""
+    return args[0] if args else ""
+
+
+def validate_ref(ref: object) -> str:
+    """Return ``ref`` unchanged if it is a safe git revision, else raise ``ValueError``.
+
+    Accepts what ``git check-ref-format --allow-onelevel`` accepts (``main``,
+    ``origin/main``, ``v1.2.3``, a full or abbreviated hex SHA, ``HEAD``),
+    optionally followed by ancestry operators (``HEAD~3``, ``main^``,
+    ``HEAD^2~1``). Everything is checked locally; no subprocess is started.
+
+    Rejected: non-strings, empty values, anything starting with ``-`` (option
+    injection), control characters or whitespace, ``..`` (including range
+    syntax), ``@{`` (reflog syntax), a lone ``@``, backslashes and the other
+    characters git forbids in ref names, empty or dot-leading path components,
+    components ending in ``.lock``, a trailing ``.`` or ``/``, and values longer
+    than :data:`MAX_REF_LENGTH`.
+    """
+    if not isinstance(ref, str):
+        raise ValueError(f"git ref must be a string, got {type(ref).__name__}")
+    shown = ref if len(ref) <= 80 else ref[:77] + "..."
+    if not ref:
+        raise ValueError("git ref must not be empty")
+    if len(ref) > MAX_REF_LENGTH:
+        raise ValueError(f"git ref {shown!r} is longer than {MAX_REF_LENGTH} characters")
+    if ref.startswith("-"):
+        raise ValueError(f"git ref {shown!r} must not start with '-'")
+    if any(ch.isspace() or not ch.isprintable() for ch in ref):
+        raise ValueError(f"git ref {shown!r} contains whitespace or control characters")
+
+    # Split ``name~2^`` into the ref name and its ancestry suffix.
+    cut = min((i for i in (ref.find("~"), ref.find("^")) if i != -1), default=len(ref))
+    name, suffix = ref[:cut], ref[cut:]
+    if suffix and not _REV_SUFFIX_RE.fullmatch(suffix):
+        raise ValueError(f"git ref {shown!r} has an unsupported revision suffix")
+
+    reason = _check_ref_format(name)
+    if reason:
+        raise ValueError(f"git ref {shown!r} is not a valid ref name: {reason}")
+    return ref
+
+
+def _check_ref_format(name: str) -> str | None:
+    """Mirror ``git check-ref-format --allow-onelevel``; return why ``name`` fails."""
+    if not name:
+        return "empty ref name"
+    if name == "@":
+        return "a lone '@' is not allowed"
+    if "@{" in name:
+        return "'@{' (reflog syntax) is not allowed"
+    if ".." in name:
+        return "'..' is not allowed"
+    bad = sorted({ch for ch in name if ch in _REF_FORBIDDEN_CHARS})
+    if bad:
+        return f"forbidden character(s) {''.join(bad)!r}"
+    if name.startswith("/") or name.endswith("/") or "//" in name:
+        return "empty path component"
+    if name.endswith("."):
+        return "must not end with '.'"
+    for component in name.split("/"):
+        if component.startswith("."):
+            return "path components must not start with '.'"
+        if component.endswith(".lock"):
+            return "path components must not end with '.lock'"
+    return None
+
+
 def _is_repo(root: Path) -> bool:
     """True if ``root`` is inside a git work tree."""
-    out = _run_git(root, ["rev-parse", "--is-inside-work-tree"])
+    out = git_output(root, ["rev-parse", "--is-inside-work-tree"])
     return out == "true"
 
 
@@ -80,7 +198,7 @@ def _sanitize_remote(url: str) -> str:
 
 def _remote_hash(root: Path) -> str | None:
     """SHA-256 of the sanitized origin remote, or ``None`` if no remote."""
-    url = _run_git(root, ["remote", "get-url", "origin"])
+    url = git_output(root, ["remote", "get-url", "origin"])
     if not url:
         return None
     sanitized = _sanitize_remote(url)
@@ -104,15 +222,15 @@ def collect(root: Path | str, cfg: Any) -> GitContext | None:
     if not _is_repo(root_path):
         return None
 
-    branch = _run_git(root_path, ["rev-parse", "--abbrev-ref", "HEAD"])
-    commit_hash = _run_git(root_path, ["rev-parse", "HEAD"])
+    branch = git_output(root_path, ["rev-parse", "--abbrev-ref", "HEAD"])
+    commit_hash = git_output(root_path, ["rev-parse", "HEAD"])
 
     include_dirty = True
     if cfg is not None:
         include_dirty = getattr(getattr(cfg, "git", None), "include_dirty_status", True)
     dirty = False
     if include_dirty:
-        status = _run_git(root_path, ["status", "--porcelain"])
+        status = git_output(root_path, ["status", "--porcelain"])
         dirty = bool(status)
 
     remote_hash = _remote_hash(root_path)
@@ -158,9 +276,18 @@ def diff_summary(root: Path | str, a: str, b: str) -> DiffSummary:
     Returns counts of files changed, insertions, and deletions plus a short
     human-readable summary line. Full diff text is intentionally out of scope
     here (gated behind ``git.include_full_diffs`` elsewhere). If git is missing
-    or the diff fails, an all-zero summary is returned — never an exception.
+    or the diff fails, an all-zero summary is returned.
+
+    Raises:
+        ValueError: ``a`` or ``b`` is not a safe ref (see :func:`validate_ref`).
+            Validation happens before any subprocess is started.
     """
-    out = _run_git(Path(root), ["diff", "--numstat", a, b])
+    from_ref = validate_ref(a)
+    to_ref = validate_ref(b)
+    out = git_output(
+        Path(root),
+        ["diff", "--numstat", "--end-of-options", from_ref, to_ref, "--"],
+    )
     if out is None:
         return DiffSummary(
             from_ref=a,

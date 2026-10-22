@@ -7,8 +7,14 @@ capability never raises — it returns a structured ``{"status": "disabled"}``
 envelope so an agent can discover the capability instead of hitting an error.
 
 All git access flows through :mod:`knowledge_engine.project_context.git_context`
-(``subprocess`` argv lists, ``shell=False``) or the small argv helpers below,
-which degrade gracefully when the ``git`` binary is missing.
+(:func:`~knowledge_engine.project_context.git_context.run_git`: argv lists,
+``shell=False``), which degrades gracefully when the ``git`` binary is missing.
+
+Refs taken from tool arguments are untrusted: each one is checked with
+:func:`~knowledge_engine.project_context.git_context.validate_ref` and placed
+after ``--end-of-options`` and before ``--`` in the argv. An invalid ref (for
+example ``--output=/tmp/x``) yields ``{"status": "invalid_args"}`` and git is
+never started.
 
 Tools:
 
@@ -22,7 +28,7 @@ Tools:
 
 from __future__ import annotations
 
-import subprocess
+import logging
 from dataclasses import asdict
 from typing import Any
 
@@ -31,8 +37,10 @@ from .base import ToolContext, status_result, text_result
 
 GROUP = "git"
 
-# Conservative timeout so a hung/locked repo can never stall a tool call.
-_GIT_TIMEOUT = 10
+logger = logging.getLogger(__name__)
+
+#: Bounds for the ``limit`` argument of the history/commit tools.
+_MAX_LIMIT = 1000
 
 
 def tools(cfg) -> list[dict]:
@@ -113,31 +121,44 @@ def tools(cfg) -> list[dict]:
     ]
 
 
-def _run_git(root, args: list[str]) -> str | None:
-    """Run ``git <args>`` in ``root`` (argv list, ``shell=False``).
+def _limit_arg(args: dict[str, Any], default: int = 10) -> int:
+    """Parse the ``limit`` argument as an int in ``[1, _MAX_LIMIT]``.
 
-    Returns stripped stdout, or ``None`` if the binary is missing, the command
-    fails, or it times out. Never raises for the common failure modes.
+    Raises ``ValueError`` for a non-integer value; out-of-range values are clamped.
     """
+    raw = args.get("limit", default)
+    if isinstance(raw, bool):
+        raise ValueError("'limit' must be an integer")
     try:
-        proc = subprocess.run(  # noqa: S603  # argv list, no shell; git resolved from PATH
-            ["git", *args],  # noqa: S607  # git resolved from PATH
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            shell=False,
-            timeout=_GIT_TIMEOUT,
-            check=False,  # returncode is inspected below
-        )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
-        return None
-    if proc.returncode != 0:
-        return None
-    return proc.stdout.strip()
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"'limit' must be an integer, got {raw!r}") from None
+    return max(1, min(value, _MAX_LIMIT))
+
+
+def _path_arg(raw: Any) -> str:
+    """Validate a repo-relative pathspec argument (placed after ``--``)."""
+    if not isinstance(raw, str) or not raw:
+        raise ValueError("'path' is required")
+    if any(not ch.isprintable() for ch in raw):
+        raise ValueError("'path' must not contain control characters")
+    return raw
 
 
 def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
-    """Handle a git/lineage tool call, honoring config gates."""
+    """Handle a git/lineage tool call, honoring config gates.
+
+    Argument validation failures (``ValueError``, e.g. an unsafe ref) are
+    returned as the standard ``invalid_args`` status envelope.
+    """
+    try:
+        return _dispatch(name, args, ctx)
+    except ValueError as exc:
+        logger.warning("rejected %s call: %s", name, exc)
+        return status_result("invalid_args", reason=str(exc))
+
+
+def _dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     if name == "project_context.git_context":
         return _git_context(args, ctx)
     if name == "project_context.search_by_commit":
@@ -206,12 +227,15 @@ def _get_branch_lineage(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
     """Describe lineage of HEAD relative to a base ref."""
     if not ctx.cfg.git.enabled:
         return status_result("disabled", reason="git.enabled is false")
+    base = gitctx.validate_ref(args.get("base") or "main")
     if not gitctx._is_repo(ctx.root):
         return status_result("not_configured", reason="not a git repository or git unavailable")
-    base = args.get("base") or "main"
-    current = _run_git(ctx.root, ["rev-parse", "--abbrev-ref", "HEAD"])
-    merge_base = _run_git(ctx.root, ["merge-base", "HEAD", base])
-    counts = _run_git(ctx.root, ["rev-list", "--left-right", "--count", f"{base}...HEAD"])
+    current = gitctx.git_output(ctx.root, ["rev-parse", "--abbrev-ref", "HEAD"])
+    merge_base = gitctx.git_output(ctx.root, ["merge-base", "--end-of-options", "HEAD", base])
+    counts = gitctx.git_output(
+        ctx.root,
+        ["rev-list", "--left-right", "--count", "--end-of-options", f"{base}...HEAD", "--"],
+    )
     ahead: int | None = None
     behind: int | None = None
     if counts:
@@ -233,11 +257,15 @@ def _get_change_context(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
     """Summarize a single commit (subject + numstat)."""
     if not ctx.cfg.git.enabled:
         return status_result("disabled", reason="git.enabled is false")
+    commit = gitctx.validate_ref(args.get("commit") or "HEAD")
     if not gitctx._is_repo(ctx.root):
         return status_result("not_configured", reason="not a git repository or git unavailable")
-    commit = args.get("commit") or "HEAD"
-    subject = _run_git(ctx.root, ["log", "-1", "--format=%s", commit])
-    numstat = _run_git(ctx.root, ["show", "--numstat", "--format=", commit])
+    subject = gitctx.git_output(
+        ctx.root, ["log", "-1", "--format=%s", "--end-of-options", commit, "--"]
+    )
+    numstat = gitctx.git_output(
+        ctx.root, ["show", "--numstat", "--format=", "--end-of-options", commit, "--"]
+    )
     files: list[dict[str, Any]] = []
     insertions = 0
     deletions = 0
@@ -269,15 +297,13 @@ def _explain_file_history(args: dict[str, Any], ctx: ToolContext) -> dict[str, A
     """List recent commits touching a file path."""
     if not ctx.cfg.git.enabled:
         return status_result("disabled", reason="git.enabled is false")
+    path = _path_arg(args.get("path"))
+    limit = _limit_arg(args)
     if not gitctx._is_repo(ctx.root):
         return status_result("not_configured", reason="not a git repository or git unavailable")
-    path = args.get("path")
-    if not path:
-        return status_result("invalid_args", reason="'path' is required")
-    limit = int(args.get("limit", 10))
-    out = _run_git(
+    out = gitctx.git_output(
         ctx.root,
-        ["log", f"-{limit}", "--format=%H\t%s", "--", str(path)],
+        ["log", f"-{limit}", "--format=%H\t%s", "--", path],
     )
     commits: list[dict[str, str]] = []
     for line in (out or "").splitlines():
@@ -297,5 +323,6 @@ def _search_by_diff(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     if not from_ref:
         return status_result("invalid_args", reason="'from_ref' is required")
     to_ref = args.get("to_ref") or "HEAD"
+    # diff_summary validates both refs before any subprocess is started.
     summary = gitctx.diff_summary(ctx.root, from_ref, to_ref)
     return text_result(asdict(summary))
