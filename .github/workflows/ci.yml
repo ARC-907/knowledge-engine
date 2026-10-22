@@ -76,9 +76,7 @@ jobs:
       - name: Install
         run: uv sync --group test
       - name: pytest
-        # TODO(#4): drop `-p no:randomly` once the agent-board sweeper test isolation
-        # fix lands; until then random ordering can trip test_http_scope_isolation.
-        run: uv run pytest -q -p no:randomly --cov --cov-report=xml:coverage.xml --cov-report=term
+        run: uv run pytest -q -p randomly --cov --cov-report=xml:coverage.xml --cov-report=term
         working-directory: engine
       - name: Upload coverage report
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
