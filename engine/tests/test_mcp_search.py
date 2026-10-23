@@ -120,10 +120,10 @@ def test_no_kind_and_unknown_kind(server: Engine) -> None:
     assert _search(server, query="fox", kind="kit") == []
 
 
-def test_empty_kind_is_rejected(server: Engine) -> None:
-    # The schema has always listed the four kinds; the SDK server enforces it,
-    # where the hand-rolled server silently read "" as "no filter".
-    result = _call(server, query="fox", kind="")
+def test_empty_kind_means_no_filter(server: Engine) -> None:
+    # Pre-SDK contract kept: "" is "no filter", while a wrong kind is still rejected.
+    assert _search(server, query="fox", kind="") == _search(server, query="fox")
+    result = _call(server, query="fox", kind="plugin")
     assert result.is_error
     assert "kind" in _text(result)
 

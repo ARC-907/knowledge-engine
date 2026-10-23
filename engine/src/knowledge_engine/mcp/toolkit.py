@@ -28,7 +28,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.mcpserver.tools import ToolManager
 from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase, FuncMetadata
 from mcp.shared.exceptions import MCPError
-from mcp_types import CallToolResult
+from mcp.types import CallToolResult
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)

@@ -26,14 +26,14 @@ from typing import Annotated, Any
 import anyio
 from mcp import Client
 from mcp.server.mcpserver import MCPServer
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 from .. import __version__
 from ..core.config import Config
 from ..core.registry import EntryKind, Registry
 from ..retrieval.fts5 import Indexer
 from .http import transport_security
-from .options import add_arguments
+from .options import add_arguments, resolve_http_options
 from .toolkit import DispatchFn, register_group, tool_errors
 
 logger = logging.getLogger(__name__)
@@ -125,6 +125,11 @@ def _register_optional_groups(server: MCPServer[Any]) -> None:
 # ── Base tools ───────────────────────────────────────────────────────
 
 
+def _empty_is_none(value: object) -> object:
+    """Keep the pre-SDK contract: an empty ``kind`` means "no filter"."""
+    return None if value == "" else value
+
+
 def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: Indexer) -> None:
     # Names, parameters and descriptions are a public contract, frozen in
     # tests/snapshots/mcp_tools.json. Results are the same JSON text as before.
@@ -132,7 +137,11 @@ def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: In
     def search(
         query: Annotated[str, Field(description="FTS5 query string")],
         limit: int = 10,
-        kind: Annotated[EntryKind | None, Field(description="Optional kind filter")] = None,
+        kind: Annotated[
+            EntryKind | None,
+            BeforeValidator(_empty_is_none),
+            Field(description="Optional kind filter"),
+        ] = None,
     ) -> str:
         """Full-text search across enabled libraries, skills, kits, and tools in the corpus."""
         with tool_errors("search"):
@@ -140,7 +149,10 @@ def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: In
                 raise ValueError("limit must be a positive integer")
             return json.dumps(indexer.search(query, limit=limit, kind=kind), indent=2)
 
-    def registry_list(kind: EntryKind | None = None, enabled_only: bool = False) -> str:
+    def registry_list(
+        kind: Annotated[EntryKind | None, BeforeValidator(_empty_is_none)] = None,
+        enabled_only: bool = False,
+    ) -> str:
         """List entries in the registry."""
         with tool_errors("registry_list"):
             return json.dumps(registry.list(kind=kind, enabled_only=enabled_only), indent=2)
@@ -283,7 +295,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="knowledge-engine mcp", description="Run the knowledge-engine MCP server."
     )
     add_arguments(parser)
-    return run(parser.parse_args(argv))
+    args = parser.parse_args(argv)
+    resolve_http_options(parser, args)
+    return run(args)
 
 
 if __name__ == "__main__":

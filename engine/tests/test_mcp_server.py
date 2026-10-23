@@ -20,8 +20,11 @@ import anyio
 import mcp.types
 import pytest
 from mcp import Client
-from mcp.client._memory import InMemoryTransport
 from mcp.types.version import LATEST_HANDSHAKE_VERSION
+
+# Private SDK module used for one handshake variant; an SDK patch release that
+# moves it skips that case instead of turning the whole gate red.
+InMemoryTransport = pytest.importorskip("mcp.client._memory").InMemoryTransport
 
 SNAPSHOT = Path(__file__).parent / "snapshots" / "mcp_tools.json"
 BASE_TOOLS = ["search", "registry_list", "registry_toggle", "registry_get"]
@@ -810,3 +813,30 @@ def test_cli_serve_exports_the_bind_host(ke_env: Path, monkeypatch: pytest.Monke
             "factory": True,
         }
     ]
+
+
+@pytest.mark.parametrize("flags", [["--host", "0.0.0.0"], ["--port", "9300"]])  # noqa: S104
+def test_host_and_port_require_http(flags: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    from knowledge_engine.mcp.server import main
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--selftest", *flags])
+    assert exc.value.code == 2
+    assert "--http" in capsys.readouterr().err
+
+
+def test_http_defaults_fill_in_when_flags_are_omitted() -> None:
+    import argparse
+
+    from knowledge_engine.mcp.options import (
+        DEFAULT_HTTP_HOST,
+        DEFAULT_HTTP_PORT,
+        add_arguments,
+        resolve_http_options,
+    )
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    args = parser.parse_args(["--http"])
+    resolve_http_options(parser, args)
+    assert (args.host, args.port) == (DEFAULT_HTTP_HOST, DEFAULT_HTTP_PORT)

@@ -23,4 +23,10 @@ warnings.warn(
 __all__ = ["main"]
 
 if __name__ == "__main__":
+    # The DeprecationWarning above is attributed to runpy under ``python -m``
+    # and silenced by the default filters, so say it where the operator looks.
+    sys.stderr.write(
+        "knowledge_engine.mcp_server is deprecated; launch the server with "
+        "`knowledge-engine mcp` (or `python -m knowledge_engine.mcp.server`) instead.\n"
+    )
     sys.exit(main())

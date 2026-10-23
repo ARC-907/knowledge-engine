@@ -11,7 +11,7 @@ from typing import Any
 
 from .core.config import Config
 from .core.registry import EntryKind, Registry, RegistryEntry
-from .mcp.options import add_arguments as add_mcp_arguments
+from .mcp.options import add_arguments as add_mcp_arguments, resolve_http_options
 from .retrieval.fts5 import Indexer
 
 BASE_MCP_TOOLS = ["search", "registry_list", "registry_toggle", "registry_get"]
@@ -220,6 +220,7 @@ def main() -> int:
     if args.cmd == "mcp":
         from .mcp.server import run as mcp_run
 
+        resolve_http_options(parser, args)
         return mcp_run(args)
 
     config = Config.from_env()

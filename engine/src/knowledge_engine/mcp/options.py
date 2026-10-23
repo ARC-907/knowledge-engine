@@ -38,12 +38,26 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--host",
-        default=DEFAULT_HTTP_HOST,
+        default=None,
         help=f"Bind address for --http (default {DEFAULT_HTTP_HOST}).",
     )
     parser.add_argument(
         "--port",
         type=_port,
-        default=DEFAULT_HTTP_PORT,
+        default=None,
         help=f"Port for --http (default {DEFAULT_HTTP_PORT}).",
     )
+
+
+def resolve_http_options(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Fill in ``--host``/``--port`` defaults, or reject them when ``--http`` is off.
+
+    Without this the flags were accepted and silently ignored for stdio and
+    ``--selftest`` runs. Call it right after ``parse_args``.
+    """
+    if not args.http and (args.host is not None or args.port is not None):
+        parser.error("--host/--port only apply with --http")
+    if args.host is None:
+        args.host = DEFAULT_HTTP_HOST
+    if args.port is None:
+        args.port = DEFAULT_HTTP_PORT
