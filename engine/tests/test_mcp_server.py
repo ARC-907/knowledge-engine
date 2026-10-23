@@ -632,8 +632,11 @@ def test_http_mount_serves_mcp(mcp_http_app: Any) -> None:
     from fastapi.testclient import TestClient
 
     app = mcp_http_app
-    assert app.state.built_with == [(app.state.config, app.state.registry, app.state.indexer)]
+    # The factory does no I/O: the server is built by the lifespan, around the
+    # registry and index that lifespan opened.
+    assert app.state.built_with == []
     with TestClient(app, base_url="http://127.0.0.1:9210") as client:
+        assert app.state.built_with == [(app.state.config, app.state.registry, app.state.indexer)]
         r = client.post(
             "/registry", json={"id": "kit-x", "kind": "kit", "name": "X", "path": "kits/x"}
         )
@@ -694,8 +697,11 @@ def test_http_mount_serves_mcp(mcp_http_app: Any) -> None:
         r = client.post("/mcp", headers={**HTTP_HEADERS, "Host": "evil.example"}, json={})
         assert r.status_code == 421
 
-    # The session manager is single-use; a second lifespan gets a fresh one.
+    # The session manager is single-use; a second lifespan gets a fresh one
+    # (and a fresh server around that lifespan's newly opened registry/index).
     with TestClient(app, base_url="http://127.0.0.1:9210") as client:
+        assert len(app.state.built_with) == 2
+        assert app.state.built_with[-1][1] is app.state.registry
         message, _ = _initialize(client, LATEST_HANDSHAKE_VERSION)
         assert message["result"]["protocolVersion"] == LATEST_HANDSHAKE_VERSION
     # Outside the lifespan the endpoint answers 503 instead of crashing.

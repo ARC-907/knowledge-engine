@@ -50,8 +50,26 @@ class Indexer:
         self.registry = registry
         self.db_path = config.data_dir / INDEX_FILENAME
         self._lock = threading.Lock()
+        self._closed = False
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        self._conn.executescript(self.SCHEMA)
+        try:
+            self._conn.executescript(self.SCHEMA)
+        except BaseException:
+            self._conn.close()
+            raise
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def close(self) -> None:
+        """Close the index connection. Idempotent; later use raises ``ProgrammingError``."""
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._conn.close()
+        _logger.debug("FTS index %s closed", self.db_path)
 
     def rebuild(self) -> dict[str, int]:
         with self._lock:

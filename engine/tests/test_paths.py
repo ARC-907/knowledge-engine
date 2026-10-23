@@ -211,15 +211,20 @@ def test_master_key_file_lands_in_created_data_dir(
 
 
 def test_create_app_creates_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The factory does no I/O; the lifespan creates the data dir and databases."""
+    from fastapi.testclient import TestClient
+
     from knowledge_engine.app import create_app
 
     data = tmp_path / "new" / "data"
     monkeypatch.setenv("KE_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("KE_DATA_DIR", str(data))
 
-    create_app()
+    app = create_app()
+    assert not data.exists()
 
-    assert (data / "registry.db").is_file()
+    with TestClient(app):
+        assert (data / "registry.db").is_file()
 
 
 def test_mcp_server_creates_data_dir(

@@ -140,7 +140,7 @@ def test_invalid_key_is_401_on_admin_route() -> None:
 @pytest.mark.usefixtures("board_env")
 def test_bootstrap_master_once_from_loopback_then_409(caplog: pytest.LogCaptureFixture) -> None:
     with (
-        caplog.at_level(logging.WARNING, logger="knowledge_engine.server.api.board_routes"),
+        caplog.at_level(logging.WARNING, logger="knowledge_engine.agent_board.http"),
         TestClient(create_app(), client=LOOPBACK) as client,
     ):
         first = client.post("/board/keys/bootstrap-master")
@@ -320,7 +320,7 @@ def test_trusted_proxies_env_extends_the_proxy_set(monkeypatch: pytest.MonkeyPat
 @pytest.mark.usefixtures("board_env")
 def test_trust_policy_logged_at_startup(caplog: pytest.LogCaptureFixture) -> None:
     with (
-        caplog.at_level(logging.INFO, logger="knowledge_engine.server.api.board_routes"),
+        caplog.at_level(logging.INFO, logger="knowledge_engine.agent_board.http"),
         TestClient(create_app(), client=LOOPBACK),
     ):
         pass
@@ -883,7 +883,7 @@ def test_startup_policy_lines_reach_stderr_under_server_log_config(
     assert proc.stdout == "done"
     assert "CORS: allow_origins=" in proc.stderr, proc.stderr
     assert "board trust: trusted_cidrs=" in proc.stderr, proc.stderr
-    assert "knowledge_engine.server.api.board_routes:" in proc.stderr
+    assert "knowledge_engine.agent_board.http:" in proc.stderr
     assert "INFO" in proc.stderr
 
     quiet = run("WARNING")

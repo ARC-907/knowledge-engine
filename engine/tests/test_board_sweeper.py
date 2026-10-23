@@ -85,15 +85,16 @@ def test_standalone_service_honours_env(
 @pytest.mark.usefixtures("board_env")
 def test_reset_for_tests_stops_and_clears_state() -> None:
     assert sweeper.start() is True
-    old_event = sweeper._stop_event
+    default = sweeper.default_sweeper()
+    old_event = default._stop_event
 
     sweeper.reset_for_tests()
 
     assert not sweeper.is_running()
-    assert sweeper._thread is None
+    assert default._thread is None
     assert old_event.is_set()
-    assert sweeper._stop_event is not old_event
-    assert not sweeper._stop_event.is_set()
+    assert default._stop_event is not old_event
+    assert not default._stop_event.is_set()
     # A fresh start works after a reset.
     assert sweeper.start() is True
     assert sweeper.stop() is True

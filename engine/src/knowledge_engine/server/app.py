@@ -1,4 +1,12 @@
-"""FastAPI application factory."""
+"""FastAPI application factory.
+
+``create_app`` only *describes* the app: routes, middleware, exception
+handlers and the optional mounts. It performs no I/O -- no directory is
+created, no database opened, no provider probed. Everything stateful is
+built by the lifespan (:mod:`knowledge_engine.server.lifespan`) and reached
+by the routes through the dependency providers in
+:mod:`knowledge_engine.server.deps`.
+"""
 
 from __future__ import annotations
 
@@ -8,19 +16,18 @@ import logging
 from importlib import resources
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
-from ..core.config import Config
-from ..core.http import BodySizeLimitMiddleware, cors_origins, install_cors
-from ..core.registry import Registry
-from ..generation import ProviderRegistry
-from ..generation.cloud_http import CloudHTTPProvider, EchoProvider
-from ..generation.ollama_provider import OllamaProvider
-from ..retrieval.fts5 import Indexer
+from ..core.errors import error_response, install_exception_handlers
+from ..core.http import install_cors, parse_cors_origins
+from ..core.logsafe import log_safe
+from ..core.settings import Settings
+from ..generation import ProviderError
 from .api import generate_routes, health_routes, registry_routes, search_routes
-from .lifespan import bind_host, env_truthy, lifespan
+from .lifespan import lifespan
 
 _logger = logging.getLogger(__name__)
 
@@ -62,30 +69,51 @@ def _mount_dashboard(app: FastAPI) -> None:
     _logger.info("dashboard mounted at /ui from %s", ui_dir)
 
 
-def create_app() -> FastAPI:
-    config = Config.from_env()
-    # The registry mirror and FTS index below open SQLite files in data_dir.
-    config.ensure_dirs()
-    registry = Registry(config.registry_path, config.data_dir / "registry.db")
-    indexer = Indexer(config, registry)
-    providers = ProviderRegistry()
-    cloud = CloudHTTPProvider()
-    if cloud.available():
-        providers.register(cloud)
-    ollama = OllamaProvider()
-    if ollama.available():
-        providers.register(ollama)
-    providers.register(EchoProvider())
+async def _provider_error(request: Request, exc: Exception) -> JSONResponse:
+    _logger.warning(
+        "502 %s %s: %s", log_safe(request.method), log_safe(request.url.path), log_safe(exc)
+    )
+    return error_response(502, str(exc), "provider_error")
 
+
+def _mount_board(app: FastAPI) -> None:
+    try:
+        # Optional subsystem: a broken board must never block the core app.
+        from ..agent_board import http as board_http  # noqa: PLC0415
+
+        board_http.mount_board(app)
+    except Exception:
+        _logger.exception("agent board failed to mount; continuing without it")
+
+
+def _mount_mcp(app: FastAPI, settings: Settings) -> None:
+    try:
+        # Optional surface, imported lazily: the MCP SDK is only loaded when enabled.
+        from ..mcp.http import StreamableHTTPMount  # noqa: PLC0415
+
+        # The server itself is attached per lifespan, around that lifespan's
+        # registry and index; until then the endpoint answers 503.
+        mcp_http = StreamableHTTPMount(host=settings.bind_host)
+        app.router.routes.append(mcp_http.route())
+        app.state.mcp_http = mcp_http
+    except Exception:
+        _logger.exception("MCP streamable-HTTP endpoint failed to mount; continuing without it")
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Build the engine app. ``settings`` defaults to the current environment.
+
+    No I/O happens here; see :mod:`knowledge_engine.server.lifespan`.
+    """
+    settings = settings if settings is not None else Settings()
     app = FastAPI(
         title="Knowledge Engine",
         version=__version__,
         lifespan=lifespan,
     )
-    app.state.config = config
-    app.state.registry = registry
-    app.state.indexer = indexer
-    app.state.providers = providers
+    app.state.settings = settings
+    install_exception_handlers(app)
+    app.add_exception_handler(ProviderError, _provider_error)
 
     app.include_router(health_routes.router)
     app.include_router(registry_routes.router, prefix="/registry", tags=["registry"])
@@ -93,48 +121,21 @@ def create_app() -> FastAPI:
     app.include_router(generate_routes.router, prefix="/generate", tags=["generate"])
 
     # ── Agent Board (opt-out via KE_BOARD_ENABLED=0) ─────────────
-    # Router mounting happens at app-creation time (cheap, no I/O).
-    # Sweeper start/stop is owned by the `lifespan` context (see lifespan.py)
-    # so uvicorn reload / SIGTERM cleanly drains the daemon thread.
-    if env_truthy("KE_BOARD_ENABLED", default=True):
-        try:
-            # Optional subsystem: a broken board must never block the core app.
-            from .api import board_routes  # noqa: PLC0415
-
-            app.include_router(board_routes.router, prefix="/board", tags=["board"])
-            # Streamed-body cap for /board: ``Content-Length`` is checked in the
-            # routes too, but only this middleware stops a chunked upload.
-            app.add_middleware(
-                BodySizeLimitMiddleware,
-                max_bytes=board_routes.MAX_REQUEST_BODY_BYTES,
-                path_prefix="/board",
-            )
-        except Exception:
-            _logger.exception("agent board failed to mount; continuing without it")
+    # Router + body cap are mounted here (cheap, no I/O); the sweeper is
+    # created, started and stopped by the lifespan.
+    if settings.board_enabled:
+        _mount_board(app)
 
     # ── MCP over streamable HTTP at /mcp (opt-in via KE_MCP_HTTP=1) ──
-    # Shares this app's registry/indexer; the session manager runs inside
-    # `lifespan` (see lifespan.py). The bind address (KE_BIND_HOST, set by
-    # `knowledge-engine serve --host`) decides the endpoint's Host-header policy.
-    if env_truthy("KE_MCP_HTTP", default=False):
-        try:
-            # Optional surface, imported lazily: the MCP SDK is only loaded when enabled.
-            from ..mcp.http import StreamableHTTPMount  # noqa: PLC0415
-            from ..mcp.server import build_server  # noqa: PLC0415
-
-            mcp_http = StreamableHTTPMount(
-                build_server(app.state.config, app.state.registry, app.state.indexer),
-                host=bind_host(),
-            )
-            app.router.routes.append(mcp_http.route())
-            app.state.mcp_http = mcp_http
-        except Exception:
-            _logger.exception("MCP streamable-HTTP endpoint failed to mount; continuing without it")
+    # The bind address (KE_BIND_HOST, set by `knowledge-engine serve --host`)
+    # decides the endpoint's Host-header policy.
+    if settings.mcp_http:
+        _mount_mcp(app, settings)
 
     # Registered last so CORSMiddleware is the outermost layer (``add_middleware``
     # is LIFO): a 413 written by the body cap then still carries the CORS grant
     # for an allowed browser origin instead of surfacing as an opaque error.
-    install_cors(app, cors_origins(CORS_ORIGINS_ENV), env_var=CORS_ORIGINS_ENV)
+    install_cors(app, parse_cors_origins(settings.cors_origins), env_var=CORS_ORIGINS_ENV)
 
     # Static dashboard (served at /ui)
     _mount_dashboard(app)

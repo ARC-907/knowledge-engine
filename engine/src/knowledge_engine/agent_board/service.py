@@ -2,7 +2,7 @@
 
 For headless deployments where the operator only needs the coordination
 surface (no /search, no /registry, no dashboard). Reuses the same
-`api/board_routes.py` router on a separate FastAPI app + port.
+`agent_board/http.py` router on a separate FastAPI app + port.
 
 Default port 11437 was picked to avoid colliding with the engine's 9210.
 Override with `KE_BOARD_STANDALONE_PORT` or `--port`.
@@ -10,6 +10,9 @@ Override with `KE_BOARD_STANDALONE_PORT` or `--port`.
 CORS is restricted by default to loopback origins (the same list the
 engine app uses). Extend or override via the `KE_BOARD_CORS_ORIGINS` env
 var (comma-separated list, or `*` to allow any origin — not recommended).
+
+Construction is free of I/O: the sweeper is built and started by the
+lifespan, which also logs the effective trust policy.
 
 Use `python -m knowledge_engine.agent_board.service` or
 `knowledge-engine board-serve --port N` to start it.
@@ -27,11 +30,15 @@ from typing import Any
 from fastapi import FastAPI
 
 from .. import __version__
-from ..core.http import BodySizeLimitMiddleware, cors_origins, install_cors, uvicorn_proxy_kwargs
+from ..core.errors import install_exception_handlers
+from ..core.http import install_cors, parse_cors_origins, uvicorn_proxy_kwargs
 from ..core.logging_config import uvicorn_log_config
-from . import sweeper as kb_sweeper
+from ..core.settings import Settings
+from . import http as board_http, sweeper as kb_sweeper
 
 _logger = logging.getLogger(__name__)
+
+CORS_ORIGINS_ENV = "KE_BOARD_CORS_ORIGINS"
 
 
 @asynccontextmanager
@@ -41,66 +48,67 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     The sweeper coordinates with any embedded sweeper running in the
     main engine via the `board.sweeper_lease` row in `kv_store` so the
     two never both run a pass. `KE_BOARD_SWEEPER=0` skips it, matching the
-    embedded engine's lifespan.
+    embedded engine's lifespan. The sweeper object is owned by this app
+    (``app.state.sweeper``) and installed as the process default while the
+    app runs.
     """
+    settings: Settings = app.state.settings
     try:
-        from ..server.api import board_routes  # noqa: PLC0415
-
-        board_routes.log_trust_policy()
+        board_http.log_trust_policy(settings)
     except Exception:
         _logger.exception("could not log board trust policy")
+    owned = kb_sweeper.Sweeper(settings=settings)
+    app.state.sweeper = owned
+    previous = kb_sweeper.install_default(owned)
     try:
-        if kb_sweeper.env_override() is False:
+        if owned.env_override() is False:
             _logger.info("standalone sweeper disabled by %s", kb_sweeper.SWEEPER_ENV)
         else:
-            kb_sweeper.start()
+            owned.start()
     except Exception:
         _logger.exception("standalone sweeper failed to start")
     try:
         yield
     finally:
         try:
-            kb_sweeper.stop()
+            owned.stop()
         except Exception:
             _logger.exception("standalone sweeper failed to stop cleanly")
+        kb_sweeper.install_default(previous)
 
 
-CORS_ORIGINS_ENV = "KE_BOARD_CORS_ORIGINS"
-
-
-def _resolve_cors_origins() -> list[str]:
+def _resolve_cors_origins(settings: Settings | None = None) -> list[str]:
     """Default to loopback origins. `KE_BOARD_CORS_ORIGINS=*` opts into
     permissive CORS for users who need it (and accept the implications);
     a comma-separated list overrides the default explicitly. Shares its
-    parser and defaults with the engine app (``core.http.cors_origins``).
+    parser and defaults with the engine app (``core.http.parse_cors_origins``).
     """
-    return cors_origins(CORS_ORIGINS_ENV)
+    settings = settings if settings is not None else Settings()
+    return parse_cors_origins(settings.board_cors_origins)
 
 
-def create_standalone_app() -> FastAPI:
-    """Build a FastAPI app exposing only the /board/* routes."""
-    # Local import: keeps Settings cold-import safe and breaks the
-    # agent_board -> server.api.board_routes -> agent_board import cycle.
-    from ..server.api import board_routes  # noqa: PLC0415
+def create_standalone_app(settings: Settings | None = None) -> FastAPI:
+    """Build a FastAPI app exposing only the /board/* routes.
 
+    Construction does no I/O; the sweeper is created and started by the
+    lifespan. ``settings`` defaults to the current environment.
+    """
+    settings = settings if settings is not None else Settings()
     app = FastAPI(
         title="Knowledge Engine — Agent Board (standalone)",
         version=__version__,
         lifespan=_lifespan,
     )
+    app.state.settings = settings
+    install_exception_handlers(app)
     # CORS is locked to loopback by default. Operators on a private mesh
     # who want browser access from a non-loopback origin set
     # KE_BOARD_CORS_ORIGINS explicitly; the peer-trust gate still applies
     # at the route layer.
-    app.add_middleware(
-        BodySizeLimitMiddleware,
-        max_bytes=board_routes.MAX_REQUEST_BODY_BYTES,
-        path_prefix="/board",
-    )
+    board_http.mount_board(app)
     # CORS is registered after the body cap so it ends up outermost
     # (``add_middleware`` is LIFO) and a 413 still carries the CORS grant.
-    install_cors(app, _resolve_cors_origins(), env_var=CORS_ORIGINS_ENV)
-    app.include_router(board_routes.router, prefix="/board", tags=["board"])
+    install_cors(app, _resolve_cors_origins(settings), env_var=CORS_ORIGINS_ENV)
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -109,8 +117,8 @@ def create_standalone_app() -> FastAPI:
     return app
 
 
-def serve(host: str = "127.0.0.1", port: int = 11437) -> int:
-    """Run the standalone service via uvicorn."""
+def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
+    """Run the standalone service via uvicorn (``port`` default: ``KE_BOARD_STANDALONE_PORT``)."""
     try:
         # Only needed when actually serving; keeps `import agent_board` light.
         import uvicorn  # noqa: PLC0415
@@ -120,13 +128,14 @@ def serve(host: str = "127.0.0.1", port: int = 11437) -> int:
     # Same wiring as `knowledge-engine serve`: a root handler so the board's
     # INFO policy lines reach stderr, and uvicorn's proxy-header handling
     # bound to KE_TRUST_PROXY / KE_TRUSTED_PROXIES instead of its own default.
+    settings = Settings()
     uvicorn.run(
         "knowledge_engine.agent_board.service:create_standalone_app",
         host=host,
-        port=port,
+        port=port if port is not None else settings.board_standalone_port,
         factory=True,
-        log_config=uvicorn_log_config(),
-        **uvicorn_proxy_kwargs(),
+        log_config=uvicorn_log_config(settings.log_level),
+        **uvicorn_proxy_kwargs(settings=settings),
     )
     return 0
 
@@ -135,7 +144,9 @@ def main() -> int:
     """`python -m knowledge_engine.agent_board.service` entry point."""
     p = argparse.ArgumentParser(prog="agent-board-service")
     p.add_argument("--host", default="127.0.0.1")
-    p.add_argument("--port", type=int, default=11437)
+    p.add_argument(
+        "--port", type=int, default=None, help="Port (default: KE_BOARD_STANDALONE_PORT or 11437)."
+    )
     args = p.parse_args()
     return serve(host=args.host, port=args.port)
 

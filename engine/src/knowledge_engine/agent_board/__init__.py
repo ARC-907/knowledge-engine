@@ -10,7 +10,7 @@ of the `foundation/db.py` SQLite backbone and the existing
 * Context-compressed digests for MCP callers (`store.digest`)
 * Provider-key vault for config-tab key management (`keys.py`)
 * Background sweeper for TTL prune + stale-blocker reminders (`sweeper.py`)
-* HTTP routes (`api/board_routes.py`)
+* HTTP routes, trust gate and request models (`http.py`)
 * MCP tool group (`mcp_tools/`)
 * CLI subcommand (`cli.py`)
 * Optional standalone watchdog mode (`service.py`)

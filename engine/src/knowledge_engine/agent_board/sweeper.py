@@ -12,7 +12,14 @@ Runs as a daemon thread inside the FastAPI process when
 `board_config.sweeper_enabled=1`. Standalone mode (`service.py`) runs the
 same loop on its own. The `KE_BOARD_SWEEPER` env var, when set, overrides
 the persisted flag at boot (`0`/`false`/`no`/`off` keep the thread from
-starting; any other value starts it).
+starting; `1`/`true`/`yes`/`on` start it; anything else is reported and
+ignored, see `core.settings`).
+
+The loop is owned by a :class:`Sweeper` object. Each app lifespan builds
+one with its settings (and the store module it sweeps) and installs it as
+the process default, so the module-level ``start()``/``stop()``/
+``is_running()``/``sweep_once()`` wrappers -- used by the MCP sweep tool,
+the CLI and the tests -- always act on the sweeper the running app owns.
 
 Concurrency: multiple sweepers (embedded + standalone, or multi-worker
 uvicorn) coordinate via a singleton lease row in `kv_store`
@@ -32,22 +39,20 @@ import threading
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from types import ModuleType
+from typing import TYPE_CHECKING, Any
 
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
 from . import scopes, store
 
+if TYPE_CHECKING:
+    from ..core.settings import Settings
+
 _logger = logging.getLogger(__name__)
 
 SWEEPER_ENV = "KE_BOARD_SWEEPER"
-_FALSY = frozenset({"0", "false", "no", "off", ""})
-
-_thread: threading.Thread | None = None
-# Each sweeper thread gets its own stop event (see start()), so a thread that
-# outlives stop()'s join timeout can never be revived by a later start().
-_stop_event = threading.Event()
-_lock = threading.Lock()
+THREAD_NAME = "agent-board-sweeper"
 
 
 def _holder_id() -> str:
@@ -67,84 +72,182 @@ def _holder_id() -> str:
 _HOLDER_SUFFIX = uuid.uuid4().hex[:4]
 
 
-# ── Lifecycle ──────────────────────────────────────────────────
-
-
-def env_override() -> bool | None:
+def env_override(settings: Settings | None = None) -> bool | None:
     """The `KE_BOARD_SWEEPER` boot override: None when unset, else on/off."""
-    raw = os.environ.get(SWEEPER_ENV)
-    if raw is None:
-        return None
-    return raw.strip().lower() not in _FALSY
+    if settings is None:
+        from ..core.settings import Settings  # noqa: PLC0415 - keep import light
+
+        settings = Settings()
+    return settings.board_sweeper
+
+
+# ── The sweeper object ─────────────────────────────────────────
+
+
+class Sweeper:
+    """One background sweeper loop (start / stop / is_running / sweep_once).
+
+    ``store_module`` is the board store facade the passes run against
+    (default: :mod:`knowledge_engine.agent_board.store`); ``settings``
+    supplies the ``KE_BOARD_SWEEPER`` override (default: read the
+    environment when asked). Every thread gets its own stop event, so a
+    thread that outlives :meth:`stop`'s join timeout can never be revived
+    by a later :meth:`start`.
+    """
+
+    def __init__(
+        self,
+        *,
+        store_module: ModuleType | None = None,
+        settings: Settings | None = None,
+    ) -> None:
+        self.store = store_module if store_module is not None else store
+        self.settings = settings
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+
+    # ── policy ──
+    def env_override(self) -> bool | None:
+        return env_override(self.settings)
+
+    def should_run(self) -> bool:
+        """Boot decision: the env override when set, else the persisted flag."""
+        override = self.env_override()
+        if override is not None:
+            if not override:
+                _logger.info("board sweeper disabled by %s", SWEEPER_ENV)
+            return override
+        try:
+            cfg = self.store.load_config()
+        except Exception:
+            _logger.exception("could not read board config; assuming sweeper_enabled=1")
+            return True
+        return bool(cfg.get("sweeper_enabled", True))
+
+    # ── lifecycle ──
+    def start(self) -> bool:
+        """Start the sweeper thread if not already running. Idempotent."""
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return False
+            self._stop_event = threading.Event()
+            self._thread = threading.Thread(
+                target=self._run,
+                args=(self._stop_event,),
+                name=THREAD_NAME,
+                daemon=True,
+            )
+            self._thread.start()
+            _logger.info("agent-board sweeper started")
+            return True
+
+    def stop(self, timeout: float = 5.0) -> bool:
+        """Signal the sweeper to stop. Returns True if it exited within timeout.
+
+        Best-effort releases the lease so a peer sweeper can pick up promptly
+        instead of waiting for the TTL to expire.
+        """
+        with self._lock:
+            thread = self._thread
+            if thread is None or not thread.is_alive():
+                return True
+            self._stop_event.set()
+            thread.join(timeout=timeout)
+            exited = not thread.is_alive()
+            if exited:
+                self._thread = None
+        if exited:
+            _logger.info("agent-board sweeper stopped")
+        else:
+            _logger.warning("agent-board sweeper did not stop within %.1fs", timeout)
+        try:
+            db.release_sweeper_lease(_holder_id())
+        except Exception:
+            _logger.debug("releasing the sweeper lease failed; peers wait for TTL", exc_info=True)
+        return exited
+
+    def is_running(self) -> bool:
+        with self._lock:
+            return self._thread is not None and self._thread.is_alive()
+
+    def reset(self, timeout: float = 5.0) -> None:
+        """Stop and drop all thread state (test helper; see :func:`reset_for_tests`)."""
+        self.stop(timeout=timeout)
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                _logger.warning(
+                    "agent-board sweeper did not stop within %.1fs; abandoning it", timeout
+                )
+            self._stop_event.set()
+            self._thread = None
+            self._stop_event = threading.Event()
+
+    # ── passes ──
+    def sweep_once(self, force: bool = False) -> dict[str, Any]:
+        """One pass over the default DB and every scope DB (see :func:`sweep_once`)."""
+        return _sweep_all(self.store, force=force)
+
+    def _run(self, stop_event: threading.Event) -> None:
+        _run_loop(self, stop_event)
+
+
+# ── Process default (thin module-level API) ────────────────────
+
+_default_lock = threading.Lock()
+_default: Sweeper | None = None
+
+
+def default_sweeper() -> Sweeper:
+    """The process-wide sweeper the module-level helpers act on."""
+    global _default  # noqa: PLW0603  # process default instance, swapped by app lifespans
+    with _default_lock:
+        if _default is None:
+            _default = Sweeper()
+        return _default
+
+
+def install_default(sweeper: Sweeper | None) -> Sweeper | None:
+    """Make ``sweeper`` the process default; return the previous one.
+
+    App lifespans install the sweeper they own and restore the previous one
+    on shutdown. ``None`` resets to a lazily created plain instance.
+    """
+    global _default  # process default instance, swapped by app lifespans
+    with _default_lock:
+        previous, _default = _default, sweeper
+        return previous
 
 
 def start() -> bool:
-    """Start the sweeper thread if not already running. Idempotent."""
-    global _thread, _stop_event  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
-    with _lock:
-        if _thread is not None and _thread.is_alive():
-            return False
-        _stop_event = threading.Event()
-        _thread = threading.Thread(
-            target=_run,
-            args=(_stop_event,),
-            name="agent-board-sweeper",
-            daemon=True,
-        )
-        _thread.start()
-        _logger.info("agent-board sweeper started")
-        return True
+    """Start the default sweeper thread if not already running. Idempotent."""
+    return default_sweeper().start()
 
 
 def stop(timeout: float = 5.0) -> bool:
-    """Signal the sweeper to stop. Returns True if it exited within timeout.
-
-    Best-effort releases the lease so a peer sweeper can pick up promptly
-    instead of waiting for the TTL to expire.
-    """
-    global _thread  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
-    with _lock:
-        if _thread is None or not _thread.is_alive():
-            return True
-        _stop_event.set()
-        _thread.join(timeout=timeout)
-        exited = not _thread.is_alive()
-        if exited:
-            _thread = None
-    try:
-        db.release_sweeper_lease(_holder_id())
-    except Exception:
-        _logger.debug("releasing the sweeper lease failed; peers wait for TTL", exc_info=True)
-    return exited
+    """Stop the default sweeper. Returns True if it exited within timeout."""
+    return default_sweeper().stop(timeout=timeout)
 
 
 def is_running() -> bool:
-    with _lock:
-        return _thread is not None and _thread.is_alive()
+    return default_sweeper().is_running()
 
 
 def reset_for_tests(timeout: float = 5.0) -> None:
-    """Stop the sweeper and drop all module-level state. Test helper.
+    """Stop the default sweeper and drop its state. Test helper.
 
     Test suites call this between tests so a sweeper started by one app
     lifespan can never post into (or hold a connection to) the next test's
     database. A thread that misses the join timeout keeps its own, already
     set, stop event and exits after its current pass.
     """
-    global _thread, _stop_event  # noqa: PLW0603  # module-level singleton until the sweeper becomes an object
-    stop(timeout=timeout)
-    with _lock:
-        if _thread is not None and _thread.is_alive():
-            _logger.warning("agent-board sweeper did not stop within %.1fs; abandoning it", timeout)
-        _stop_event.set()
-        _thread = None
-        _stop_event = threading.Event()
+    default_sweeper().reset(timeout=timeout)
 
 
 # ── One pass (also exposed for the manual `/board/sweep` endpoint) ─
 
 
-def _sweep_active_db() -> dict[str, Any]:
+def _sweep_active_db(store_mod: ModuleType = store) -> dict[str, Any]:
     """Run the maintenance pass against whatever DB is currently active.
 
     "Active" = the default board DB, or a scope DB if called inside
@@ -152,7 +255,7 @@ def _sweep_active_db() -> dict[str, Any]:
     keeps independent retention / reminder / digest cadence, and records the
     pass into that DB's ``board_sweeps`` for per-scope observability.
     """
-    cfg = store.load_config()
+    cfg = store_mod.load_config()
     started_at = _now_iso()
     pruned_expired = 0
     pruned_overflow = 0
@@ -160,19 +263,22 @@ def _sweep_active_db() -> dict[str, Any]:
     digests_emitted = 0
     error: str | None = None
     try:
-        pruned_expired = store.prune_expired()
-        pruned_overflow = store.prune_by_count(int(cfg["max_messages_before_prune"]))
-        reminders_emitted = _emit_stale_blocker_reminders(int(cfg["stale_blocker_hours"]))
+        pruned_expired = store_mod.prune_expired()
+        pruned_overflow = store_mod.prune_by_count(int(cfg["max_messages_before_prune"]))
+        reminders_emitted = _emit_stale_blocker_reminders(
+            int(cfg["stale_blocker_hours"]), store_mod
+        )
         digests_emitted = _maybe_emit_digests(
             int(cfg["digest_interval_minutes"]),
             cfg.get("channels") or [],
+            store_mod,
         )
     except Exception as exc:
         error = str(exc)
         _logger.exception("agent-board sweep failed")
 
     finished_at = _now_iso()
-    store.record_sweep(
+    store_mod.record_sweep(
         started_at=started_at,
         finished_at=finished_at,
         pruned_expired=pruned_expired,
@@ -206,9 +312,14 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
     triggers where the operator wants an immediate pass regardless of who
     holds the lease.
 
-    Returns an aggregate with a per-target breakdown.
+    Returns an aggregate with a per-target breakdown. Runs against the
+    default sweeper's store.
     """
-    cfg = store.load_config()  # default DB config governs the lease TTL
+    return default_sweeper().sweep_once(force=force)
+
+
+def _sweep_all(store_mod: ModuleType, *, force: bool) -> dict[str, Any]:
+    cfg = store_mod.load_config()  # default DB config governs the lease TTL
     started_at = _now_iso()
     holder = _holder_id()
     have_lease = True
@@ -239,7 +350,7 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
 
     # Sweep the default board first, then every scope DB.
     targets: list[dict[str, Any]] = []
-    default_result = _sweep_active_db()
+    default_result = _sweep_active_db(store_mod)
     default_result["target"] = "(default)"
     targets.append(default_result)
 
@@ -253,7 +364,7 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
         path = str(entry["db_path"])
         try:
             with db.using_db(path):
-                r = _sweep_active_db()
+                r = _sweep_active_db(store_mod)
             r["target"] = f"scope:{entry['scope']}"
             targets.append(r)
         except Exception:
@@ -277,20 +388,18 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
 # ── Loop body ──────────────────────────────────────────────────
 
 
-def _run(stop_event: threading.Event | None = None) -> None:
-    """The thread target. Loops until ``stop_event`` (default: the current one) is set."""
-    if stop_event is None:
-        stop_event = _stop_event
+def _run_loop(sweeper: Sweeper, stop_event: threading.Event) -> None:
+    """The thread target. Loops until ``stop_event`` is set."""
     # Default initialization makes the loop robust to a first-iteration
     # exception in load_config — without it, `interval` would only be
     # bound inside the try block.
     interval = 60
     while not stop_event.is_set():
         try:
-            cfg = store.load_config()
+            cfg = sweeper.store.load_config()
             interval = max(5, int(cfg.get("sweep_interval_s") or 60))
             if cfg.get("sweeper_enabled"):
-                sweep_once()
+                sweeper.sweep_once()
         except Exception:
             _logger.exception("sweeper loop error; continuing")
             interval = max(interval, 60)
@@ -301,7 +410,7 @@ def _run(stop_event: threading.Event | None = None) -> None:
             slept += 0.5
 
 
-def _emit_stale_blocker_reminders(threshold_hours: int) -> int:
+def _emit_stale_blocker_reminders(threshold_hours: int, store_mod: ModuleType = store) -> int:
     """For each stale unacked blocker, post one `reminder` message.
 
     Idempotency: a reminder's `reply_to` references the original blocker's
@@ -316,7 +425,7 @@ def _emit_stale_blocker_reminders(threshold_hours: int) -> int:
     own TTL would also collapse to zero, meaning "no expiry").
     """
     threshold_hours = max(1, threshold_hours)
-    blockers = store.get_unacked_blockers(threshold_hours=threshold_hours)
+    blockers = store_mod.get_unacked_blockers(threshold_hours=threshold_hours)
     if not blockers:
         return 0
 
@@ -369,7 +478,9 @@ def _emit_stale_blocker_reminders(threshold_hours: int) -> int:
     return emitted
 
 
-def _maybe_emit_digests(interval_minutes: int, channels: list[str]) -> int:
+def _maybe_emit_digests(
+    interval_minutes: int, channels: list[str], store_mod: ModuleType = store
+) -> int:
     """If at least `interval_minutes` have passed since the last digest per
     channel, emit a new one. Returns the count emitted in this pass.
     """
@@ -400,7 +511,7 @@ def _maybe_emit_digests(interval_minutes: int, channels: list[str]) -> int:
             # so a freshly-restarted process still summarises pre-restart
             # activity in that channel.
             since = last or cutoff
-            summary = store.digest(channel=channel, since=since, max_messages=200)
+            summary = store_mod.digest(channel=channel, since=since, max_messages=200)
             # Skip empty windows — no point spamming a quiet channel.
             if summary.get("scanned", 0) == 0:
                 continue
@@ -438,7 +549,10 @@ def _age_hours(iso: str | None) -> float | None:
 
 __all__ = [
     "SWEEPER_ENV",
+    "Sweeper",
+    "default_sweeper",
     "env_override",
+    "install_default",
     "is_running",
     "reset_for_tests",
     "start",

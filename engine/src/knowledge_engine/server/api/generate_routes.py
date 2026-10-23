@@ -2,27 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Any
+import logging
 
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException
 
-from ...generation import GenerationRequest
+from ...generation import GenerationRequest, ProviderError
+from ..deps import ProvidersDep
+from ..schemas import ErrorResponse, GenerateResponse, GenIn
 
 router = APIRouter()
+_logger = logging.getLogger(__name__)
+
+__all__ = ["GenIn", "router"]
 
 
-class GenIn(BaseModel):
-    prompt: str
-    provider: str | None = None
-    model: str | None = None
-    max_tokens: int = 1024
-    temperature: float = 0.2
-
-
-@router.post("")
-def generate(payload: GenIn, request: Request) -> dict[str, Any]:
-    providers = request.app.state.providers
+@router.post(
+    "",
+    response_model=GenerateResponse,
+    responses={502: {"model": ErrorResponse, "description": "The selected provider failed."}},
+)
+def generate(payload: GenIn, providers: ProvidersDep) -> GenerateResponse:
     provider = providers.select(preferred=payload.provider)
     if provider is None:
         raise HTTPException(status_code=503, detail="no provider available")
@@ -32,16 +31,15 @@ def generate(payload: GenIn, request: Request) -> dict[str, Any]:
         max_tokens=payload.max_tokens,
         temperature=payload.temperature,
     )
-    res = provider.generate(req)
-    return {
-        "text": res.text,
-        "provider": res.provider,
-        "model": res.model,
-        "usage": res.usage,
-    }
+    try:
+        res = provider.generate(req)
+    except ProviderError:
+        # Re-probe before the next request instead of trusting a stale "up".
+        providers.invalidate(provider.name)
+        raise
+    return GenerateResponse(text=res.text, provider=res.provider, model=res.model, usage=res.usage)
 
 
-@router.get("/providers")
-def list_providers(request: Request) -> list[str]:
-    names: list[str] = request.app.state.providers.list()
-    return names
+@router.get("/providers", response_model=list[str])
+def list_providers(providers: ProvidersDep) -> list[str]:
+    return providers.list()
