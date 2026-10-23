@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from fastapi import APIRouter, HTTPException
 
 from ...generation import GenerationRequest, ProviderError
@@ -11,7 +9,6 @@ from ..deps import ProvidersDep
 from ..schemas import ErrorResponse, GenerateResponse, GenIn
 
 router = APIRouter()
-_logger = logging.getLogger(__name__)
 
 __all__ = ["GenIn", "router"]
 

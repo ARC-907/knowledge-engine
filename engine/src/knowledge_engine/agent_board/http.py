@@ -136,8 +136,6 @@ def _pop_scope(payload: dict[str, Any]) -> str | None:
 # ── Trust gate ─────────────────────────────────────────────────
 
 
-_LOCALHOST_V4 = ipaddress.ip_address("127.0.0.1")
-_LOCALHOST_V6 = ipaddress.ip_address("::1")
 # Tailscale CGNAT range — every Tailscale-issued IPv4 lives here. Treating
 # the whole /10 as trusted means peers on the operator's private mesh
 # don't need to round-trip through key creation just to coordinate.
@@ -159,7 +157,7 @@ def _allowed_networks(settings: Settings | None = None) -> list[IPNetwork]:
     `127.0.0.1/32,::1/128` to disable Tailscale trust, or add extra
     private-mesh ranges if you operate outside Tailscale.
     """
-    raw = (settings if settings is not None else Settings()).board_trusted_cidrs
+    raw = (settings if settings is not None else Settings()).board_peer_allowlist
     if raw is not None:
         return _parse_cidrs(raw)
     return [

@@ -224,7 +224,7 @@ class Settings(BaseSettings):
         section="server",
         read_by="core.http, agent_board.http",
     )
-    trusted_proxies: str | None = _env(
+    proxy_allowlist: str | None = _env(
         "KE_TRUSTED_PROXIES",
         None,
         "Comma-separated CIDRs allowed to speak for clients via X-Forwarded-For. "
@@ -249,7 +249,7 @@ class Settings(BaseSettings):
         section="board",
         read_by="agent_board.sweeper, server.lifespan, agent_board.service",
     )
-    board_trusted_cidrs: str | None = _env(
+    board_peer_allowlist: str | None = _env(
         "KE_BOARD_TRUSTED_CIDRS",
         None,
         "Comma-separated CIDRs of trusted board peers. Unset: loopback + "

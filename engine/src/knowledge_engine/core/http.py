@@ -158,7 +158,7 @@ def allowed_proxy_networks(
     for proxies elsewhere on the mesh. Every address listed here is trusted
     to append `X-Forwarded-For` honestly.
     """
-    raw = env.get(TRUSTED_PROXIES_ENV) if env is not None else _settings(settings).trusted_proxies
+    raw = env.get(TRUSTED_PROXIES_ENV) if env is not None else _settings(settings).proxy_allowlist
     if raw is not None:
         return parse_cidrs(raw)
     return list(LOOPBACK_NETS)

@@ -60,7 +60,7 @@ def test_board_routes_is_an_alias_of_agent_board_http() -> None:
 def test_trust_helpers_follow_explicit_settings() -> None:
     from knowledge_engine.agent_board import http as board_http
 
-    s = Settings(board_trusted_cidrs="10.0.0.0/8", trust_proxy=True, trusted_proxies="")
+    s = Settings(board_peer_allowlist="10.0.0.0/8", trust_proxy=True, proxy_allowlist="")
     assert [str(n) for n in board_http._allowed_networks(s)] == ["10.0.0.0/8"]
     assert board_http._trust_proxy_enabled(s) is True
     assert board_http._allowed_proxy_networks(s) == []

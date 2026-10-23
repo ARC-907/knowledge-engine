@@ -235,7 +235,8 @@ def test_hand_edited_registry_rows_are_served_unchanged(engine_env: Path) -> Non
         assert info["lifecycle"] == doc["lifecycle"]
         assert info["counts"] == {"libraries": 1, "skills": 0, "kits": 0, "tools": 0}
         assert info["providers"] == ["ollama", "echo"]
-        assert client.delete("/registry/lib-a").json() == {"removed": "lib-a"}
+        removed = client.delete("/registry/lib-a").json()
+        assert removed == {"removed": "lib-a"}
 
 
 # ── Exception handlers ───────────────────────────────────────────

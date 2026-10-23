@@ -274,7 +274,10 @@ def _sweep_active_db(store_mod: ModuleType = store) -> dict[str, Any]:
             store_mod,
         )
     except Exception as exc:
-        error = str(exc)
+        # The full traceback goes to the log; the stored/returned summary names
+        # only the exception type so a /board/sweep response never carries
+        # internal details (paths, SQL, stack text).
+        error = f"sweep failed ({type(exc).__name__}); see the server log"
         _logger.exception("agent-board sweep failed")
 
     finished_at = _now_iso()

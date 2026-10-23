@@ -42,9 +42,9 @@ def test_defaults_match_the_historical_behaviour(monkeypatch: pytest.MonkeyPatch
     assert s.bind_host == "127.0.0.1"
     assert s.board_enabled is True
     assert s.board_sweeper is None
-    assert s.board_trusted_cidrs is None
+    assert s.board_peer_allowlist is None
     assert s.trust_proxy is False
-    assert s.trusted_proxies is None
+    assert s.proxy_allowlist is None
     assert s.mcp_http is False
     assert s.log_level == "INFO"
     assert s.board_max_scopes == 64
