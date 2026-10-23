@@ -5,7 +5,9 @@
                        JSON auto-deserialization, schema migration).
 
 Config knobs:
-  - `KE_PIPELINE_ROOT` env var sets the pipeline directory (default: `./pipeline`).
+  - `KE_PIPELINE_ROOT` env var sets the pipeline directory (default: `./pipeline`);
+    its `.env` is loaded by `config.load_dotenv_file()` from the entry points,
+    never at import.
   - `KE_PIPELINE_DB` env var sets the SQLite path (default: `$KE_DATA_DIR/pipeline.db`).
 
 The schema is a lean coordination store: queue, worker registry, message board,

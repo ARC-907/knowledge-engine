@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -26,6 +25,7 @@ from typing import Annotated, Any
 import anyio
 from mcp import Client
 from mcp.server.mcpserver import MCPServer
+from mcp.types import CallToolResult, TextContent
 from pydantic import BeforeValidator, Field
 
 from .. import __version__
@@ -142,12 +142,18 @@ def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: In
             BeforeValidator(_empty_is_none),
             Field(description="Optional kind filter"),
         ] = None,
-    ) -> str:
+    ) -> CallToolResult:
         """Full-text search across enabled libraries, skills, kits, and tools in the corpus."""
         with tool_errors("search"):
             if limit < 1:
                 raise ValueError("limit must be a positive integer")
-            return json.dumps(indexer.search(query, limit=limit, kind=kind), indent=2)
+            hits = indexer.search(query, limit=limit, kind=kind)
+            meta = getattr(hits, "meta", None) or None
+            # Same JSON text as always; an FTS5 syntax fallback is flagged in `_meta`.
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps(list(hits), indent=2))],
+                _meta=meta,
+            )
 
     def registry_list(
         kind: Annotated[EntryKind | None, BeforeValidator(_empty_is_none)] = None,
@@ -168,7 +174,11 @@ def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: In
         with tool_errors("registry_get"):
             return json.dumps(registry.get(entry_id), indent=2)
 
-    for fn in (search, registry_list, registry_toggle, registry_get):
+    base = (search, registry_list, registry_toggle, registry_get)
+    # BASE_TOOLS is the public list (CLI `capabilities`, selftest); keep it honest.
+    if tuple(fn.__name__ for fn in base) != BASE_TOOLS:  # pragma: no cover - programming error
+        raise RuntimeError("mcp.server.BASE_TOOLS is out of sync with the registered base tools")
+    for fn in base:
         server.add_tool(fn, structured_output=False)
 
 
@@ -221,16 +231,15 @@ def build_server(
 
 
 def configure_logging() -> None:
-    """Log to stderr at ``KE_LOG_LEVEL`` (default INFO); stdout is the transport."""
-    raw = os.environ.get("KE_LOG_LEVEL", "INFO").strip().upper()
-    level = logging.getLevelNamesMapping().get(raw)
-    logging.basicConfig(
-        stream=sys.stderr,
-        level=level if level is not None else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    if level is None:
-        logger.warning("ignoring invalid KE_LOG_LEVEL=%r; using INFO", raw)
+    """Log to stderr at ``KE_LOG_LEVEL`` (default INFO); stdout is the transport.
+
+    A no-op when the host already configured logging (``knowledge-engine mcp``
+    does, once, in the CLI's ``main``); an invalid level is reported by the
+    settings layer and replaced by INFO.
+    """
+    from ..core.logging_config import CLI_FORMAT, resolve_log_level  # noqa: PLC0415
+
+    logging.basicConfig(stream=sys.stderr, level=resolve_log_level(), format=CLI_FORMAT)
 
 
 async def selftest(server: MCPServer[Any]) -> dict[str, Any]:
@@ -253,12 +262,15 @@ async def selftest(server: MCPServer[Any]) -> dict[str, Any]:
 
 def run(args: argparse.Namespace) -> int:
     """Run the server as selected by the ``knowledge-engine mcp`` flags."""
+    from ..runtime.foundation.config import load_dotenv_file  # noqa: PLC0415 - entry point only
+
     configure_logging()
+    load_dotenv_file()
     config = Config.from_env()
-    # Registry and Indexer open their SQLite files eagerly; a fresh KE_DATA_DIR
-    # must exist first (Config.from_env() itself never touches the filesystem).
+    # The Indexer opens its SQLite file eagerly; a fresh KE_DATA_DIR must exist
+    # first (Config.from_env() itself never touches the filesystem).
     config.ensure_dirs()
-    registry = Registry(config.registry_path, config.data_dir / "registry.db")
+    registry = Registry(config.registry_path)
     indexer = Indexer(config, registry)
     server = build_server(config, registry, indexer)
 

@@ -23,10 +23,11 @@ import json
 import logging
 import sqlite3
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any, Protocol
 
 from ..core.logsafe import log_safe
+from ..core.util.time import utc_now_iso
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
 from . import schemas
@@ -190,7 +191,7 @@ def update_config(patch: dict[str, Any]) -> dict[str, Any]:
     if not sets:
         return load_config()
     sets.append("updated_at = ?")
-    params.append(_now_iso())
+    params.append(utc_now_iso())
     conn.execute(
         f"UPDATE board_config SET {', '.join(sets)} WHERE id = 1",
         params,
@@ -505,7 +506,7 @@ def digest(
 @_scoped
 def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
     """Blockers that are requires_ack=1, unacked, and older than threshold."""
-    cutoff = (datetime.now(UTC) - timedelta(hours=threshold_hours)).isoformat()
+    cutoff = utc_now_iso(-timedelta(hours=threshold_hours))
     conn = db.get_connection()
     rows = conn.execute(
         """SELECT * FROM messages
@@ -661,10 +662,6 @@ def _has_ack(msg: dict[str, Any]) -> bool:
     if isinstance(ack, str):
         return ack not in ("", "[]")
     return False
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 # Convenience re-exports for callers that want flat imports.

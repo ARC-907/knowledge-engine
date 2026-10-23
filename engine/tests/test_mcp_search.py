@@ -188,3 +188,16 @@ def test_unexpected_exceptions_become_internal_errors_and_the_session_survives(
     assert "search" in names
     assert not healthy.is_error
     assert json.loads(_text(healthy))["id"] == "zoo"
+
+
+def test_fts5_syntax_fallback_is_flagged_in_meta(server: Engine) -> None:
+    good = _call(server, query="fox", limit=1)
+    assert not good.is_error
+    assert not (good.meta or {}).get("syntax_fallback")
+
+    fallback = _call(server, query='"fox', limit=3)
+    assert not fallback.is_error
+    assert (fallback.meta or {}).get("syntax_fallback") is True
+    hits = json.loads(_text(fallback))
+    assert isinstance(hits, list)
+    assert all(hit["path"] for hit in hits)

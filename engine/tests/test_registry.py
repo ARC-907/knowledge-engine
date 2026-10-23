@@ -88,3 +88,19 @@ def test_persist_is_atomic_and_leaves_no_temp_file_on_failure(
         reg.close()
     assert registry_path.read_text(encoding="utf-8") == before
     assert list(tmp_path.glob(".registry.json.*.tmp")) == []
+
+
+def test_persist_writes_lf_line_endings_on_every_platform(tmp_path: Path) -> None:
+    # The temp file is opened ``O_BINARY`` and wrapped with ``newline="\n"`` so a
+    # Windows CRT text-mode fd cannot turn the committed corpus file into CRLF (or
+    # ``\r\r\n``) on every mutation; ``.gitattributes`` normalises it to LF.
+    registry_path = tmp_path / "registry.json"
+    reg = Registry(registry_path, tmp_path / "registry.db")
+    try:
+        reg.upsert(_entry("kit-a"))
+        reg.set_enabled("kit-a", False)
+    finally:
+        reg.close()
+    raw = registry_path.read_bytes()
+    assert b"\r" not in raw
+    assert raw.count(b"\n") > 1

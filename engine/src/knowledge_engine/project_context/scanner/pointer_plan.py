@@ -16,10 +16,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ...core.util.time import utc_now_iso
 from .. import pointers
 from ..schema import CATEGORY_DOCSTRING, POINTER_DOCSTRING
 
@@ -27,11 +27,6 @@ from ..schema import CATEGORY_DOCSTRING, POINTER_DOCSTRING
 #: ``PointerReplacementCfg`` only carries a boolean ``write_backups`` gate (not a
 #: suffix), so the convention is defined here and shared by plan + apply.
 BACKUP_SUFFIX = ".ke-bak"
-
-
-def _utcnow() -> str:
-    """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(UTC).isoformat()
 
 
 def stub_for(pointer_uri: str, content_hash: str) -> str:
@@ -176,7 +171,7 @@ def run(
         INSERT INTO pointer_rewrite_plans (plan_id, created_at, dry_run, items_json, status)
         VALUES (?, ?, 1, ?, 'planned')
         """,
-        (plan_id, _utcnow(), json.dumps(items)),
+        (plan_id, utc_now_iso(), json.dumps(items)),
     )
     project_conn.commit()
     return {"plan_id": plan_id, "items": items}

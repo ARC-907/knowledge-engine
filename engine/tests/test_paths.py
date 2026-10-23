@@ -224,7 +224,7 @@ def test_create_app_creates_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert not data.exists()
 
     with TestClient(app):
-        assert (data / "registry.db").is_file()
+        assert (data / "index.db").is_file()
 
 
 def test_mcp_server_creates_data_dir(
@@ -242,7 +242,7 @@ def test_mcp_server_creates_data_dir(
     assert main(["--selftest"]) == 0
 
     assert json.loads(capsys.readouterr().out)["ok"] is True
-    assert (data / "registry.db").is_file()
+    assert (data / "index.db").is_file()
 
 
 def test_cli_info_creates_data_dir_and_reports_paths(
@@ -259,4 +259,32 @@ def test_cli_info_creates_data_dir_and_reports_paths(
     out = json.loads(capsys.readouterr().out)
     assert out["corpus_root"] == str(repo / "corpus")
     assert out["data_dir"] == str(repo / ".knowledge-engine" / "data")
-    assert (repo / ".knowledge-engine" / "data" / "registry.db").is_file()
+    assert (repo / ".knowledge-engine" / "data").is_dir()
+
+
+# ── ensure_within (shared containment check) ─────────────────
+
+
+def test_ensure_within(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    (root / "sub").mkdir(parents=True)
+    assert paths.ensure_within(root, "sub/x") == (root / "sub" / "x").resolve()
+    with pytest.raises(ValueError, match="resolves outside the root"):
+        paths.ensure_within(root, "../x")
+    with pytest.raises(ValueError, match="outside the corpus"):
+        paths.ensure_within(root, "/etc/passwd", label="the corpus")
+    with pytest.raises(ValueError, match="embedded null byte"):
+        paths.ensure_within(root, "a\x00b")
+
+
+def test_ensure_within_rejects_escaping_symlink(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        (root / "link").symlink_to(outside, target_is_directory=True)
+    except OSError:  # pragma: no cover - symlinks unavailable (Windows without privilege)
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(ValueError, match="outside"):
+        paths.ensure_within(root, "link/x")

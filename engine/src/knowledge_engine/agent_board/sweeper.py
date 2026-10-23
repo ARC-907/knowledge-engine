@@ -42,6 +42,7 @@ from datetime import UTC, datetime, timedelta
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
+from ..core.util.time import utc_now_iso
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
 from . import scopes, store
@@ -256,7 +257,7 @@ def _sweep_active_db(store_mod: ModuleType = store) -> dict[str, Any]:
     pass into that DB's ``board_sweeps`` for per-scope observability.
     """
     cfg = store_mod.load_config()
-    started_at = _now_iso()
+    started_at = utc_now_iso()
     pruned_expired = 0
     pruned_overflow = 0
     reminders_emitted = 0
@@ -280,7 +281,7 @@ def _sweep_active_db(store_mod: ModuleType = store) -> dict[str, Any]:
         error = f"sweep failed ({type(exc).__name__}); see the server log"
         _logger.exception("agent-board sweep failed")
 
-    finished_at = _now_iso()
+    finished_at = utc_now_iso()
     store_mod.record_sweep(
         started_at=started_at,
         finished_at=finished_at,
@@ -323,7 +324,7 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
 
 def _sweep_all(store_mod: ModuleType, *, force: bool) -> dict[str, Any]:
     cfg = store_mod.load_config()  # default DB config governs the lease TTL
-    started_at = _now_iso()
+    started_at = utc_now_iso()
     holder = _holder_id()
     have_lease = True
     lease_ttl = max(30, int(cfg.get("sweep_interval_s") or 60) * 2)
@@ -340,7 +341,7 @@ def _sweep_all(store_mod: ModuleType, *, force: bool) -> dict[str, Any]:
     if not have_lease:
         return {
             "started_at": started_at,
-            "finished_at": _now_iso(),
+            "finished_at": utc_now_iso(),
             "skipped": True,
             "reason": "another sweeper holds the lease",
             "targets_swept": 0,
@@ -376,7 +377,7 @@ def _sweep_all(store_mod: ModuleType, *, force: bool) -> dict[str, Any]:
 
     return {
         "started_at": started_at,
-        "finished_at": _now_iso(),
+        "finished_at": utc_now_iso(),
         "skipped": False,
         "targets_swept": len(targets),
         "pruned_expired": sum(int(t.get("pruned_expired", 0)) for t in targets),
@@ -446,7 +447,7 @@ def _emit_stale_blocker_reminders(threshold_hours: int, store_mod: ModuleType = 
         if r["reply_to"]:
             last_per_blocker[r["reply_to"]] = r["last_at"]
 
-    cutoff = (datetime.now(UTC) - timedelta(hours=threshold_hours)).isoformat()
+    cutoff = utc_now_iso(-timedelta(hours=threshold_hours))
     emitted = 0
     for b in blockers:
         last_at = last_per_blocker.get(b["message_id"])
@@ -503,7 +504,7 @@ def _maybe_emit_digests(
         if r["channel"]:
             last_digest_per_channel[r["channel"]] = r["last_at"]
 
-    cutoff = (datetime.now(UTC) - timedelta(minutes=interval_minutes)).isoformat()
+    cutoff = utc_now_iso(-timedelta(minutes=interval_minutes))
     emitted = 0
     for channel in channels:
         last = last_digest_per_channel.get(channel)
@@ -534,10 +535,6 @@ def _maybe_emit_digests(
 
 
 # ── Helpers ────────────────────────────────────────────────────
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def _age_hours(iso: str | None) -> float | None:

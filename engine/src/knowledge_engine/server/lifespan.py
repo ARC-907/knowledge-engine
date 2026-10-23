@@ -2,8 +2,10 @@
 
 ``create_app`` does no I/O; this lifespan does it all, in order:
 
+0. load ``<KE_PIPELINE_ROOT>/.env`` (``runtime.foundation.config.load_dotenv_file``;
+   variables already in the environment win);
 1. resolve the paths from ``app.state.settings``, create the data directory,
-   open the registry mirror and the FTS index (``app.state.config``,
+   load the registry and open the FTS index (``app.state.config``,
    ``registry``, ``indexer``);
 2. build the generation providers (``app.state.providers``) and, unless
    ``KE_PROVIDER_STARTUP_PROBE=0``, probe them on a background thread so an
@@ -16,7 +18,7 @@
    lifespan's registry/indexer to the mount and run its session manager.
 
 On shutdown the sweeper is stopped (and the previous default restored), the
-MCP session manager exits, and the SQLite connections are closed. Optional
+MCP session manager exits, the registry is closed and the FTS connection is closed. Optional
 subsystems (board, MCP, provider probe) are wrapped so a failure there is
 logged and never blocks the core app; a failure to open the core databases
 aborts startup.
@@ -38,6 +40,7 @@ from ..core.settings import Settings, env_flag
 from ..generation import ProviderRegistry
 from ..generation.factory import build_provider_registry
 from ..retrieval.fts5 import Indexer
+from ..runtime.foundation.config import load_dotenv_file
 
 if TYPE_CHECKING:
     from ..agent_board.sweeper import Sweeper
@@ -78,7 +81,7 @@ def open_engine(settings: Settings) -> tuple[Config, Registry, Indexer]:
     config = Config.from_settings(settings)
     try:
         config.ensure_dirs()
-        registry = Registry(config.registry_path, config.data_dir / "registry.db")
+        registry = Registry(config.registry_path)
     except Exception:
         _logger.exception(
             "could not open the registry (registry=%s, data_dir=%s)",
@@ -180,6 +183,9 @@ def _close_engine(app: FastAPI) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build the engine on startup and release everything on shutdown."""
+    # The pipeline .env used to be loaded as an import side effect of the
+    # board substrate; load it explicitly (the real environment always wins).
+    load_dotenv_file()
     settings = _app_settings(app)
     config, registry, indexer = open_engine(settings)
     app.state.config = config

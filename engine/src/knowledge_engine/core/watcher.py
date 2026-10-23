@@ -10,7 +10,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from .config import Config
-from .registry import EntryKind, Registry, RegistryEntry
+from .registry import CORPUS_FOLDER_TO_KIND, Registry, RegistryEntry
+from .util.slug import slugify
 
 if TYPE_CHECKING:
     from watchdog.events import DirCreatedEvent, FileCreatedEvent
@@ -19,53 +20,74 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def slugify(name: str) -> str:
-    out = []
-    for ch in name.lower():
-        if ch.isalnum():
-            out.append(ch)
-        elif ch in (" ", "-", "_", "&"):
-            out.append("-")
-    s = "".join(out)
-    while "--" in s:
-        s = s.replace("--", "-")
-    return s.strip("-")
+def register_corpus_folders(config: Config, registry: Registry) -> dict[str, int]:
+    """Register every folder under ``corpus/{libraries,skills,kits,capabilities}``.
 
+    Children are visited in sorted order; hidden folders and files are
+    ignored. Each new folder becomes a ``<kind>-<slug>`` entry with
+    ``auto_registered=True``; a folder whose id is already registered (or
+    already claimed by an earlier folder in this pass) is counted as
+    ``skipped``. All new entries are written in one atomic registry update.
 
-_FOLDER_TO_KIND: dict[str, EntryKind] = {
-    "libraries": "library",
-    "skills": "skill",
-    "kits": "kit",
-    "capabilities": "tool",
-}
+    Returns ``{"library": n, "skill": n, "kit": n, "tool": n, "skipped": n}``.
+    """
+    root = config.corpus_root
+    counts: dict[str, int] = {"library": 0, "skill": 0, "kit": 0, "tool": 0, "skipped": 0}
+    pending: list[RegistryEntry] = []
+    claimed: set[str] = set()
+    for sub, kind in CORPUS_FOLDER_TO_KIND.items():
+        folder = root / sub
+        if not folder.is_dir():
+            continue
+        try:
+            # Sort by name (not Path): Path ordering is case-insensitive on
+            # Windows, which would make the registration order platform-dependent.
+            children = sorted(folder.iterdir(), key=lambda child: child.name)
+        except OSError as exc:
+            log.warning("cannot list corpus folder %s: %s", folder, exc)
+            continue
+        for child in children:
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            entry_id = f"{kind}-{slugify(child.name)}"
+            if registry.get(entry_id):
+                counts["skipped"] += 1
+                continue
+            entry = RegistryEntry(
+                id=entry_id,
+                kind=kind,
+                name=child.name,
+                path=child.relative_to(root).as_posix(),
+                auto_registered=True,
+            )
+            if entry_id in claimed:
+                # Two folders slugify to the same id. Historically the later
+                # folder won (and both counted as added); keep that, loudly,
+                # and keep the entry's position in the sorted walk.
+                log.warning(
+                    "duplicate corpus slug %r: %s replaces an earlier folder", entry_id, child
+                )
+                index = next(i for i, e in enumerate(pending) if e.id == entry_id)
+                pending[index] = entry
+            else:
+                claimed.add(entry_id)
+                pending.append(entry)
+            counts[kind] += 1
+    registry.upsert_many(pending)
+    for entry in pending:
+        log.info("auto-registered %s", entry.id)
+    return counts
 
 
 def auto_register(
     config: Config, registry: Registry, on_change: Callable[[], None] | None = None
 ) -> int:
-    """One-shot scan: register any folder under corpus/{libraries,skills,kits,capabilities} not yet in registry."""
-    added = 0
-    for sub, kind in _FOLDER_TO_KIND.items():
-        folder = config.corpus_root / sub
-        if not folder.exists():
-            continue
-        for child in folder.iterdir():
-            if not child.is_dir() or child.name.startswith("."):
-                continue
-            entry_id = f"{kind}-{slugify(child.name)}"
-            if registry.get(entry_id):
-                continue
-            registry.upsert(
-                RegistryEntry(
-                    id=entry_id,
-                    kind=kind,
-                    name=child.name,
-                    path=str(child.relative_to(config.corpus_root)).replace("\\", "/"),
-                    auto_registered=True,
-                )
-            )
-            added += 1
-            log.info("auto-registered %s", entry_id)
+    """One-shot scan: register any corpus folder not yet in the registry.
+
+    Returns the number of entries added; calls ``on_change`` when any were.
+    """
+    counts = register_corpus_folders(config, registry)
+    added = sum(n for key, n in counts.items() if key != "skipped")
     if added and on_change:
         on_change()
     return added
@@ -88,7 +110,7 @@ def start_watcher(
                 auto_register(config, registry, on_change)
 
     observer = Observer()
-    for sub in _FOLDER_TO_KIND:
+    for sub in CORPUS_FOLDER_TO_KIND:
         folder = config.corpus_root / sub
         if folder.exists():
             observer.schedule(Handler(), str(folder), recursive=False)

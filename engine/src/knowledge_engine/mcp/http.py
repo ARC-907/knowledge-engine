@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -13,6 +12,8 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
+
+from ..core.util.env import env_list
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,7 @@ LOOPBACK_BINDS = ("127.0.0.1", "localhost", "::1", "[::1]")
 
 
 def _allowed_hosts_from_env() -> list[str]:
-    raw = os.environ.get(ALLOWED_HOSTS_ENV, "")
-    return [host.strip() for host in raw.split(",") if host.strip()]
+    return env_list(ALLOWED_HOSTS_ENV)
 
 
 def _protect(hosts: Iterable[str]) -> TransportSecuritySettings:

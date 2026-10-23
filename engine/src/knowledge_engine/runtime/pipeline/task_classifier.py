@@ -13,12 +13,15 @@ Env vars:
 from __future__ import annotations
 
 import json
+import logging
 import os
-import urllib.error
-import urllib.request
 from typing import Any
 
-from ..foundation import config  # noqa: F401 — loads .env so KE_* vars are visible
+from ...core.ollama import OllamaClient, OllamaError
+
+_logger = logging.getLogger(__name__)
+
+_GENERATE_PATH = "/api/generate"
 
 CLASSIFIER_MODEL_DEFAULT = os.environ.get("KE_CLASSIFIER_MODEL", "qwen3:4b")
 CLASSIFIER_ENDPOINT_DEFAULT = os.environ.get(
@@ -69,8 +72,8 @@ def classify_task(
 
     if not isinstance(endpoint, str):
         raise RuntimeError(f"classifier endpoint must be a string, got {type(endpoint).__name__}")
-    if not endpoint.endswith("/api/generate"):
-        endpoint = endpoint.rstrip("/") + "/api/generate"
+    if not endpoint.endswith(_GENERATE_PATH):
+        endpoint = endpoint.rstrip("/") + _GENERATE_PATH
 
     if model is None:
         model = CLASSIFIER_MODEL_DEFAULT
@@ -79,34 +82,21 @@ def classify_task(
     if context_hint:
         prompt += f"\n\nAdditional context: {context_hint}"
 
-    payload = json.dumps(
-        {
-            "model": model,
-            "prompt": prompt,
-            "system": CLASSIFIER_PROMPT,
-            "stream": False,
-            "options": {
-                "temperature": 0.1,
-                "num_ctx": 2048,
-                "num_predict": 256,
-            },
-        }
-    ).encode()
-
+    base_url = endpoint[: -len(_GENERATE_PATH)]
     try:
-        req = urllib.request.Request(  # noqa: S310  # URL comes from operator config
-            endpoint,
-            data=payload,
-            headers={"Content-Type": "application/json"},
+        raw = OllamaClient(base_url, float(timeout)).generate(
+            model,
+            prompt,
+            system=CLASSIFIER_PROMPT,
+            options={"temperature": 0.1, "num_ctx": 2048, "num_predict": 256},
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310  # URL comes from operator config
-            raw = json.loads(resp.read())
-
-        response_text = raw.get("response", "")
-        return _parse_classification(response_text)
-
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+    except (OllamaError, ValueError) as exc:  # ValueError: non-positive timeout
+        _logger.debug("task classifier unavailable (%s); using the default class", exc)
         return _default_classification()
+    response_text = raw.get("response", "")
+    if not isinstance(response_text, str):
+        return _default_classification()
+    return _parse_classification(response_text)
 
 
 def _parse_classification(text: str) -> dict[str, Any]:

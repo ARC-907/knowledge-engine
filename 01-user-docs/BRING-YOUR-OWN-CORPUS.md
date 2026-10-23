@@ -77,7 +77,7 @@ it. The engine reads every path from environment variables:
 | --- | --- | --- |
 | `KE_HOME` | Base for the defaults below | nearest directory (from the cwd upward) containing `corpus/registry.json`, else the cwd |
 | `KE_CORPUS_ROOT` | Where libraries / skills / kits live | `${KE_HOME}/corpus` |
-| `KE_DATA_DIR` | Where the SQLite index + registry mirror are written | `${KE_HOME}/.knowledge-engine/data` |
+| `KE_DATA_DIR` | Where the SQLite search index (and other runtime databases) are written | `${KE_HOME}/.knowledge-engine/data` |
 | `KE_REGISTRY_PATH` | The registry JSON file | `${KE_CORPUS_ROOT}/registry.json` |
 
 Set them before running any command:

@@ -792,6 +792,18 @@
             },
             "title": "Results",
             "type": "array"
+          },
+          "syntax_fallback": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present (true) only when `q` was not valid FTS5 syntax and was searched as one quoted phrase instead.",
+            "title": "Syntax Fallback"
           }
         },
         "required": [

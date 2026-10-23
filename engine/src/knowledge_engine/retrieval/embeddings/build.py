@@ -20,17 +20,21 @@ Env vars:
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
+import logging
 import math
 import os
 import sqlite3
 import struct
+import sys
 import time
-import urllib.request
 from pathlib import Path
 
 from ...core import paths as engine_paths
+from ...core.ollama import OllamaClient, OllamaError
+from ...core.util.hashing import sha256_hex
+from ...core.util.sqlite import connect as sqlite_connect
+
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -42,6 +46,9 @@ EMBED_MODEL = os.environ.get("KE_EMBED_MODEL", "bge-m3:latest")
 _paths = engine_paths.resolve(warn_missing_corpus=False)  # import time: stay quiet
 CORPUS_ROOT = _paths.corpus_root
 DB_PATH = Path(os.environ.get("KE_EMBEDDINGS_DB", str(_paths.data_dir / "embeddings.db"))).resolve()
+
+#: Seconds allowed for one ``/api/embed`` request.
+EMBED_TIMEOUT = 60.0
 
 CHUNK_SIZE = 1500  # chars per chunk (bge-m3 context is ~8192 tokens)
 CHUNK_OVERLAP = 200
@@ -89,11 +96,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
 
 def _file_hash(path: Path) -> str:
     """Compute a truncated SHA-256 hash of a file's contents."""
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for block in iter(lambda: f.read(8192), b""):
-            h.update(block)
-    return h.hexdigest()[:16]
+    return sha256_hex(path, length=16)
 
 
 def _chunk_text(text: str, path_rel: str) -> list[dict]:
@@ -131,14 +134,39 @@ def _chunk_text(text: str, path_rel: str) -> list[dict]:
     return chunks
 
 
+def _client() -> OllamaClient:
+    return OllamaClient(OLLAMA_URL, EMBED_TIMEOUT)
+
+
+def get_embeddings(texts: list[str]) -> list[list[float]]:
+    """Embed ``texts`` with ``KE_EMBED_MODEL`` (batched). Raises ``OllamaError``."""
+    return _client().embed(texts, EMBED_MODEL)
+
+
 def get_embedding(text: str) -> list[float]:
-    """Fetch a single embedding from Ollama. Raises on HTTP error."""
-    body = json.dumps({"model": EMBED_MODEL, "input": text}).encode()
-    req = urllib.request.Request(f"{OLLAMA_URL}/api/embed", data=body, method="POST")  # noqa: S310  # URL comes from operator config
-    req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310  # URL comes from operator config
-        data = json.loads(resp.read().decode())
-    return data["embeddings"][0]
+    """Fetch a single embedding from Ollama. Raises ``OllamaError`` on failure."""
+    return get_embeddings([text])[0]
+
+
+def _embed_chunks(rel: str, chunks: list[dict]) -> list[list[float] | None]:
+    """Embed every chunk of one file; a chunk that fails is ``None`` (logged).
+
+    One batched request per file; if it fails, each chunk is retried alone so
+    a single bad chunk does not drop the whole file.
+    """
+    texts = [chunk["text"][:2000] for chunk in chunks]
+    try:
+        return list(get_embeddings(texts))
+    except OllamaError as exc:
+        _logger.debug("batched embed failed for %s (%s); retrying per chunk", rel, exc)
+    out: list[list[float] | None] = []
+    for ci, text in enumerate(texts):
+        try:
+            out.append(get_embedding(text))
+        except OllamaError as exc:
+            _logger.warning("embed error on %s chunk %d: %s", rel, ci, exc)
+            out.append(None)
+    return out
 
 
 def embedding_to_blob(emb: list[float]) -> bytes:
@@ -174,10 +202,7 @@ def _find_library(rel_path: str) -> str:
 
 def build_index(incremental: bool = False) -> dict:
     """Build or update the embedding index. Returns a stats dict."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn = sqlite_connect(DB_PATH)
     _init_db(conn)
 
     # Gather all markdown files
@@ -188,7 +213,7 @@ def build_index(incremental: bool = False) -> dict:
             continue
         md_files.append(md_path)
 
-    print(f"Found {len(md_files)} markdown files under {CORPUS_ROOT}")
+    _logger.info("found %d markdown files under %s", len(md_files), CORPUS_ROOT)
 
     existing: dict[str, str] = {}
     if incremental:
@@ -241,21 +266,18 @@ def build_index(incremental: bool = False) -> dict:
         # Replace chunks for this file
         conn.execute("DELETE FROM chunks WHERE file_id=?", (file_id,))
 
-        for ci, chunk in enumerate(chunks):
-            try:
-                emb = get_embedding(chunk["text"][:2000])
-                blob = embedding_to_blob(emb)
-                conn.execute(
-                    """
-                    INSERT INTO chunks (file_id, chunk_idx, text, heading, embedding)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (file_id, ci, chunk["text"], chunk["heading"], blob),
-                )
-                total_chunks += 1
-            except Exception as exc:
-                print(f"  Embed error on {rel} chunk {ci}: {exc}")
+        for ci, (chunk, emb) in enumerate(zip(chunks, _embed_chunks(rel, chunks), strict=True)):
+            if emb is None:
                 errors += 1
+                continue
+            conn.execute(
+                """
+                INSERT INTO chunks (file_id, chunk_idx, text, heading, embedding)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (file_id, ci, chunk["text"], chunk["heading"], embedding_to_blob(emb)),
+            )
+            total_chunks += 1
 
         conn.commit()
         indexed += 1
@@ -263,19 +285,28 @@ def build_index(incremental: bool = False) -> dict:
         if (i + 1) % 20 == 0 or i == len(md_files) - 1:
             elapsed = time.time() - start_time
             rate = indexed / elapsed if elapsed > 0 else 0
-            print(
-                f"  [{i + 1}/{len(md_files)}] {indexed} indexed, "
-                f"{skipped} skipped, {errors} errors, "
-                f"{total_chunks} chunks ({rate:.1f} files/sec)"
+            _logger.info(
+                "[%d/%d] %d indexed, %d skipped, %d errors, %d chunks (%.1f files/sec)",
+                i + 1,
+                len(md_files),
+                indexed,
+                skipped,
+                errors,
+                total_chunks,
+                rate,
             )
 
     elapsed = time.time() - start_time
-    print(f"\nDone in {elapsed:.1f}s")
-    print(f"  Files indexed: {indexed}")
-    print(f"  Files skipped: {skipped}")
-    print(f"  Total chunks: {total_chunks}")
-    print(f"  Errors: {errors}")
-    print(f"  DB: {DB_PATH} ({DB_PATH.stat().st_size / 1024 / 1024:.1f} MB)")
+    _logger.info(
+        "done in %.1fs: %d files indexed, %d skipped, %d chunks, %d errors; DB %s (%.1f MB)",
+        elapsed,
+        indexed,
+        skipped,
+        total_chunks,
+        errors,
+        DB_PATH,
+        DB_PATH.stat().st_size / 1024 / 1024,
+    )
     conn.close()
 
     return {
@@ -294,7 +325,7 @@ def show_stats() -> None:
         print("No index found. Run `python -m knowledge_engine.embeddings.build` first.")
         return
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite_connect(DB_PATH, row_factory=None)
     files = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
     chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
     libs = conn.execute(
@@ -313,6 +344,7 @@ def show_stats() -> None:
 
 
 def main() -> None:
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Build / inspect the corpus embedding index.")
     parser.add_argument("--incremental", action="store_true", help="Only index new/changed files")
     parser.add_argument("--stats", action="store_true", help="Show index statistics and exit")

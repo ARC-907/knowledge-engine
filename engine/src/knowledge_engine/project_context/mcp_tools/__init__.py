@@ -1,30 +1,16 @@
 """Dynamic discovery and merging of project-context MCP tool modules.
 
 ``collect_tools(cfg)`` imports every ``*_tools.py`` module in this package and
-returns a flat list of MCP tool definitions plus a ``name -> dispatch`` map.
-Adding a tool group means adding a file — nothing here needs editing.
+returns a flat list of MCP tool definitions plus a ``name -> dispatch`` map
+(through :func:`knowledge_engine.mcp.tool_groups.collect_group`, shared with
+the agent board). Adding a tool group means adding a file — nothing here
+needs editing.
 """
 
 from __future__ import annotations
 
-import importlib
-import logging
-import pkgutil
-from collections.abc import Callable
-from typing import Any
-
+from ...mcp.tool_groups import DispatchFn, collect_group
 from ..config import ProjectContextConfig
-
-_logger = logging.getLogger(__name__)
-
-DispatchFn = Callable[[str, dict[str, Any], Any], dict[str, Any]]
-
-
-def _iter_tool_modules():
-    for info in pkgutil.iter_modules(__path__):
-        name = info.name
-        if name.endswith("_tools") and name != "base":
-            yield importlib.import_module(f"{__name__}.{name}")
 
 
 def collect_tools(cfg: ProjectContextConfig) -> tuple[list[dict], dict[str, DispatchFn]]:
@@ -35,19 +21,9 @@ def collect_tools(cfg: ProjectContextConfig) -> tuple[list[dict], dict[str, Disp
     call time by the modules themselves, so agents can always discover a tool
     and learn it is disabled rather than have it vanish.
     """
-    defs: list[dict] = []
-    dispatch: dict[str, DispatchFn] = {}
     if not cfg.mcp.enabled:
-        return defs, dispatch
+        return [], {}
+    return collect_group(__name__, __path__, cfg)
 
-    for module in _iter_tool_modules():
-        try:
-            group_tools = module.tools(cfg)
-            handler: DispatchFn = module.dispatch
-        except AttributeError as exc:  # malformed module — skip, don't crash the server
-            _logger.warning("skipping tool module %s: %s", module.__name__, exc)
-            continue
-        for tool in group_tools:
-            defs.append(tool)
-            dispatch[tool["name"]] = handler
-    return defs, dispatch
+
+__all__ = ["DispatchFn", "collect_tools"]

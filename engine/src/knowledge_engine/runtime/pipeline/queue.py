@@ -13,6 +13,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ...core.util.time import utc_now_iso
 from ..foundation import config, db
 
 VALID_STATES = [
@@ -61,10 +62,6 @@ def _is_valid_task_type(task_type: str) -> bool:
     return task_type in VALID_TASK_TYPES or task_type.startswith("pipeline:")
 
 
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
-
-
 def _json(obj: Any) -> str:
     return json.dumps(obj) if not isinstance(obj, str) else obj
 
@@ -91,7 +88,7 @@ def create_task(
         raise ValueError(f"Invalid task_type: {task_type}")
 
     task_id = str(uuid.uuid4())
-    now = _now_iso()
+    now = utc_now_iso()
 
     default_policy = {
         "allow_web": True,
@@ -177,7 +174,7 @@ def transition_task(
     if new_state == old_state:
         return task
 
-    now = _now_iso()
+    now = utc_now_iso()
     conn = db.get_connection()
 
     updates: dict[str, Any] = {"status": new_state, "updated_at": now}
@@ -186,7 +183,7 @@ def transition_task(
         lease_sec = policy.get("queue_policy", {}).get("claim_timeout_seconds", 600)
         updates["claimed_at"] = now
         updates["assigned_worker"] = worker
-        updates["lease_expires_at"] = (datetime.now(UTC) + timedelta(seconds=lease_sec)).isoformat()
+        updates["lease_expires_at"] = utc_now_iso(timedelta(seconds=lease_sec))
     elif new_state == "running":
         updates["started_at"] = now
     elif new_state in ("complete", "failed"):

@@ -34,6 +34,7 @@ from ..core.errors import install_exception_handlers
 from ..core.http import install_cors, parse_cors_origins, uvicorn_proxy_kwargs
 from ..core.logging_config import uvicorn_log_config
 from ..core.settings import Settings
+from ..runtime.foundation.config import load_dotenv_file
 from . import http as board_http, sweeper as kb_sweeper
 
 _logger = logging.getLogger(__name__)
@@ -117,8 +118,12 @@ def create_standalone_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
-    """Run the standalone service via uvicorn (``port`` default: ``KE_BOARD_STANDALONE_PORT``)."""
+def serve(host: str = "127.0.0.1", port: int | None = None, log_level: str | None = None) -> int:
+    """Run the standalone service via uvicorn.
+
+    ``port`` defaults to ``KE_BOARD_STANDALONE_PORT``; ``log_level`` (the
+    ``knowledge-engine -v/-q`` override) to ``KE_LOG_LEVEL``.
+    """
     try:
         # Only needed when actually serving; keeps `import agent_board` light.
         import uvicorn  # noqa: PLC0415
@@ -134,7 +139,7 @@ def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
         host=host,
         port=port if port is not None else settings.board_standalone_port,
         factory=True,
-        log_config=uvicorn_log_config(settings.log_level),
+        log_config=uvicorn_log_config(log_level or settings.log_level),
         **uvicorn_proxy_kwargs(settings=settings),
     )
     return 0
@@ -148,6 +153,7 @@ def main() -> int:
         "--port", type=int, default=None, help="Port (default: KE_BOARD_STANDALONE_PORT or 11437)."
     )
     args = p.parse_args()
+    load_dotenv_file()
     return serve(host=args.host, port=args.port)
 
 

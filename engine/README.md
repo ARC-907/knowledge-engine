@@ -6,8 +6,8 @@ subtree is self-contained and can be lifted into its own repo without changes.
 ## Layout
 
 - `src/knowledge_engine/` — core package
-  - `cli.py` — `knowledge-engine` CLI entrypoint; `app.py` / `mcp_server.py` — compat shims
-  - `core/` — env config + path resolver (`KE_HOME`, `KE_CORPUS_ROOT`, `KE_DATA_DIR`), corpus registry (source of truth + SQLite mirror), watchdog auto-register
+  - `cli/` — `knowledge-engine` CLI (parser in `__init__.py`, one module per command group; `-v`/`-q` set the stderr log level); `app.py` / `mcp_server.py` — compat shims
+  - `core/` — env config + path resolver (`KE_HOME`, `KE_CORPUS_ROOT`, `KE_DATA_DIR`), corpus registry (`registry.json`, the source of truth), watchdog auto-register, shared helpers (`util/`, `ollama.py`)
   - `server/` — FastAPI app factory + HTTP route modules (`api/`) + packaged dashboard (`static/`, served at `/ui/`)
   - `mcp/` — MCP server on the official MCP Python SDK (stdio + streamable HTTP)
   - `generation/` — provider abstraction (echo / cloud HTTP / Ollama)
@@ -16,8 +16,6 @@ subtree is self-contained and can be lifted into its own repo without changes.
   - `agent_board/` — scoped board store, HTTP/CLI/MCP surfaces, sweeper, provider credential bindings
   - `tool_host/` — hosted script/service/static tool registry
   - `runtime/` — execution substrate: `foundation/` (SQLite backbone), `pipeline/`, `sandbox/` hook
-- `routing_local/` — **opt-in** Ollama / local-LLM provider; not imported unless installed
-- `sandbox_adapter/` — **opt-in** Docker / WSL sandbox adapter
 - `tests/` — pytest smoke tests
 
 ## Run

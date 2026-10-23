@@ -3,16 +3,16 @@
 :class:`RemoteProvider` is gated behind ``cfg.embeddings.allow_remote_provider``.
 When that gate is False the provider raises immediately, ensuring the
 conservative default never silently ships document text to a third party. When
-permitted, it POSTs to a configured HTTP endpoint using the standard library
-only. No network access occurs at import or construction time.
+permitted, it POSTs to a configured HTTP endpoint with ``httpx``. No network
+access occurs at import or construction time.
 """
 
 from __future__ import annotations
 
 import json
-import urllib.error
-import urllib.request
 from typing import TYPE_CHECKING
+
+import httpx
 
 from knowledge_engine.project_context.embeddings.providers import EmbeddingProvider
 
@@ -59,18 +59,16 @@ class RemoteProvider(EmbeddingProvider):
 
     def _embed_one(self, text: str) -> list[float]:
         """POST a single embed request to the remote endpoint."""
-        payload = json.dumps({"model": self._model, "input": text}).encode("utf-8")
-        request = urllib.request.Request(  # noqa: S310  # URL comes from operator config
-            self._endpoint,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
         try:
-            with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:  # noqa: S310  # URL comes from operator config
-                body = response.read().decode("utf-8")
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            response = httpx.post(
+                self._endpoint,
+                json={"model": self._model, "input": text},
+                timeout=_TIMEOUT,
+            )
+            response.raise_for_status()
+        except (httpx.HTTPError, OSError) as exc:
             raise RuntimeError(f"Remote embedding request failed: {exc}") from exc
+        body = response.text
 
         vector = self._parse_vector(body)
         self._dim = len(vector)

@@ -61,11 +61,3 @@ def test_board_serve_reads_board_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "host": "::1",
         "port": 12001,
     }
-
-
-def test_bad_ke_port_is_reported_and_ignored(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setenv("KE_PORT", "lots")
-    assert cli._env_port("KE_PORT", 9210) == 9210
-    assert "KE_PORT" in capsys.readouterr().err

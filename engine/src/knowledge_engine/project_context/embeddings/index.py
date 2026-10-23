@@ -23,8 +23,8 @@ Functions:
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
 
+from ...core.util.time import utc_now_iso
 from . import providers
 
 __all__ = [
@@ -34,11 +34,6 @@ __all__ = [
     "semantic_search",
     "similar_records",
 ]
-
-
-def _utc_now() -> str:
-    """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(UTC).isoformat()
 
 
 def _provider_model(provider: providers.EmbeddingProvider) -> str:
@@ -134,7 +129,7 @@ def generate(
 
     texts = [body for _, body in docs]
     vectors = provider.embed(texts)
-    created_at = _utc_now()
+    created_at = utc_now_iso()
 
     count = 0
     for (record_id, _body), vector in zip(docs, vectors, strict=True):

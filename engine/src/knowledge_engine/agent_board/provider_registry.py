@@ -31,10 +31,10 @@ credentials the engine uses to authenticate *out* to providers.
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from ..core.util.time import utc_now_iso
 from ..runtime.foundation import db
 
 # Recommended env-var binding per known provider. Operators may override
@@ -49,10 +49,6 @@ DEFAULT_ENV_VARS: dict[str, str] = {
 }
 
 KNOWN_PROVIDERS = tuple(DEFAULT_ENV_VARS.keys())
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def default_env_var(provider: str) -> str:
@@ -143,7 +139,7 @@ def verify_provider(key_id: str) -> dict[str, Any] | None:
         return None
     conn.execute(
         "UPDATE api_keys SET last_verified = ? WHERE key_id = ?",
-        (_now_iso(), key_id),
+        (utc_now_iso(), key_id),
     )
     conn.commit()
     return get_provider(key_id)

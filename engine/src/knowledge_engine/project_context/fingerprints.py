@@ -14,10 +14,11 @@ allocation, override, collision, and validation is written to the
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import sqlite3
-from datetime import UTC, datetime
+
+from ..core.util.hashing import sha256_digest, sha256_hex
+from ..core.util.time import utc_now_iso
 
 PROJECT_FP_PREFIX = "proj_"
 BRANCH_FP_PREFIX = "br_"
@@ -26,11 +27,6 @@ _FP_LEN = 16
 
 class ContextError(Exception):
     """Raised when a fingerprint collision or a missing context is detected."""
-
-
-def _now() -> str:
-    """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(UTC).isoformat()
 
 
 def _b32lower(digest: bytes) -> str:
@@ -48,14 +44,14 @@ def project_fp(canonical_root: str, remote_identity: str | None = None) -> str:
     payload = (
         canonical_root if remote_identity is None else f"{canonical_root}\x00{remote_identity}"
     )
-    digest = hashlib.sha256(payload.encode("utf-8")).digest()
+    digest = sha256_digest(payload)
     return PROJECT_FP_PREFIX + _b32lower(digest)[:_FP_LEN]
 
 
 def branch_fp(project_fp: str, branch_name: str) -> str:
     """Derive a deterministic branch fingerprint from a project fp + branch name."""
     payload = f"{project_fp}:{branch_name}"
-    digest = hashlib.sha256(payload.encode("utf-8")).digest()
+    digest = sha256_digest(payload)
     return BRANCH_FP_PREFIX + _b32lower(digest)[:_FP_LEN]
 
 
@@ -72,7 +68,7 @@ def _log_event(
     conn.execute(
         "INSERT INTO fingerprint_events (ts, kind, project_fp, branch_fp, detail, data_json) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (_now(), kind, project_fp, branch_fp, detail, json.dumps(data) if data else None),
+        (utc_now_iso(), kind, project_fp, branch_fp, detail, json.dumps(data) if data else None),
     )
 
 
@@ -101,12 +97,8 @@ def ensure_project(
     ``fingerprint_events``.
     """
     fp = override or project_fp(canonical_root, remote_identity)
-    now = _now()
-    remote_hash = (
-        hashlib.sha256(remote_identity.encode("utf-8")).hexdigest()
-        if remote_identity is not None
-        else None
-    )
+    now = utc_now_iso()
+    remote_hash = sha256_hex(remote_identity) if remote_identity is not None else None
 
     row = conn.execute("SELECT root_path FROM projects WHERE project_fp = ?", (fp,)).fetchone()
 
@@ -124,7 +116,7 @@ def ensure_project(
             (
                 fp,
                 "manual" if override else "derived",
-                hashlib.sha256(canonical_root.encode("utf-8")).hexdigest(),
+                sha256_hex(canonical_root),
                 1 if override else 0,
                 now,
             ),
@@ -195,7 +187,7 @@ def ensure_branch(
     record references an as-yet-unknown branch. Idempotent on repeat calls.
     """
     fp = override or branch_fp(project_fp, branch_name)
-    now = _now()
+    now = utc_now_iso()
 
     row = conn.execute("SELECT branch_fp FROM branches WHERE branch_fp = ?", (fp,)).fetchone()
     if row is not None:

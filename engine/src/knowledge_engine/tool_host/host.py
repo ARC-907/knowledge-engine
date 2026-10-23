@@ -38,17 +38,31 @@ import shlex
 import subprocess
 import uuid as _uuid
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime
 from http.client import HTTPMessage
 from pathlib import Path
 from typing import IO, Any
 from urllib import error as urllib_error, parse as urllib_parse, request as urllib_request
 
+from ..core.util.env import parse_bool_or, parse_list
+from ..core.util.time import utc_now_iso
 from ..runtime.foundation import config, db as db_mod
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_ROOT = config.PIPELINE_ROOT
+
+def _pipeline_root() -> Path:
+    """The pipeline root: a module-level ``PIPELINE_ROOT`` override, else resolved now."""
+    override = globals().get("PIPELINE_ROOT")
+    return Path(override) if override is not None else config.pipeline_root()
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562: ``PIPELINE_ROOT`` used to be frozen at import; it is now
+    # resolved on access (assigning the attribute still overrides it).
+    if name == "PIPELINE_ROOT":
+        return config.pipeline_root()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 _VALID_KINDS = {"script", "service", "static"}
 
@@ -83,10 +97,6 @@ _ALLOWED_UPSTREAM_SCHEMES = frozenset({"http", "https"})
 _HTTP_TOKEN_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 _URL_FORBIDDEN_RE = re.compile(r"[\x00-\x20\x7f]")
 _CREDENTIAL_HEADERS = ("Authorization", "Cookie", "Proxy-authorization")
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def _load_tool_host_config() -> dict[str, Any]:
@@ -142,7 +152,7 @@ def register_tool(
 
     conn = db_mod.get_connection()
     tool_id = str(_uuid.uuid4())
-    now = _now_iso()
+    now = utc_now_iso()
 
     conn.execute(
         """INSERT INTO hosted_tools
@@ -271,7 +281,7 @@ def update_tool(tool_id: str, **fields: Any) -> dict[str, Any] | None:
         if field in updates and not isinstance(updates[field], str):
             updates[field] = json.dumps(updates[field])
 
-    updates["updated_at"] = _now_iso()
+    updates["updated_at"] = utc_now_iso()
 
     conn = db_mod.get_connection()
     set_clause = ", ".join(f"{k} = ?" for k in updates)
@@ -294,7 +304,7 @@ def toggle_tool(tool_id: str) -> dict[str, Any] | None:
     conn = db_mod.get_connection()
     conn.execute(
         "UPDATE hosted_tools SET enabled = 1 - enabled, updated_at = ? WHERE tool_id = ?",
-        (_now_iso(), tool_id),
+        (utc_now_iso(), tool_id),
     )
     conn.commit()
     return get_tool(tool_id)
@@ -311,7 +321,7 @@ def _record_invocation(tool_id: str) -> None:
            SET invocation_count = invocation_count + 1,
                last_invoked_at = ?
            WHERE tool_id = ?""",
-        (_now_iso(), tool_id),
+        (utc_now_iso(), tool_id),
     )
     conn.commit()
 
@@ -361,7 +371,7 @@ def invoke_script(
         logger.warning("tool %s: interpreter %r denied (not allowlisted)", tool_id, first_word)
         return {"ok": False, "error": f"Interpreter '{first_word}' not in allowed list"}
 
-    working_dir = tool.get("working_dir") or str(PIPELINE_ROOT)
+    working_dir = tool.get("working_dir") or str(_pipeline_root())
     inline = _as_bool(tool.get("allow_inline"))
     if inline:
         script_label = "<inline mode>"
@@ -463,7 +473,7 @@ def _check_script_argv(
     base = Path(working_dir)
     try:
         script = (base / first_arg).resolve()
-        roots = [base.resolve(), Path(PIPELINE_ROOT).resolve()]
+        roots = [base.resolve(), _pipeline_root().resolve()]
     except (OSError, RuntimeError, ValueError) as exc:
         return f"Script path '{first_arg}' cannot be resolved: {exc}"
     if not any(script.is_relative_to(root) for root in roots):
@@ -658,7 +668,7 @@ def health_check_all_services() -> list[dict[str, Any]]:
 def _as_bool(value: Any) -> bool:
     """Interpret a DB/config flag (``1``, ``True``, ``"true"`` ...) as a bool."""
     if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
+        return parse_bool_or(value, False)
     return bool(value)
 
 
@@ -668,7 +678,7 @@ def _decode_list(value: Any) -> Any:
         try:
             return json.loads(value)
         except json.JSONDecodeError:
-            return [part.strip() for part in value.split(",") if part.strip()]
+            return parse_list(value)
     return value
 
 

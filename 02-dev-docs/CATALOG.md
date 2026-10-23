@@ -30,10 +30,10 @@ add your own under `corpus/` and register them (see
 
 ## Engine modules (`engine/src/knowledge_engine/`)
 
-- `cli.py` — `knowledge-engine` console-script entrypoint
+- `cli/` — `knowledge-engine` console-script entrypoint: `__init__.py` (parser, `-v`/`-q` logging, lazy dispatch) and one module per command group (`corpus`, `serve`, `mcp`, `board`, `project_context`)
   (`info | bootstrap | capabilities | reindex | watch | search | serve | mcp | config | project-context | board | board-serve`)
 - `app.py`, `mcp_server.py` — compatibility shims re-exporting `server.app` / `mcp.server` (`mcp_server` is deprecated)
-- `core/` — `settings.py` (typed `Settings`: every `KE_*` / `OLLAMA_*` env var; `config show`, generates `01-user-docs/CONFIGURATION.md`), `config.py` (path view over `Settings`), `errors.py` (shared HTTP exception handlers), `registry.py` (JSON registry + SQLite mirror), `watcher.py` (`watchdog` auto-register)
+- `core/` — `settings.py` (typed `Settings`: every `KE_*` / `OLLAMA_*` env var; `config show`, generates `01-user-docs/CONFIGURATION.md`), `config.py` (path view over `Settings`), `errors.py` (shared HTTP exception handlers), `registry.py` (JSON registry, atomic writes), `watcher.py` (`watchdog` auto-register), `ollama.py` (shared `OllamaClient`), `util/` (time, hashing, slug, env, git and SQLite helpers)
 - `server/` — `app.py` (I/O-free FastAPI application factory), `lifespan.py` (opens/closes the registry, index, providers, board sweeper and MCP mount), `deps.py` (`Depends` providers), `schemas.py` (request/response models), and `api/` route modules: `health_routes`, `registry_routes`, `search_routes`, `generate_routes`, `board_routes` (alias of `agent_board/http.py`)
 - `mcp/server.py` — MCP server on the official MCP Python SDK, stdio + streamable HTTP (protocol `2026-07-28`; `initialize` clients back to `2024-11-05`); `mcp/toolkit.py` mounts the legacy JSON-schema tool groups
 - `generation/` — provider abstraction: `base.py` (Provider contract + `ProviderRegistry`), `EchoProvider` + `CloudHTTPProvider` (OpenAI-compatible, `cloud_http.py`), `OllamaProvider` (`ollama_provider.py`), `factory.py` (registry from `Settings`)
@@ -45,8 +45,8 @@ add your own under `corpus/` and register them (see
 
 ### Optional adjuncts
 
-- `engine/routing_local/ollama_provider.py` — opt-in Ollama provider module
-- `engine/sandbox_adapter/` — opt-in sandbox scaffold (README only — bring your own executor)
+- `runtime/sandbox/` — `get_sandbox()` hook (default `NoopSandbox`); bring your own executor
+- Ollama: `core/ollama.py` (`OllamaClient`) serves the `ollama` generation provider, embeddings and the task classifier
 
 ### Tests (`engine/tests/`)
 

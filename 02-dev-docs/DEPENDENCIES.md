@@ -18,7 +18,7 @@ All required-core deps are pinned in `engine/pyproject.toml`.
 | Feature | Deps | Enabled by |
 | --- | --- | --- |
 | Local model routing via Ollama | Ollama installed at `OLLAMA_BASE_URL` | always registered; reachability probed lazily and cached (`KE_PROVIDER_PROBE_TTL`), unreachable → next provider |
-| Sandboxed agent execution | Docker / WSL / subprocess executor of your choice | `engine/sandbox_adapter/` is a scaffold — bring your own executor |
+| Sandboxed agent execution | Docker / WSL / subprocess executor of your choice | `runtime/sandbox/` `get_sandbox()` hook — bring your own executor |
 | Cloud model routing | An OpenAI-compatible endpoint + key (`KE_CLOUD_ENDPOINT`, `KE_CLOUD_API_KEY`, `KE_CLOUD_MODEL`) | `cloud-http` provider registered first when both endpoint and key are set; otherwise not registered |
 | Filename / fulltext index over external files | Index those files into FTS5 by registering their parent folder | manual — `knowledge-engine reindex` |
 | Pipeline foundation (`runtime/foundation/`) | `pyyaml` for config-loader YAML files | import-time: `KE_PIPELINE_ROOT` / `KE_PIPELINE_DB` env vars; foundation SQLite auto-creates on first connect |

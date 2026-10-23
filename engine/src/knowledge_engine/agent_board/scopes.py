@@ -41,6 +41,7 @@ from pathlib import Path
 
 from ..core import paths
 from ..core.logsafe import log_safe
+from ..core.util.slug import slugify
 from ..runtime.foundation import db
 
 _logger = logging.getLogger(__name__)
@@ -50,8 +51,9 @@ _logger = logging.getLogger(__name__)
 # dots (hidden files, traversal), no slashes, no uppercase, no whitespace.
 SCOPE_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
-# Legacy normaliser kept for callers that pre-process free-form keys.
-_SAFE_CHARS = re.compile(r"[^a-z0-9._-]+")
+# Legacy normaliser kept for callers that pre-process free-form keys: ASCII
+# letters/digits plus these characters survive, every other run becomes "-".
+_SLUG_KEEP = "._-"
 _MAX_SLUG_LEN = 80
 SCOPES_DIRNAME = "board-scopes"
 
@@ -92,11 +94,15 @@ def slugify_scope(scope: str) -> str:
     """
     if not scope or not scope.strip():
         raise ValueError("scope must be a non-empty string")
-    slug = _SAFE_CHARS.sub("-", scope.strip().lower())
-    slug = slug.strip("-._")
-    slug = re.sub(r"-{2,}", "-", slug)
-    if len(slug) > _MAX_SLUG_LEN:
-        slug = slug[:_MAX_SLUG_LEN].rstrip("-._")
+    slug = slugify(
+        scope.strip(),
+        separators="",
+        keep=_SLUG_KEEP,
+        replace_unknown=True,
+        ascii_only=True,
+        strip="-._",
+        max_length=_MAX_SLUG_LEN,
+    )
     if not slug:
         raise ValueError(f"scope {scope!r} slugifies to empty; choose another key")
     return slug

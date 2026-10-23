@@ -88,7 +88,9 @@ def test_lifespan_opens_and_closes_the_databases(engine_env: Path) -> None:
     with TestClient(app) as client:
         registry = app.state.registry
         indexer = app.state.indexer
-        assert (engine_env / "data" / "registry.db").is_file()
+        assert (engine_env / "data" / "index.db").is_file()
+        # The never-read SQLite mirror of registry.json is no longer written.
+        assert not (engine_env / "data" / "registry.db").exists()
         assert client.get("/search", params={"q": "x"}).status_code == 200
         assert not registry.closed and not indexer.closed
     assert registry.closed and indexer.closed
@@ -219,11 +221,11 @@ def test_concurrent_registry_toggles_from_eight_threads(engine_env: Path) -> Non
 
         listed = client.get("/registry").json()
         assert sorted(e["id"] for e in listed) == ids
-    # The JSON source of truth is intact and agrees with the mirror.
+    # The JSON source of truth is intact (and is the only copy).
     doc = json.loads((engine_env / "corpus" / "registry.json").read_text(encoding="utf-8"))
     assert sorted(row["id"] for row in doc["kits"]) == ids
-    with sqlite3.connect(engine_env / "data" / "registry.db") as conn:
-        assert conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0] == 8
+    assert all(isinstance(row["enabled"], bool) for row in doc["kits"])
+    assert not (engine_env / "data" / "registry.db").exists()
     leftovers = list((engine_env / "corpus").glob(".registry.json.*.tmp"))
     assert leftovers == []
 

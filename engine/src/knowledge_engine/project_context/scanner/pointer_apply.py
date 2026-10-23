@@ -27,20 +27,16 @@ import logging
 import os
 import sqlite3
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
 
+from ...core.paths import ensure_within
+from ...core.util.time import utc_now_iso
 from .. import ingest, pointers
 from ..schema import CATEGORY_DOCSTRING, POINTER_DOCSTRING
 from . import validators
 from .pointer_plan import BACKUP_SUFFIX, _parse_span, stub_for
 
 logger = logging.getLogger(__name__)
-
-
-def _utcnow() -> str:
-    """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(UTC).isoformat()
 
 
 def _not_permitted(plan_id: str, reason: str) -> dict:
@@ -83,28 +79,8 @@ def _load_plan_items(conn: sqlite3.Connection, plan_id: str) -> list[dict] | Non
 
 
 def _ensure_within(root: str | Path, path: str | Path) -> Path:
-    """Resolve ``path`` against ``root`` and require the result to stay under it.
-
-    Relative paths are joined to ``root``; absolute paths are taken as given.
-    Symlinks are followed, so a link that points outside ``root`` is rejected.
-    Returns the resolved path. Raises ``ValueError`` when the path escapes
-    ``root`` or cannot be resolved.
-
-    TODO: move to ``knowledge_engine.core.paths.ensure_within`` once that shared
-    helper exists, and import it from there.
-    """
-    if "\x00" in str(path):
-        # Windows' realpath swallows the embedded-null ValueError and returns
-        # the path unchanged, so check explicitly on every platform.
-        raise ValueError(f"cannot resolve {str(path)!r}: embedded null byte")
-    try:
-        root_resolved = Path(root).resolve()
-        resolved = (root_resolved / path).resolve()
-    except (OSError, RuntimeError, ValueError) as exc:
-        raise ValueError(f"cannot resolve {str(path)!r}: {exc}") from exc
-    if not resolved.is_relative_to(root_resolved):
-        raise ValueError(f"{str(path)!r} resolves outside the project root")
-    return resolved
+    """:func:`knowledge_engine.core.paths.ensure_within` worded for a project root."""
+    return ensure_within(root, path, label="the project root")
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -173,7 +149,7 @@ def _record_event(
             (plan_id, pointer_id, ts, action, backup_path, result, detail)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (plan_id, pointer_id, _utcnow(), action, backup_path, result, detail),
+        (plan_id, pointer_id, utc_now_iso(), action, backup_path, result, detail),
     )
     conn.commit()
 

@@ -20,9 +20,9 @@ the engine's HTTP API. You can replace any one without touching the others.
 ## Flexible-corpus principle
 
 The engine **never hardcodes** library names, skill names, paths, or counts.
-Every piece of discovery goes through the registry. `corpus/registry.json`
-(mirrored into a queryable SQLite cache at `<KE_DATA_DIR>/registry.db`) is the
-single source of truth for what is enabled and indexed.
+Every piece of discovery goes through the registry. `corpus/registry.json` is
+the single source of truth for what is enabled and indexed (it is rewritten
+atomically on every change; there is no SQLite copy).
 
 This is what makes the engine corpus-agnostic: drop in any markdown corpus,
 register it, reindex, and the dashboard and MCP server expose it without a
@@ -45,7 +45,7 @@ surface over several source-owned systems:
 | Agent board | Scoped agent messages, digests, blockers, acknowledgements | `/board/*`, board CLI, `board_*` MCP tools |
 | Hosted tools | Script/service/static tool registrations | `tool_host/host.py` backed by `runtime.foundation.db` |
 | Foundation | Shared substrate, provider bindings, queues, tool records, future catalog/memory | SQLite WAL backbone and optional pipeline modules |
-| Sandbox/execution adapter | Execution delegated to an external or sandboxed agent runtime | `sandbox/` factory hook and `sandbox_adapter/` bring-your-own executor |
+| Sandbox/execution adapter | Execution delegated to an external or sandboxed agent runtime | `runtime/sandbox/` factory hook (`get_sandbox()`); bring your own executor |
 
 The future retrieval broker should normalize and govern these existing
 surfaces. It should not flatten all stores into one database. Each source keeps
@@ -64,9 +64,9 @@ corpus/                         the knowledge content (data layer)
 engine/                          the engine (code layer)
   pyproject.toml                 package metadata; `knowledge-engine` console script
   src/knowledge_engine/
-    cli.py                       `knowledge-engine` CLI entrypoint (bootstrap/capabilities/reindex/search/...)
+    cli/                         `knowledge-engine` CLI: parser + dispatch (__init__.py), corpus/serve/mcp/board/project_context command modules
     app.py  mcp_server.py        compat shims re-exporting server.app / mcp.server
-    core/                        paths.py (KE_HOME/KE_* path resolver), config.py (env config), registry.py (source of truth), watcher.py (auto-register)
+    core/                        paths.py (KE_HOME/KE_* path resolver), config.py (env config), registry.py (source of truth), watcher.py (auto-register), ollama.py (Ollama client), util/ (shared helpers)
     server/                      app.py (FastAPI factory) + api/ routes (health, registry, search, generate, board)
       static/                    index.html + app.js + compiled tailwind.css (built from ui-src/) — Alpine.js dashboard (Search / Registry / Board / Config tabs), served at /ui/
     mcp/                         server.py — JSON-RPC 2.0 MCP stdio server
@@ -76,8 +76,6 @@ engine/                          the engine (code layer)
     agent_board/                 agent coordination surface — schemas, scopes (per-project/branch/agent DB routing), store, FTS5 search, keys, provider_registry, sweeper, CLI, MCP tool group
     tool_host/                   opt-in tool host (script/service/static tool registry over HTTP)
     runtime/                     execution substrate — foundation/ (YAML config + SQLite WAL backbone), pipeline/ (queue + message board + worker registry + task classifier), sandbox/ hook
-  routing_local/                 opt-in Ollama provider module
-  sandbox_adapter/              opt-in sandboxed-agent scaffold (README only)
   tests/                         pytest smoke + regression tests
 
 scripts/
@@ -194,13 +192,17 @@ is what an AI assistant sees, so anything not on it is invisible to agents.
 
 ## Concurrency note
 
-`Registry` and `Indexer` each hold a long-lived SQLite connection. Because the
-FastAPI app runs synchronous route handlers on a worker threadpool, those
-connections are opened with `check_same_thread=False` and every cursor
-operation is serialized behind a lock. This lets a single shared `Registry` /
-`Indexer` live on `app.state` and be used safely from any worker thread. If
-you add a new SQLite-backed component, follow this pattern — do not share a
-bare connection across threads.
+`Registry` holds the JSON document in memory and `Indexer` holds a long-lived
+SQLite connection. Because the FastAPI app runs synchronous route handlers on a
+worker threadpool, each serializes its state behind a lock: every registry
+mutation (and its atomic file write) runs under the registry lock, and every
+FTS cursor operation under the indexer lock — `rebuild()` reads the corpus
+first and only swaps the table contents under it. SQLite connections are
+opened through `core.util.sqlite.connect` (WAL, 5 s busy timeout, foreign keys,
+`check_same_thread=False`). This lets a single shared `Registry` / `Indexer`
+live on `app.state` and be used safely from any worker thread. If you add a new
+SQLite-backed component, follow this pattern — do not share a bare connection
+across threads.
 
 ## Optional layers (loud escape hatches)
 
@@ -208,12 +210,25 @@ Several subsystems are **opt-in** and the lean core works without them:
 
 - `retrieval/embeddings/` — bge-m3 semantic search via Ollama. Build with
   `python -m knowledge_engine.retrieval.embeddings.build`.
-- `routing_local/` — the Ollama provider for local model routing.
-- `sandbox_adapter/` — a scaffold for sandboxed-agent execution; ships as a
-  README only. Bring your own executor.
+- Ollama — every Ollama HTTP call (the `ollama` generation provider, corpus
+  and project-context embeddings, the pipeline task classifier) goes through
+  one client, `core/ollama.py` (`OllamaClient`: `available()`, `generate()`,
+  batched `embed()`). Each consumer keeps its own variables (`OLLAMA_BASE_URL`
+  / `OLLAMA_MODEL` / `OLLAMA_TIMEOUT`, `KE_OLLAMA_URL` / `KE_EMBED_MODEL`,
+  the project-context `[embeddings] url`, `KE_CLASSIFIER_ENDPOINT`); the
+  module docstring lists the precedence.
+- `runtime/sandbox/` — the sandboxed-execution hook. `get_sandbox()` returns a
+  `NoopSandbox` (every `run(command, stdin=None, timeout=30.0)` answers
+  `SandboxResult(returncode=127)`); to delegate heavy or containerized work
+  (Docker, WSL, Firecracker, a subprocess jail), return your own object with
+  the same `run()` signature from that factory. Disabled by default.
 - `runtime/foundation/` — YAML config loader (`config.py`) + SQLite WAL backbone
   (`db.py`). The shared base for the pipeline and tool-host layers. Lives under
-  `$KE_PIPELINE_ROOT` (default: `./pipeline`); SQLite at `$KE_PIPELINE_DB`
+  `$KE_PIPELINE_ROOT` (default: `./pipeline`, resolved when first needed, not
+  at import). `$KE_PIPELINE_ROOT/.env` is loaded explicitly by
+  `config.load_dotenv_file()` from the `knowledge-engine` CLI, the MCP server
+  entry point and the HTTP app's lifespan (variables already set win);
+  importing the package never touches `os.environ`. SQLite at `$KE_PIPELINE_DB`
   (default: `$KE_DATA_DIR/pipeline.db`). The DB path is resolved
   **dynamically** on every `get_connection()` (`db.resolve_db_path`), not
   frozen at import — so the backbone can be re-pointed at a different

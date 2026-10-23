@@ -12,11 +12,12 @@ is invoked, and they degrade gracefully when their dependency is unavailable.
 
 from __future__ import annotations
 
-import hashlib
 import math
 import struct
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+
+from ...core.util.hashing import sha256_digest
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from knowledge_engine.project_context.config import ProjectContextConfig
@@ -81,7 +82,7 @@ class StubProvider(EmbeddingProvider):
         # Expand the digest deterministically until we have enough components.
         while len(values) < self._dim:
             seed = f"{counter}:{text}".encode()
-            digest = hashlib.sha256(seed).digest()
+            digest = sha256_digest(seed)
             for i in range(0, len(digest), 2):
                 if len(values) >= self._dim:
                     break

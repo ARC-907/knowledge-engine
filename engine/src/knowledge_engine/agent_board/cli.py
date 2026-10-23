@@ -15,30 +15,54 @@ import argparse
 import contextlib
 import io
 import json
-import os
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlencode
 
-# Windows consoles default to cp1252; em-dashes, arrows, and emoji in agent
-# bodies otherwise raise UnicodeEncodeError on a read pass.
-with contextlib.suppress(Exception):  # pragma: no cover
-    if isinstance(sys.stdout, io.TextIOWrapper):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    if isinstance(sys.stderr, io.TextIOWrapper):
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+import httpx
+
+from ..core.settings import Settings
+
+#: Seconds allowed for one request to the board API.
+REQUEST_TIMEOUT = 15.0
 
 
-def _base_url(arg_url: str | None) -> str:
+class BoardRequestError(Exception):
+    """A request to the board API failed."""
+
+
+class BoardUnreachableError(BoardRequestError):
+    """The board API could not be reached (connection refused, DNS, timeout)."""
+
+
+class BoardHTTPError(BoardRequestError):
+    """The board API answered with an HTTP error status."""
+
+    def __init__(self, code: int, body: str) -> None:
+        super().__init__(f"HTTP {code}")
+        self.code = code
+        self.body = body
+
+
+def _utf8_console() -> None:
+    """Windows consoles default to cp1252; em-dashes, arrows and emoji in agent
+    bodies otherwise raise UnicodeEncodeError on a read pass."""
+    with contextlib.suppress(Exception):  # pragma: no cover
+        if isinstance(sys.stdout, io.TextIOWrapper):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if isinstance(sys.stderr, io.TextIOWrapper):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+def _base_url(arg_url: str | None, settings: Settings | None = None) -> str:
+    """``--url``, else ``KE_BOARD_URL``, else loopback on ``KE_BOARD_PORT``/``KE_PORT``/9210."""
     if arg_url:
         return arg_url.rstrip("/")
-    env_url = os.environ.get("KE_BOARD_URL")
-    if env_url:
-        return env_url.rstrip("/")
-    port = os.environ.get("KE_BOARD_PORT", os.environ.get("KE_PORT", "9210"))
+    settings = settings if settings is not None else Settings()
+    if settings.board_url:
+        return settings.board_url.rstrip("/")
+    port = (settings.board_port or "").strip() or str(settings.port or 9210)
     return f"http://127.0.0.1:{port}"
 
 
@@ -50,49 +74,51 @@ def _resolve_body(raw: str) -> str:
     return raw
 
 
+def _request(
+    method: str, url: str, payload: dict[str, Any] | None = None, key: str | None = None
+) -> Any:
+    """Send one request to the board API and return the decoded JSON body.
+
+    Raises :class:`BoardUnreachableError` on transport failures and
+    :class:`BoardHTTPError` on a 4xx/5xx answer. An empty body decodes to
+    ``{"ok": True}``.
+    """
+    headers = {"X-Board-Key": key} if key else {}
+    try:
+        response = httpx.request(
+            method,
+            url,
+            json=payload,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except httpx.TransportError as exc:
+        raise BoardUnreachableError(f"{type(exc).__name__}: {exc}") from exc
+    if response.status_code >= 400:
+        raise BoardHTTPError(response.status_code, response.text)
+    if not response.content:
+        return {"ok": True}
+    return response.json()
+
+
 def _get(url: str, key: str | None = None) -> Any:
-    req = urllib.request.Request(url, method="GET")  # noqa: S310  # URL comes from operator config
-    if key:
-        req.add_header("X-Board-Key", key)
-    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # URL comes from operator config
-        return json.loads(resp.read().decode("utf-8"))
+    return _request("GET", url, key=key)
 
 
 def _post(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(  # noqa: S310  # URL comes from operator config
-        url,
-        data=data,
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    if key:
-        req.add_header("X-Board-Key", key)
-    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # URL comes from operator config
-        return json.loads(resp.read().decode("utf-8"))
+    return _request("POST", url, payload, key=key)
+
+
+def _put(url: str, key: str | None = None) -> Any:
+    return _request("PUT", url, key=key)
 
 
 def _patch(url: str, payload: dict[str, Any], key: str | None = None) -> Any:
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(  # noqa: S310  # URL comes from operator config
-        url,
-        data=data,
-        method="PATCH",
-        headers={"Content-Type": "application/json"},
-    )
-    if key:
-        req.add_header("X-Board-Key", key)
-    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # URL comes from operator config
-        return json.loads(resp.read().decode("utf-8"))
+    return _request("PATCH", url, payload, key=key)
 
 
 def _delete(url: str, key: str | None = None) -> Any:
-    req = urllib.request.Request(url, method="DELETE")  # noqa: S310  # URL comes from operator config
-    if key:
-        req.add_header("X-Board-Key", key)
-    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # URL comes from operator config
-        body = resp.read().decode("utf-8")
-        return json.loads(body) if body else {"ok": True}
+    return _request("DELETE", url, key=key)
 
 
 def _print_messages(msgs: list[dict[str, Any]]) -> None:
@@ -126,7 +152,7 @@ def _scope_of(args) -> str | None:
 def cmd_status(args, base: str) -> int:
     try:
         st = _get(f"{base}/board/status")
-    except urllib.error.URLError as e:
+    except BoardUnreachableError as e:
         print(f"board unreachable at {base}: {e}", file=sys.stderr)
         return 2
     print(json.dumps(st, indent=2))
@@ -160,11 +186,11 @@ def cmd_read(args, base: str) -> int:
     if scope := _scope_of(args):
         params["scope"] = scope
     params["limit"] = str(args.limit)
-    qs = urllib.parse.urlencode(params)
+    qs = urlencode(params)
     url = f"{base}/board/messages?{qs}"
     try:
         msgs = _get(url)
-    except urllib.error.URLError as e:
+    except BoardUnreachableError as e:
         print(f"board unreachable at {base}: {e}", file=sys.stderr)
         return 2
     if args.json:
@@ -208,10 +234,10 @@ def cmd_post(args, base: str) -> int:
         payload["scope"] = _scope_of(args)
     try:
         msg = _post(f"{base}/board/messages", payload, key=args.key)
-    except urllib.error.HTTPError as e:
-        print(f"post rejected ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
+    except BoardHTTPError as e:
+        print(f"post rejected ({e.code}): {e.body}", file=sys.stderr)
         return 1
-    except urllib.error.URLError as e:
+    except BoardUnreachableError as e:
         print(f"board unreachable at {base}: {e}", file=sys.stderr)
         return 2
     print(json.dumps(msg, indent=2))
@@ -226,7 +252,7 @@ def cmd_thread(args, base: str) -> int:
             file=sys.stderr,
         )
         return 1
-    quoted = urllib.parse.quote(ident, safe="")
+    quoted = quote(ident, safe="")
     # The route is /board/threads/{correlation_id}. The store also accepts
     # thread_id — when the caller passes --thread-id we route through the
     # threads endpoint as a correlation_id; the store layer falls back to
@@ -238,7 +264,7 @@ def cmd_thread(args, base: str) -> int:
         params["scope"] = scope
     url = f"{base}/board/threads/{quoted}"
     if params:
-        url += "?" + urllib.parse.urlencode(params)
+        url += "?" + urlencode(params)
     msgs = _get(url)
     if args.json:
         print(json.dumps(msgs, indent=2))
@@ -253,7 +279,7 @@ def cmd_search(args, base: str) -> int:
         params["channel"] = args.channel
     if _scope_of(args):
         params["scope"] = _scope_of(args)
-    qs = urllib.parse.urlencode(params)
+    qs = urlencode(params)
     hits = _get(f"{base}/board/search?{qs}")
     print(json.dumps(hits, indent=2))
     return 0
@@ -269,14 +295,24 @@ def cmd_digest(args, base: str) -> int:
         params["max_messages"] = str(args.max_messages)
     if scope := _scope_of(args):
         params["scope"] = scope
-    qs = urllib.parse.urlencode(params)
+    qs = urlencode(params)
     url = f"{base}/board/digest" + (f"?{qs}" if qs else "")
     print(json.dumps(_get(url), indent=2))
     return 0
 
 
 def cmd_scopes(args, base: str) -> int:
-    print(json.dumps(_get(f"{base}/board/scopes"), indent=2))
+    print(json.dumps(_get(f"{base}/board/scopes", key=args.key), indent=2))
+    return 0
+
+
+def cmd_scopes_create(args, base: str) -> int:
+    try:
+        result = _put(f"{base}/board/scopes/{quote(args.name, safe='')}", key=args.key)
+    except BoardHTTPError as e:
+        print(f"scope create rejected ({e.code}): {e.body}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -286,12 +322,12 @@ def cmd_ack(args, base: str) -> int:
         payload["scope"] = _scope_of(args)
     try:
         msg = _post(
-            f"{base}/board/messages/{urllib.parse.quote(args.message_id, safe='')}/ack",
+            f"{base}/board/messages/{quote(args.message_id, safe='')}/ack",
             payload,
             key=args.key,
         )
-    except urllib.error.HTTPError as e:
-        print(f"ack rejected ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
+    except BoardHTTPError as e:
+        print(f"ack rejected ({e.code}): {e.body}", file=sys.stderr)
         return 1
     print(json.dumps(msg, indent=2))
     return 0
@@ -300,8 +336,8 @@ def cmd_ack(args, base: str) -> int:
 def cmd_sweep(args, base: str) -> int:
     try:
         result = _post(f"{base}/board/sweep", {}, key=args.key)
-    except urllib.error.HTTPError as e:
-        print(f"sweep rejected ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
+    except BoardHTTPError as e:
+        print(f"sweep rejected ({e.code}): {e.body}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2))
     return 0
@@ -331,7 +367,7 @@ def cmd_keys_create(args, base: str) -> int:
 def cmd_keys_revoke(args, base: str) -> int:
     print(
         json.dumps(
-            _delete(f"{base}/board/keys/{urllib.parse.quote(args.key_id, safe='')}", key=args.key),
+            _delete(f"{base}/board/keys/{quote(args.key_id, safe='')}", key=args.key),
             indent=2,
         )
     )
@@ -341,10 +377,8 @@ def cmd_keys_revoke(args, base: str) -> int:
 def cmd_keys_bootstrap(args, base: str) -> int:
     try:
         result = _post(f"{base}/board/keys/bootstrap-master", {})
-    except urllib.error.HTTPError as e:
-        print(
-            f"bootstrap rejected ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr
-        )
+    except BoardHTTPError as e:
+        print(f"bootstrap rejected ({e.code}): {e.body}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2))
     return 0
@@ -412,7 +446,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("types", help="List canonical message types + scopes.").set_defaults(
         func=cmd_types
     )
-    sub.add_parser("scopes", help="List per-scope databases.").set_defaults(func=cmd_scopes)
+    psc = sub.add_parser("scopes", help="List (default) or create per-scope databases.")
+    psc.set_defaults(func=cmd_scopes)
+    pscs = psc.add_subparsers(dest="scopes_cmd")
+    pscs.add_parser("list", help="List per-scope databases.").set_defaults(func=cmd_scopes)
+    pscc = pscs.add_parser("create", help="Create a per-scope database (admin key; idempotent).")
+    pscc.add_argument("name", help="Scope name: [a-z0-9][a-z0-9_-]{0,63}.")
+    pscc.set_defaults(func=cmd_scopes_create)
 
     pr = sub.add_parser("read", help="Read messages.", parents=[scope_parent])
     pr.add_argument("--since")
@@ -514,19 +554,24 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _utf8_console()
     parser = build_parser()
     args = parser.parse_args(argv)
+    settings = Settings()
     if not getattr(args, "key", None):
-        args.key = os.environ.get("KE_BOARD_KEY")
-    base = _base_url(args.url)
+        args.key = settings.board_key.get_secret_value() if settings.board_key else None
+    base = _base_url(args.url, settings)
     try:
         return args.func(args, base)
-    except urllib.error.HTTPError as e:
-        print(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
+    except BoardHTTPError as e:
+        print(f"HTTP {e.code}: {e.body}", file=sys.stderr)
         return 1
-    except urllib.error.URLError as e:
+    except BoardUnreachableError as e:
         print(f"board unreachable at {base}: {e}", file=sys.stderr)
         return 2
+    except ValueError as e:  # a 2xx answer whose body is not JSON
+        print(f"unexpected response from {base}: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
