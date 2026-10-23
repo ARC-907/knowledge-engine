@@ -52,6 +52,18 @@ def ke_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
+# Registries / indexes opened by ``_engine``; closed after each test so the
+# run stays free of "unclosed database" ResourceWarnings.
+_OPENED: list[Any] = []
+
+
+@pytest.fixture(autouse=True)
+def _close_engines() -> Iterator[None]:
+    yield
+    while _OPENED:
+        _OPENED.pop().close()
+
+
 def _engine() -> tuple[Any, Any, Any]:
     from knowledge_engine.core.config import Config
     from knowledge_engine.core.registry import Registry
@@ -59,7 +71,9 @@ def _engine() -> tuple[Any, Any, Any]:
 
     config = Config.from_env()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")
-    return config, registry, Indexer(config, registry)
+    indexer = Indexer(config, registry)
+    _OPENED.extend([registry, indexer])
+    return config, registry, indexer
 
 
 def _build(*, include_groups: bool = True) -> Any:

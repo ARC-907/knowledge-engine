@@ -30,7 +30,7 @@ from ..core.logsafe import log_safe
 from ..core.util.time import utc_now_iso
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
-from . import schemas
+from . import digest as digest_mod, schemas
 from .scopes import scope_db_path, scope_exists
 
 _logger = logging.getLogger(__name__)
@@ -55,24 +55,6 @@ def _default_config() -> dict[str, Any]:
     return cfg
 
 
-def _empty_digest(
-    channel: str | None = None,
-    since: str | None = None,
-    max_messages: int = 200,
-    include_sweeper_posts: bool = False,
-) -> dict[str, Any]:
-    return {
-        "channel": channel or "(all)",
-        "since": since,
-        "scanned": 0,
-        "counts_by_type": {},
-        "most_recent_per_type": {},
-        "open_blockers": [],
-        "top_senders": [],
-        "busy_threads": [],
-    }
-
-
 # What each read returns for a scope that does not exist. Keyed by function
 # name; the factory receives the call's own arguments so shape-dependent
 # answers (``digest``) can echo the filters back like the real thing.
@@ -83,7 +65,7 @@ _EMPTY_FOR_UNKNOWN_SCOPE: dict[str, Callable[..., Any]] = {
     "relevant_for": lambda *a, **k: [],
     "thread_messages": lambda *a, **k: [],
     "search_messages": lambda *a, **k: [],
-    "digest": _empty_digest,
+    "digest": digest_mod.empty_digest,
     "get_unacked_blockers": lambda *a, **k: [],
     "ack_message": lambda *a, **k: None,
     "channel_stats": lambda *a, **k: [],
@@ -412,8 +394,8 @@ def _like_search(
 # ── Context-compressed digest ──────────────────────────────────
 
 
-_SWEEPER_NODE_ID = "board-sweeper"
-_DIGEST_SELF_TYPES = frozenset({"digest"})
+_SWEEPER_NODE_ID = digest_mod.SWEEPER_NODE_ID
+_DIGEST_SELF_TYPES = digest_mod.DIGEST_SELF_TYPES
 
 
 @_scoped
@@ -426,15 +408,11 @@ def digest(
     """Compressed summary of recent activity. The MCP context-saver.
 
     Instead of returning N full message bodies (cheap to flood a context
-    window), returns a short structured summary:
+    window), returns a short structured summary (see
+    :func:`knowledge_engine.agent_board.digest.summarize`): counts by type,
+    most recent message per type, open blockers, top senders, busy threads.
 
-    * Counts by message_type
-    * Most-recent message per type (subject only)
-    * Open blockers (requires_ack=1 AND not yet acked)
-    * Active senders (top 5 by post count)
-    * Threads with >= 3 messages (correlation_id + count)
-
-    Sweeper-emitted `digest` posts are excluded by default — otherwise
+    Sweeper-emitted `digest` posts are excluded by default -- otherwise
     each new digest would count prior digests in its `scanned` set,
     making `top_senders` collapse to `board-sweeper`. Set
     `include_sweeper_posts=True` if you actually want the full picture.
@@ -443,61 +421,8 @@ def digest(
     """
     msgs = poll(since=since, channel=channel, limit=max_messages)
     if not include_sweeper_posts:
-        msgs = [
-            m
-            for m in msgs
-            if not (
-                m.get("sender_node_id") == _SWEEPER_NODE_ID
-                and m.get("message_type") in _DIGEST_SELF_TYPES
-            )
-        ]
-    by_type: dict[str, int] = {}
-    by_sender: dict[str, int] = {}
-    by_thread: dict[str, int] = {}
-    most_recent_per_type: dict[str, dict[str, Any]] = {}
-    open_blockers: list[dict[str, Any]] = []
-
-    for msg in msgs:
-        mt = msg.get("message_type") or "unknown"
-        by_type[mt] = by_type.get(mt, 0) + 1
-        if mt not in most_recent_per_type:
-            most_recent_per_type[mt] = {
-                "message_id": msg.get("message_id"),
-                "subject": msg.get("subject"),
-                "from": msg.get("sender_node_id"),
-                "at": msg.get("created_at"),
-            }
-        sender = msg.get("sender_node_id") or "unknown"
-        by_sender[sender] = by_sender.get(sender, 0) + 1
-        corr = msg.get("correlation_id")
-        if corr:
-            by_thread[corr] = by_thread.get(corr, 0) + 1
-        if msg.get("requires_ack") and not _has_ack(msg):
-            open_blockers.append(
-                {
-                    "message_id": msg.get("message_id"),
-                    "subject": msg.get("subject"),
-                    "task_id": msg.get("task_id"),
-                    "from": msg.get("sender_node_id"),
-                    "at": msg.get("created_at"),
-                }
-            )
-
-    top_senders = sorted(by_sender.items(), key=lambda kv: kv[1], reverse=True)[:5]
-    busy_threads = [
-        {"correlation_id": cid, "count": cnt} for cid, cnt in by_thread.items() if cnt >= 3
-    ]
-
-    return {
-        "channel": channel or "(all)",
-        "since": since,
-        "scanned": len(msgs),
-        "counts_by_type": by_type,
-        "most_recent_per_type": most_recent_per_type,
-        "open_blockers": open_blockers,
-        "top_senders": [{"from": s, "count": c} for s, c in top_senders],
-        "busy_threads": busy_threads,
-    }
+        msgs = digest_mod.without_sweeper_digests(msgs)
+    return digest_mod.summarize(msgs, channel=channel, since=since)
 
 
 # ── Sweeper inputs ─────────────────────────────────────────────
@@ -655,13 +580,7 @@ def last_sweep() -> dict[str, Any] | None:
 # ── Helpers ────────────────────────────────────────────────────
 
 
-def _has_ack(msg: dict[str, Any]) -> bool:
-    ack = msg.get("ack_by")
-    if isinstance(ack, list):
-        return bool(ack)
-    if isinstance(ack, str):
-        return ack not in ("", "[]")
-    return False
+_has_ack = digest_mod.has_ack
 
 
 # Convenience re-exports for callers that want flat imports.

@@ -14,7 +14,8 @@
 3. build the generation providers (``app.state.providers``) and, unless
    ``KE_PROVIDER_STARTUP_PROBE=0``, probe them on a background thread so an
    unreachable provider is reported at WARNING without delaying startup;
-4. board (unless ``KE_BOARD_ENABLED=0``): log the trust policy, create the
+4. board (unless ``KE_BOARD_ENABLED=0``): log the trust policy, warn about
+   scope databases whose names are no longer valid scopes, create the
    app's :class:`~knowledge_engine.agent_board.sweeper.Sweeper`
    (``app.state.sweeper``), install it as the process default and start it
    when ``KE_BOARD_SWEEPER`` / the persisted flag say so;
@@ -136,6 +137,12 @@ def _start_board(app: FastAPI, settings: Settings) -> tuple[Sweeper | None, Swee
         board_http.log_trust_policy(settings)
     except Exception:
         _logger.exception("could not log board trust policy; continuing")
+    try:
+        from ..agent_board import scopes as board_scopes  # noqa: PLC0415
+
+        board_scopes.warn_nonconforming_scopes()
+    except Exception:
+        _logger.exception("could not check board scope names; continuing")
     try:
         from ..agent_board import sweeper as board_sweeper  # noqa: PLC0415
 

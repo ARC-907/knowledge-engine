@@ -2,15 +2,15 @@
 
 First-class coordination surface for agents collaborating across worktrees,
 branches, research, library, planning, execution, and testing. Sits on top
-of the `foundation/db.py` SQLite backbone and the existing
+of the `foundation/db/` SQLite backbone and the existing
 `pipeline/message_board.py` post/poll primitives, adding:
 
 * Schema-enforced channels and message types (`schemas.py`)
 * FTS5 search over subject/body (`store.search_messages`)
-* Context-compressed digests for MCP callers (`store.digest`)
+* Context-compressed digests for MCP callers (`store.digest`, analytics in `digest.py`)
 * Provider-key vault for config-tab key management (`keys.py`)
 * Background sweeper for TTL prune + stale-blocker reminders (`sweeper.py`)
-* HTTP routes, trust gate and request models (`http.py`)
+* HTTP routes, trust gate and request models (`http/`)
 * MCP tool group (`mcp_tools/`)
 * CLI subcommand (`cli.py`)
 * Optional standalone watchdog mode (`service.py`)
@@ -22,12 +22,13 @@ an X-Board-Key on non-localhost writes; restrict or extend the trusted
 network set with the `KE_BOARD_TRUSTED_CIDRS` env var.
 """
 
-from . import keys, provider_registry, schemas, scopes, service, store, sweeper
+from . import digest, keys, provider_registry, schemas, scopes, service, store, sweeper
 
 # ``cli`` is deliberately not imported here: it reconfigures stdout on import, which
 # must never happen inside the MCP stdio server process. Import it explicitly.
 
 __all__ = [
+    "digest",
     "keys",
     "provider_registry",
     "schemas",

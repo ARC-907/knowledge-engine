@@ -2,7 +2,7 @@
 
 For headless deployments where the operator only needs the coordination
 surface (no /search, no /registry, no dashboard). Reuses the same
-`agent_board/http.py` router on a separate FastAPI app + port.
+`agent_board/http/` router on a separate FastAPI app + port.
 
 Default port 11437 was picked to avoid colliding with the engine's 9210.
 Override with `KE_BOARD_STANDALONE_PORT` or `--port`.
@@ -36,7 +36,7 @@ from ..core.logging_config import uvicorn_log_config
 from ..core.settings import Settings
 from ..runtime.foundation import db
 from ..runtime.foundation.config import load_dotenv_file
-from . import http as board_http, sweeper as kb_sweeper
+from . import http as board_http, scopes, sweeper as kb_sweeper
 
 _logger = logging.getLogger(__name__)
 
@@ -59,6 +59,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         board_http.log_trust_policy(settings)
     except Exception:
         _logger.exception("could not log board trust policy")
+    try:
+        scopes.warn_nonconforming_scopes()
+    except Exception:
+        _logger.exception("could not check board scope names")
     owned = kb_sweeper.Sweeper(settings=settings)
     app.state.sweeper = owned
     previous = kb_sweeper.install_default(owned)

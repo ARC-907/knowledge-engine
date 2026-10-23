@@ -143,14 +143,29 @@ def scope_db_path(scope: str, *, create: bool = False) -> str:
 
     With ``create=False`` (the default) this is a pure computation: nothing
     is touched on disk. With ``create=True`` the parent directory is made
-    and the scope cap is enforced for a scope that does not exist yet; the
-    DB file + schema are then created by ``foundation.db.get_connection``
-    on first use under ``using_db``.
+    and the scope cap is enforced for a scope that does not exist yet: the
+    count and the creation of the DB file (+ schema) happen under one lock.
     """
     name = validate_scope(scope)
     root = scopes_root()
     target = root / f"{name}.db"
     if create and not target.exists():
+        _create_scope_db(name, root, target)
+    return str(target.resolve())
+
+
+def _create_scope_db(name: str, root: Path, target: Path) -> bool:
+    """Count against the cap and create ``target`` as one step.
+
+    Holding :func:`db.scope_creation_lock` while the database file is
+    created (and migrated) closes the count-then-create race: concurrent
+    first posts to new scopes in this process can no longer overshoot
+    ``KE_BOARD_MAX_SCOPES``. Separate processes sharing the data directory
+    are not serialised (bounded overshoot, as before).
+    """
+    with db.scope_creation_lock():
+        if target.exists():  # created by a concurrent caller meanwhile
+            return False
         limit = max_scopes()
         existing = len(list_scopes())
         if limit and existing >= limit:
@@ -167,7 +182,8 @@ def scope_db_path(scope: str, *, create: bool = False) -> str:
             )
         root.mkdir(parents=True, exist_ok=True)
         _logger.info("creating board scope %r at %s", log_safe(name), target)
-    return str(target.resolve())
+        db.get_connection(target)
+        return True
 
 
 def scope_exists(scope: str) -> bool:
@@ -182,12 +198,11 @@ def create_scope(scope: str) -> dict[str, object]:
     the scope already existed. Raises ``ValueError`` on a bad name and
     :class:`ScopeLimitError` at the cap.
     """
-    existed = scope_exists(scope)
-    path = scope_db_path(scope, create=True)
-    if not existed:
-        with db.using_db(path):
-            db.get_connection()
-    return {"scope": scope, "db_path": path, "created": not existed}
+    name = validate_scope(scope)
+    root = scopes_root()
+    target = root / f"{name}.db"
+    created = False if target.exists() else _create_scope_db(name, root, target)
+    return {"scope": scope, "db_path": str(target.resolve()), "created": created}
 
 
 def list_scopes() -> list[dict[str, object]]:
@@ -209,6 +224,51 @@ def list_scopes() -> list[dict[str, object]]:
     return out
 
 
+def nonconforming_scopes() -> list[dict[str, object]]:
+    """Scope databases whose file name is not a valid scope name.
+
+    Releases before 3.0 accepted dots and other characters in scope names
+    (``v1.2.db``). Such a database is still listed by :func:`list_scopes`
+    (and swept), but every scoped route rejects its name with 400. Each
+    entry carries a ``suggested`` valid name to rename the file to.
+    """
+    out: list[dict[str, object]] = []
+    for entry in list_scopes():
+        name = str(entry["scope"])
+        if SCOPE_NAME_RE.fullmatch(name):
+            continue
+        try:
+            suggested: str | None = slugify_scope(name).replace(".", "-")[:64]
+        except ValueError:
+            suggested = None
+        if suggested is not None and not SCOPE_NAME_RE.fullmatch(suggested):
+            suggested = None
+        out.append({**entry, "suggested": suggested})
+    return out
+
+
+def warn_nonconforming_scopes() -> int:
+    """Log one WARNING per non-conforming scope database; return how many.
+
+    Called at board startup (engine lifespan and standalone service).
+    """
+    try:
+        legacy = nonconforming_scopes()
+    except OSError:
+        _logger.warning("could not scan %s for legacy scope names", scopes_root(), exc_info=True)
+        return 0
+    for entry in legacy:
+        suggested = entry["suggested"]
+        _logger.warning(
+            "board scope database %s has a name that is not a valid scope (must match %s); "
+            "it is listed and swept but cannot be addressed over HTTP/MCP/CLI -- rename it to %s",
+            entry["db_path"],
+            SCOPE_NAME_RE.pattern,
+            f"{suggested}.db" if suggested else "a valid name",
+        )
+    return len(legacy)
+
+
 def scope_db_paths() -> list[str]:
     """Just the resolved DB file paths for every known scope."""
     return [str(entry["db_path"]) for entry in list_scopes()]
@@ -223,10 +283,12 @@ __all__ = [
     "create_scope",
     "list_scopes",
     "max_scopes",
+    "nonconforming_scopes",
     "scope_db_path",
     "scope_db_paths",
     "scope_exists",
     "scopes_root",
     "slugify_scope",
     "validate_scope",
+    "warn_nonconforming_scopes",
 ]

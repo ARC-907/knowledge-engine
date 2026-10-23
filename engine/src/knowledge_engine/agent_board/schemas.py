@@ -244,6 +244,84 @@ def _check_len(errors: list[str], name: str, value: Any, cap: int) -> None:
         errors.append(f"{name} too long (max {cap} chars)")
 
 
+# ── Per-field validators ───────────────────────────────────────
+#
+# Each validator reads one field from the raw payload, appends its errors (in
+# a fixed order, so the joined message is stable) and returns the normalized
+# value. ``validate`` runs them in documentation order.
+
+#: Optional identifier fields and their length caps, in validation order.
+OPTIONAL_ID_FIELDS: tuple[tuple[str, int], ...] = (
+    ("sender_role", MAX_LEN_ROLE),
+    ("task_id", MAX_LEN_TASK_ID),
+    ("product_id", MAX_LEN_PRODUCT_ID),
+    ("target_node_id", MAX_LEN_TARGET_NODE_ID),
+    ("target_role", MAX_LEN_ROLE),
+    ("reply_to", MAX_LEN_REPLY_TO),
+    ("correlation_id", MAX_LEN_CORRELATION_ID),
+    ("thread_id", MAX_LEN_THREAD_ID),
+    ("model_id", MAX_LEN_MODEL_ID),
+)
+
+DEFAULT_TTL_HOURS = 168
+
+
+def validate_channel(
+    raw: dict[str, Any],
+    errors: list[str],
+    channels: tuple[str, ...],
+    *,
+    check_membership: bool = True,
+) -> str:
+    """``channel`` (default ``ops``): configured and at most 64 chars."""
+    channel = str(raw.get("channel") or "ops").strip()
+    if check_membership and channel not in channels:
+        errors.append(f"channel '{channel}' not in configured set (known: {', '.join(channels)})")
+    _check_len(errors, "channel", channel, MAX_LEN_CHANNEL)
+    return channel
+
+
+def validate_required_text(raw: dict[str, Any], errors: list[str], name: str, cap: int) -> str:
+    """A required free-text field: present after stripping and within ``cap``."""
+    value = str(raw.get(name) or "").strip()
+    if not value:
+        errors.append(f"{name} is required")
+    _check_len(errors, name, value, cap)
+    return value
+
+
+def validate_optional_text(
+    raw: dict[str, Any], errors: list[str], name: str, cap: int
+) -> str | None:
+    """An optional field: stripped (blank -> ``None``) and within ``cap``."""
+    value = _opt_str(raw.get(name))
+    _check_len(errors, name, value, cap)
+    return value
+
+
+def validate_visibility(raw: dict[str, Any], errors: list[str]) -> str:
+    """``visibility_scope`` (default ``all``): one of :data:`VISIBILITY_SCOPES`."""
+    visibility = str(raw.get("visibility_scope") or "all").strip()
+    if visibility not in VISIBILITY_SCOPES:
+        errors.append(f"visibility_scope '{visibility}' not in {VISIBILITY_SCOPES}")
+    return visibility
+
+
+def validate_ttl(raw: dict[str, Any], errors: list[str]) -> int:
+    """``ttl_hours`` (default 168): an integer in ``0..MAX_TTL_HOURS`` (0 = never)."""
+    ttl_raw = raw.get("ttl_hours", DEFAULT_TTL_HOURS)
+    try:
+        ttl_hours = int(ttl_raw)
+    except (TypeError, ValueError):
+        errors.append("ttl_hours must be an integer")
+        ttl_hours = DEFAULT_TTL_HOURS
+    if ttl_hours < 0:
+        errors.append("ttl_hours must be >= 0 (0 = no expiry)")
+    if ttl_hours > MAX_TTL_HOURS:
+        errors.append(f"ttl_hours too large (max {MAX_TTL_HOURS} = one year)")
+    return ttl_hours
+
+
 def validate(
     draft: dict[str, Any],
     known_channels: list[str] | None = None,
@@ -261,63 +339,16 @@ def validate(
     errors: list[str] = []
     channels = tuple(known_channels) if known_channels else DEFAULT_CHANNELS
 
-    channel = str(draft.get("channel") or "ops").strip()
-    if check_channel and channel not in channels:
-        errors.append(f"channel '{channel}' not in configured set (known: {', '.join(channels)})")
-    _check_len(errors, "channel", channel, MAX_LEN_CHANNEL)
-
-    message_type = str(draft.get("message_type") or "").strip()
-    if not message_type:
-        errors.append("message_type is required")
-    _check_len(errors, "message_type", message_type, MAX_LEN_MESSAGE_TYPE)
-
-    sender_node_id = str(draft.get("sender_node_id") or "").strip()
-    if not sender_node_id:
-        errors.append("sender_node_id is required")
-    _check_len(errors, "sender_node_id", sender_node_id, MAX_LEN_SENDER_NODE_ID)
-
-    body = str(draft.get("body") or "").strip()
-    if not body:
-        errors.append("body is required")
-    _check_len(errors, "body", body, MAX_LEN_BODY)
-
-    subject = _opt_str(draft.get("subject"))
-    _check_len(errors, "subject", subject, MAX_LEN_SUBJECT)
-
-    visibility = str(draft.get("visibility_scope") or "all").strip()
-    if visibility not in VISIBILITY_SCOPES:
-        errors.append(f"visibility_scope '{visibility}' not in {VISIBILITY_SCOPES}")
-
-    # Per-field length caps for the remaining identifier fields.
-    sender_role = _opt_str(draft.get("sender_role"))
-    task_id = _opt_str(draft.get("task_id"))
-    product_id = _opt_str(draft.get("product_id"))
-    target_node_id = _opt_str(draft.get("target_node_id"))
-    target_role = _opt_str(draft.get("target_role"))
-    reply_to = _opt_str(draft.get("reply_to"))
-    correlation_id = _opt_str(draft.get("correlation_id"))
-    thread_id = _opt_str(draft.get("thread_id"))
-    model_id = _opt_str(draft.get("model_id"))
-    _check_len(errors, "sender_role", sender_role, MAX_LEN_ROLE)
-    _check_len(errors, "task_id", task_id, MAX_LEN_TASK_ID)
-    _check_len(errors, "product_id", product_id, MAX_LEN_PRODUCT_ID)
-    _check_len(errors, "target_node_id", target_node_id, MAX_LEN_TARGET_NODE_ID)
-    _check_len(errors, "target_role", target_role, MAX_LEN_ROLE)
-    _check_len(errors, "reply_to", reply_to, MAX_LEN_REPLY_TO)
-    _check_len(errors, "correlation_id", correlation_id, MAX_LEN_CORRELATION_ID)
-    _check_len(errors, "thread_id", thread_id, MAX_LEN_THREAD_ID)
-    _check_len(errors, "model_id", model_id, MAX_LEN_MODEL_ID)
-
-    ttl_raw = draft.get("ttl_hours", 168)
-    try:
-        ttl_hours = int(ttl_raw)
-    except (TypeError, ValueError):
-        errors.append("ttl_hours must be an integer")
-        ttl_hours = 168
-    if ttl_hours < 0:
-        errors.append("ttl_hours must be >= 0 (0 = no expiry)")
-    if ttl_hours > MAX_TTL_HOURS:
-        errors.append(f"ttl_hours too large (max {MAX_TTL_HOURS} = one year)")
+    channel = validate_channel(draft, errors, channels, check_membership=check_channel)
+    message_type = validate_required_text(draft, errors, "message_type", MAX_LEN_MESSAGE_TYPE)
+    sender_node_id = validate_required_text(draft, errors, "sender_node_id", MAX_LEN_SENDER_NODE_ID)
+    body = validate_required_text(draft, errors, "body", MAX_LEN_BODY)
+    subject = validate_optional_text(draft, errors, "subject", MAX_LEN_SUBJECT)
+    visibility = validate_visibility(draft, errors)
+    ids = {
+        name: validate_optional_text(draft, errors, name, cap) for name, cap in OPTIONAL_ID_FIELDS
+    }
+    ttl_hours = validate_ttl(draft, errors)
 
     if errors:
         return None, errors
@@ -328,19 +359,11 @@ def validate(
             message_type=message_type,
             sender_node_id=sender_node_id,
             body=body,
-            sender_role=sender_role,
-            task_id=task_id,
-            product_id=product_id,
             subject=subject,
             visibility_scope=visibility,
-            target_node_id=target_node_id,
-            target_role=target_role,
             requires_ack=bool(draft.get("requires_ack", False)),
-            reply_to=reply_to,
-            correlation_id=correlation_id,
-            thread_id=thread_id,
             ttl_hours=ttl_hours,
-            model_id=model_id,
+            **ids,
         ),
         [],
     )
