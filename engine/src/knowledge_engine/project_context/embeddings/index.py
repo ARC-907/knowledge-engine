@@ -22,10 +22,13 @@ Functions:
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from ...core.util.time import utc_now_iso
 from . import providers
+
+_logger = logging.getLogger(__name__)
 
 __all__ = [
     "cluster_records",
@@ -270,8 +273,11 @@ def cluster_records(
     existing cluster whose seed is most similar (above a fixed threshold), or
     starts a new cluster while fewer than ``k`` clusters exist, otherwise it
     falls back to the nearest seed. Vectors of every stored provider/model are
-    pooled. Returns a list of cluster dicts, each with a ``cluster`` index and a
-    ``record_ids`` list. Returns an empty list when no vectors are stored.
+    pooled; a vector is only ever compared with seeds of the same dimension
+    (vectors of different models are not comparable), and one that has no
+    comparable seed once ``k`` clusters exist joins the first cluster (logged
+    at WARNING). Returns a list of cluster dicts, each with a ``cluster`` index
+    and a ``record_ids`` list. Returns an empty list when no vectors are stored.
     """
     cur = project_conn.execute("SELECT record_id, vector FROM doc_embeddings ORDER BY record_id")
     rows = cur.fetchall()
@@ -281,15 +287,18 @@ def cluster_records(
     seeds: list[list[float]] = []
     clusters: list[list[str]] = []
     threshold = 0.5
+    dims: set[int] = set()
 
     for row in rows:
         record_id = str(row["record_id"])
         vector = providers.unpack_vector(row["vector"])
+        dims.add(len(vector))
+        comparable = [idx for idx, seed in enumerate(seeds) if len(seed) == len(vector)]
 
         best_idx = -1
         best_score = threshold
-        for idx, seed in enumerate(seeds):
-            score = providers.cosine(vector, seed)
+        for idx in comparable:
+            score = providers.cosine(vector, seeds[idx])
             if score > best_score:
                 best_score = score
                 best_idx = idx
@@ -299,11 +308,19 @@ def cluster_records(
         elif len(clusters) < k:
             seeds.append(vector)
             clusters.append([record_id])
-        else:
-            nearest = max(
-                range(len(seeds)),
-                key=lambda i: providers.cosine(vector, seeds[i]),
-            )
+        elif comparable:
+            nearest = max(comparable, key=lambda i: providers.cosine(vector, seeds[i]))
             clusters[nearest].append(record_id)
+        else:
+            clusters[0].append(record_id)
+
+    if len(dims) > 1:
+        _logger.warning(
+            "doc_embeddings holds vectors of %d different dimensions %s (several models); "
+            "clustering compared same-dimension vectors only -- refresh the embeddings "
+            "with one provider",
+            len(dims),
+            sorted(dims),
+        )
 
     return [{"cluster": idx, "record_ids": members} for idx, members in enumerate(clusters)]

@@ -1,32 +1,56 @@
-"""Embedding provider abstraction for the project-context subsystem.
+"""Embedding provider abstraction: the engine's one provider interface.
 
-This module defines the :class:`EmbeddingProvider` ABC, a deterministic
-:class:`StubProvider` for offline tests, a :func:`get_provider` factory that
-honors the embeddings configuration gates, and small helpers for packing,
-unpacking, and comparing dense vectors.
+:class:`EmbeddingProvider` is the interface every embedding backend implements,
+for both the project-context store (:mod:`.index`) and the corpus embedding
+index (:mod:`knowledge_engine.retrieval.embeddings`). This module defines it
+together with two deterministic, offline providers:
+
+* :class:`StubProvider` -- hash-of-the-whole-text vectors (project-context
+  tests and dry runs; provider name ``stub``);
+* :class:`FakeProvider` -- feature-hashed bag-of-words vectors, so texts that
+  share words are similar (corpus-index tests and ``--provider fake`` CLI dry
+  runs; provider name ``fake``).
+
+The network-backed providers live next to it: :mod:`.local`
+(``LocalOllamaProvider``, batched through :class:`knowledge_engine.core.ollama.OllamaClient`)
+and :mod:`.remote` (``RemoteProvider``, gated behind an explicit opt-in).
+:func:`get_provider` resolves the project-context configuration to a provider.
+
+Packing and similarity are shared with every other vector store through
+:mod:`knowledge_engine.core.util.vectors` and re-exported here:
+:func:`pack_vector` / :func:`unpack_vector` (version byte + little-endian
+float32) and :func:`cosine`, which raises :class:`VectorDimensionError` on a
+dimension mismatch instead of returning a meaningless score.
 
 No provider performs any network I/O at import time. Providers that require a
 backend (Ollama, remote HTTP) only reach out when :meth:`EmbeddingProvider.embed`
-is invoked, and they degrade gracefully when their dependency is unavailable.
+is invoked.
 """
 
 from __future__ import annotations
 
 import math
-import struct
+import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from ...core.util.hashing import sha256_digest
+from ...core.util.vectors import (
+    VECTOR_FORMAT_VERSION,
+    VectorDimensionError,
+    cosine,
+    pack_vector,
+    unpack_vector,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from knowledge_engine.project_context.config import ProjectContextConfig
 
-# Little-endian single-precision floats, matching the on-disk vector blob.
-_FLOAT_SIZE = struct.calcsize("<f")
-
 #: Provider identifiers that mean "embeddings are intentionally off".
 _DISABLED_PROVIDERS = frozenset({"", "none"})
+
+#: Word tokens hashed by :class:`FakeProvider`.
+_TOKEN_RE = re.compile(r"\w+")
 
 
 class EmbeddingProvider(ABC):
@@ -49,6 +73,16 @@ class EmbeddingProvider(ABC):
     @abstractmethod
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Return one ``dim``-length float vector per input text."""
+
+    @property
+    def model_id(self) -> str:
+        """Identifier of the model that produced the vectors.
+
+        Recorded by the corpus embedding index, which refuses to mix vectors
+        of different models. Defaults to :attr:`name`; providers that serve a
+        configurable model return that model name.
+        """
+        return self.name
 
 
 class StubProvider(EmbeddingProvider):
@@ -93,6 +127,54 @@ class StubProvider(EmbeddingProvider):
         return values[: self._dim]
 
 
+class FakeProvider(EmbeddingProvider):
+    """Deterministic, offline provider whose vectors reflect shared words.
+
+    Each lower-cased word token is hashed to one of ``dim`` buckets with a
+    hash-derived sign (feature hashing); the sum is L2-normalised. Texts that
+    share words therefore score higher than unrelated ones, which makes the
+    provider useful for tests and ``--provider fake`` dry runs of the corpus
+    embedding index. A text without word characters gets a hash-of-text
+    vector instead, so no vector is ever all zeros.
+    """
+
+    DEFAULT_DIM = 64
+
+    def __init__(self, dim: int = DEFAULT_DIM) -> None:
+        if dim <= 0:
+            raise ValueError("dim must be a positive integer")
+        self._dim = int(dim)
+        self._fallback = StubProvider(dim=self._dim)
+
+    @property
+    def name(self) -> str:
+        return "fake"
+
+    @property
+    def model_id(self) -> str:
+        return f"fake-hash-{self._dim}"
+
+    @property
+    def dim(self) -> int:
+        return self._dim
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Return one unit-length feature-hashed vector per text."""
+        return [self._embed_one(text) for text in texts]
+
+    def _embed_one(self, text: str) -> list[float]:
+        values = [0.0] * self._dim
+        for token in _TOKEN_RE.findall(text.lower()):
+            digest = sha256_digest(token.encode("utf-8"))
+            bucket = int.from_bytes(digest[:4], "big") % self._dim
+            values[bucket] += 1.0 if digest[4] & 1 else -1.0
+        norm = math.sqrt(math.sumprod(values, values))
+        if norm == 0.0:
+            values = self._fallback.embed([text])[0]
+            norm = math.sqrt(math.sumprod(values, values)) or 1.0
+        return [value / norm for value in values]
+
+
 def get_provider(cfg: ProjectContextConfig) -> EmbeddingProvider | None:
     """Resolve the configured embedding provider, honoring all gates.
 
@@ -114,13 +196,16 @@ def get_provider(cfg: ProjectContextConfig) -> EmbeddingProvider | None:
     if provider == "stub":
         return StubProvider(dim=int(getattr(emb, "dim", 8) or 8))
 
+    if provider == "fake":
+        return FakeProvider(dim=int(getattr(emb, "dim", 0) or FakeProvider.DEFAULT_DIM))
+
     if provider in {"ollama", "local"}:
         # Lazy: local.py subclasses EmbeddingProvider from this module (import cycle).
         from knowledge_engine.project_context.embeddings.local import (  # noqa: PLC0415
-            OllamaProvider,
+            LocalOllamaProvider,
         )
 
-        return OllamaProvider(
+        return LocalOllamaProvider(
             model=str(getattr(emb, "model", "") or ""),
             url=str(getattr(emb, "url", "") or ""),
         )
@@ -137,36 +222,14 @@ def get_provider(cfg: ProjectContextConfig) -> EmbeddingProvider | None:
     return None
 
 
-def pack_vector(vector: list[float]) -> bytes:
-    """Pack a list of floats into a little-endian 4-byte-float byte string."""
-    return struct.pack(f"<{len(vector)}f", *vector)
-
-
-def unpack_vector(blob: bytes) -> list[float]:
-    """Unpack a little-endian 4-byte-float byte string into a list of floats."""
-    if len(blob) % _FLOAT_SIZE != 0:
-        raise ValueError("blob length is not a multiple of 4 bytes")
-    count = len(blob) // _FLOAT_SIZE
-    if count == 0:
-        return []
-    return list(struct.unpack(f"<{count}f", blob))
-
-
-def cosine(a: list[float], b: list[float]) -> float:
-    """Return the cosine similarity of two equal-length vectors.
-
-    Returns ``0.0`` for mismatched lengths or when either vector has zero
-    magnitude, so callers never have to guard against division by zero.
-    """
-    if len(a) != len(b) or not a:
-        return 0.0
-    dot = 0.0
-    norm_a = 0.0
-    norm_b = 0.0
-    for x, y in zip(a, b, strict=True):
-        dot += x * y
-        norm_a += x * x
-        norm_b += y * y
-    if norm_a <= 0.0 or norm_b <= 0.0:
-        return 0.0
-    return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
+__all__ = [
+    "VECTOR_FORMAT_VERSION",
+    "EmbeddingProvider",
+    "FakeProvider",
+    "StubProvider",
+    "VectorDimensionError",
+    "cosine",
+    "get_provider",
+    "pack_vector",
+    "unpack_vector",
+]
