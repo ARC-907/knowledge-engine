@@ -65,7 +65,7 @@ add your own under `corpus/` and register them (see
 - `install.ps1` / `install.sh` — venv + editable install
 - `serve.ps1` / `serve.sh` — `KE_*` env + uvicorn launch on port 9210
 - `mcp-client-config.example.json` — MCP client wiring template
-- `update-vendor.ps1` / `update-vendor.sh` — refresh the vendored dashboard JS (Alpine.js, Tailwind)
+- `vendor.py` — download + SHA-384-verify the vendored dashboard assets (Alpine.js); `--check` verifies the committed files offline
 - `agent-board/` — optional standalone Agent Board service: `start-board.bat` (Windows launcher), `board-watchdog.ps1` (Windows watchdog), `serve-board.sh` (POSIX foreground launcher), `README.md`
 
 ## Documentation

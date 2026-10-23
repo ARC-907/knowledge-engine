@@ -65,3 +65,11 @@ hooks:
 ui-css:
     npm --prefix ui-src install --no-audit --no-fund
     npm --prefix ui-src run build:css
+
+# Re-download and SHA-384-verify vendored dashboard assets (Alpine.js)
+vendor:
+    python3 scripts/vendor.py
+
+# Verify the committed vendored assets match their pinned digests (offline)
+vendor-check:
+    python3 scripts/vendor.py --check
