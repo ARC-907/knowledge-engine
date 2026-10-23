@@ -60,3 +60,8 @@ mcp *args:
 # Install git hooks
 hooks:
     {{uv}} run pre-commit install
+
+# Rebuild the dashboard stylesheet (needs Node 22+; output is committed)
+ui-css:
+    npm --prefix ui-src install --no-audit --no-fund
+    npm --prefix ui-src run build:css

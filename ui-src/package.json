@@ -1,0 +1,14 @@
+{
+  "name": "knowledge-engine-ui",
+  "private": true,
+  "description": "Build toolchain for the dashboard stylesheet. Dev-time only: the published Python package ships the compiled CSS and never needs Node.",
+  "license": "MIT",
+  "scripts": {
+    "build:css": "tailwindcss -i ./input.css -o ../engine/src/knowledge_engine/server/static/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./input.css -o ../engine/src/knowledge_engine/server/static/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.0",
+    "tailwindcss": "^4.1.0"
+  }
+}

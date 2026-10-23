@@ -1,51 +1,71 @@
 # Theming the Dashboard
 
-The Knowledge-Engine dashboard is deliberately a **single HTML file** —
-`engine/src/knowledge_engine/server/static/index.html`. There is no build step, no framework toolchain, no
-`node_modules`. That makes it trivial to restyle, fork, or replace.
+The Knowledge-Engine dashboard is three small files under
+`engine/src/knowledge_engine/server/static/`, served by the engine at `/ui/`:
 
-## How the dashboard is built
+| File | What it is |
+| --- | --- |
+| `index.html` | The markup. Plain HTML with Tailwind utility classes and Alpine.js directives. |
+| `app.js` | The Alpine component: state, API calls, tabs, theme toggle. Classic script, no bundler. |
+| `tailwind.css` | **Compiled** Tailwind CSS (≈18 KB). Generated from `ui-src/input.css`; committed. |
+| `vendor/alpinejs/<ver>/alpine.min.js` | Alpine.js, vendored and SHA-384-pinned by `scripts/vendor.py`. |
 
-`engine/src/knowledge_engine/server/static/index.html` is one self-contained file:
+Nothing is fetched from a CDN, and the published Python package never needs
+Node: the compiled stylesheet ships inside the wheel. Node is only needed by
+people who change the markup or the theme and rebuild the CSS.
 
-- **Tailwind CSS** — pulled from a CDN (`cdn.tailwindcss.com`). All styling is
-  Tailwind utility classes in the markup.
-- **Alpine.js** — pulled from a CDN. A small `dashboard()` component holds the
-  state and talks to the engine's HTTP API.
-- **No backend coupling** — the dashboard only consumes the engine's HTTP API
-  (`/info`, `/registry`, `/search`, `/search/reindex`,
-  `/registry/{id}/toggle`). Anything that speaks those endpoints can replace
-  it.
+## The edit → rebuild loop
 
-The engine serves `engine/src/knowledge_engine/server/static/` (shipped inside the package) as static files at
-`/ui/` (see `server/app.py`). Edit the file, refresh the browser — that's the
-whole loop.
+Tailwind only emits the classes it finds in `index.html` and `app.js`. So:
 
-## Recolouring (the quick win)
+1. Edit `index.html` / `app.js` (or the tokens in `ui-src/input.css`).
+2. Rebuild the stylesheet:
 
-The default theme is dark slate with a sky-blue accent. The colors are Tailwind
-classes in the markup. To re-skin, find-and-replace the palette:
+   ```bash
+   just ui-css
+   # or, without just:
+   npm --prefix ui-src install
+   npm --prefix ui-src run build:css
+   ```
 
-| Role | Default classes | Change to (example: emerald accent) |
-| --- | --- | --- |
-| Page background | `bg-slate-950` | keep, or `bg-zinc-950` |
-| Body text | `text-slate-100` | keep |
-| Cards / panels | `bg-slate-900`, `border-slate-800` | keep, or `bg-zinc-900` |
-| Accent (buttons, focus) | `bg-sky-600`, `hover:bg-sky-500`, `focus:border-sky-500` | `bg-emerald-600`, `hover:bg-emerald-500`, `focus:border-emerald-500` |
-| Reindex button | `bg-emerald-700`, `hover:bg-emerald-600` | pick a contrasting color |
+   `npm --prefix ui-src run watch:css` rebuilds on every save while you work.
+3. Refresh the browser (the engine serves the `static/` directory as-is).
+4. Commit the regenerated `tailwind.css` together with your markup change.
 
-Tailwind ships every color in shades `50`–`950`. Swap `sky` for `indigo`,
-`violet`, `rose`, `amber`, etc. — the whole palette is available with no config.
+Requirements: Node 22+ and npm. `ui-src/package.json` pins Tailwind v4 and
+`@tailwindcss/cli` as dev dependencies; `ui-src/node_modules/` is gitignored.
 
-## Light mode
+If you add a class to the markup and forget to rebuild, the class simply has
+no effect — nothing breaks, it just does not style anything.
 
-The default is dark. For a light theme, flip the base classes:
+## Light and dark
 
-- `bg-slate-950` → `bg-white`
-- `text-slate-100` → `text-slate-900`
-- `bg-slate-900` (cards) → `bg-slate-50`
-- `border-slate-800` → `border-slate-200`
-- adjust the muted-text classes (`text-slate-400/500/600`) toward darker shades
+The dashboard follows the operating system's colour scheme by default and has
+a toggle in the header. The choice is stored in `localStorage` (`ke-theme`)
+and applied as `data-theme="light|dark"` on `<html>` before the first paint.
+
+In the CSS, `dark:` variants key off that attribute (not `prefers-color-scheme`
+directly), so the toggle and the OS setting cannot disagree.
+
+## Recolouring
+
+Surfaces and text use **semantic tokens** defined in `ui-src/input.css`, one
+block for light and one for dark:
+
+| Token | Utility classes | Light default | Dark default |
+| --- | --- | --- | --- |
+| `--ke-canvas` | `bg-canvas` | white | slate-950 |
+| `--ke-panel` / `--ke-panel-2` | `bg-panel`, `bg-panel-2` | slate-50 / slate-100 | slate-900 / slate-800 |
+| `--ke-edge` / `--ke-edge-soft` | `border-edge`, `border-edge-soft` | slate-200 / slate-100 | slate-800 / slate-900 |
+| `--ke-fg` / `--ke-muted` / `--ke-faint` | `text-fg`, `text-muted`, `text-faint` | slate-900 / 600 / 500 | slate-100 / 400 / 500 |
+| `--ke-accent` | focus ring colour | sky-600 | sky-400 |
+
+To re-skin, change those two blocks (any Tailwind palette variable such as
+`var(--color-zinc-900)` or a raw colour works) and rebuild. Accent colours on
+buttons and badges (`bg-sky-600`, `bg-emerald-700`, `bg-violet-700`, …) are
+ordinary Tailwind classes in `index.html` with `dark:` counterparts where the
+contrast differs; find-and-replace `sky` with `indigo`, `emerald`, `rose`, etc.
+and rebuild.
 
 ## Layout and content
 
@@ -53,23 +73,20 @@ The markup is plain HTML. You can:
 
 - Change the page title (`<title>` and the `<h1>`).
 - Add your own logo or header.
-- Reorder the sections (search block, results, registry table).
+- Reorder the sections or tabs (the tab list lives in `app.js`: `tabs`).
 - Add columns to the registry table — the entry objects already carry
   `description`, `tags`, and (for libraries) `framework`; surface them.
 
-## Removing the CDN dependency (offline dashboard)
+Keep the accessibility scaffolding when you do: the tab strip is a proper
+`role="tablist"` with arrow-key navigation, every form control has a label
+(visible or `sr-only`), and the theme toggle has an `aria-label`.
 
-The default dashboard fetches Tailwind and Alpine from a CDN, so the **first
-load needs internet**. For a fully offline dashboard:
+## Behind a path prefix
 
-1. Download `alpinejs` and the Tailwind standalone build (or a precompiled
-   Tailwind CSS file).
-2. Drop them into `engine/src/knowledge_engine/server/static/` alongside `index.html`.
-3. Change the two `<script>`/`<link>` tags from CDN URLs to local paths
-   (`./alpine.min.js`, `./tailwind.css`).
-
-Because the engine serves the whole `static/` directory, any local
-asset you add there is served at `/ui/<filename>` automatically.
+API calls in `app.js` are resolved relative to the page
+(`new URL('..', location.href)`), so mounting the engine under a prefix such as
+`https://host/ke/` keeps the dashboard at `https://host/ke/ui/` working with no
+configuration.
 
 ## Building a different dashboard entirely
 
@@ -83,15 +100,16 @@ Vue, Svelte, or plain-JS dashboard, you can — point it at the same endpoints:
 | `GET /search?q=` | Search (returns ranked hits with `<mark>` snippets) |
 | `POST /search/reindex` | Rebuild the index |
 | `PATCH /registry/{id}/toggle` | Enable/disable an entry |
+| `/board/*` | Agent Board; admin actions need an `X-Board-Key` header |
 
-Build it however you like and either serve it from `server/static/` or host it separately
-and point it at the engine's URL. The full route list is in
-[ARCHITECTURE.md](../ARCHITECTURE.md).
+Build it however you like and either serve it from `server/static/` or host it
+separately and point it at the engine's URL. The full route list is in
+[ARCHITECTURE.md](../02-dev-docs/ARCHITECTURE.md).
 
 ## A note on the search snippets
 
-Search results come back with `<mark>…</mark>` tags around matched terms — the
-default dashboard renders them with Alpine's `x-html`. If you build your own
-dashboard, either render the snippet HTML the same way, or strip the tags if
-you don't want highlighting. The `<mark>` element is styled by your CSS;
-Tailwind gives it a default yellow highlight.
+Search results come back with `<mark>…</mark>` tags around matched terms. The
+default dashboard renders snippets with Alpine's `x-text` (never `x-html`),
+because indexed markdown can contain arbitrary user-authored HTML; the tags
+therefore show as literal text. If you build your own dashboard and want
+highlighting, sanitise the snippet before rendering it as HTML.

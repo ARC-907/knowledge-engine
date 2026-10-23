@@ -1,0 +1,74 @@
+/* Dashboard stylesheet source. Compiled by `npm run build:css` (see
+   01-user-docs/THEMING.md) into engine/src/knowledge_engine/server/static/tailwind.css,
+   which is committed so the Python package never needs Node at runtime. */
+@import "tailwindcss";
+
+/* Only classes that appear in these files are emitted. */
+@source "../engine/src/knowledge_engine/server/static/index.html";
+@source "../engine/src/knowledge_engine/server/static/app.js";
+
+/* `dark:` utilities key off the data-theme attribute that app.js sets on
+   <html> (OS preference by default, header toggle to override). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Semantic surface tokens. Re-skin the dashboard by editing these two
+   blocks; accent colours (sky / emerald / violet / rose / amber) are plain
+   Tailwind classes in the markup with `dark:` counterparts. */
+:root {
+  color-scheme: light;
+  --ke-canvas: var(--color-white);
+  --ke-panel: var(--color-slate-50);
+  --ke-panel-2: var(--color-slate-100);
+  --ke-edge: var(--color-slate-200);
+  --ke-edge-soft: var(--color-slate-100);
+  --ke-fg: var(--color-slate-900);
+  --ke-muted: var(--color-slate-600);
+  --ke-faint: var(--color-slate-500);
+  --ke-accent: var(--color-sky-600);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ke-canvas: var(--color-slate-950);
+  --ke-panel: var(--color-slate-900);
+  --ke-panel-2: var(--color-slate-800);
+  --ke-edge: var(--color-slate-800);
+  --ke-edge-soft: var(--color-slate-900);
+  --ke-fg: var(--color-slate-100);
+  --ke-muted: var(--color-slate-400);
+  --ke-faint: var(--color-slate-500);
+  --ke-accent: var(--color-sky-400);
+}
+
+/* Expose the tokens as utilities: bg-canvas, bg-panel, border-edge, text-fg ... */
+@theme inline {
+  --color-canvas: var(--ke-canvas);
+  --color-panel: var(--ke-panel);
+  --color-panel-2: var(--ke-panel-2);
+  --color-edge: var(--ke-edge);
+  --color-edge-soft: var(--ke-edge-soft);
+  --color-fg: var(--ke-fg);
+  --color-muted: var(--ke-muted);
+  --color-faint: var(--ke-faint);
+  --color-accent: var(--ke-accent);
+}
+
+@layer base {
+  /* Hide Alpine-managed elements until the component has initialised. */
+  [x-cloak] {
+    display: none !important;
+  }
+
+  /* One visible focus style for keyboard users on every interactive element. */
+  :focus-visible {
+    outline: 2px solid var(--ke-accent);
+    outline-offset: 2px;
+  }
+
+  /* Form controls draw their own border; keep the ring tight. */
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline-offset: 0;
+  }
+}

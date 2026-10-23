@@ -57,7 +57,8 @@ add your own under `corpus/` and register them (see
 
 ## Dashboard
 
-- `engine/src/knowledge_engine/server/static/index.html` — single-file Alpine.js + Tailwind dashboard auto-mounted at `/ui/` (Search / Registry / Board / Config tabs)
+- `engine/src/knowledge_engine/server/static/` — Alpine.js dashboard auto-mounted at `/ui/` (Search / Registry / Board / Config tabs): `index.html` (markup), `app.js` (component), `tailwind.css` (compiled, committed), `vendor/alpinejs/` (pinned)
+- `ui-src/` — Tailwind v4 build toolchain for `tailwind.css` (`npm run build:css`; dev-time only, see `01-user-docs/THEMING.md`)
 
 ## Scripts (`scripts/`)
 
