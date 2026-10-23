@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-import os
 import secrets
 import sqlite3
 import stat
@@ -13,7 +12,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, Literal, TextIO, get_args
 
 EntryKind = Literal["library", "skill", "kit", "tool"]
 #: Public name for the entry-kind vocabulary (HTTP query/body validation uses it).
@@ -137,22 +136,23 @@ class Registry:
     def _write_json(self, data: dict[str, Any]) -> None:
         """Write ``data`` to the registry file atomically (temp file + replace).
 
-        The temp file is created with ``0o666`` masked by the process umask
-        (what ``open()`` gives a new file), then chmod'ed to the existing
-        file's permission bits when there is one, so an operator-edited or
-        bind-mounted ``registry.json`` keeps its mode across persists instead
-        of inheriting the private ``0600`` a ``mkstemp`` temp file would have.
+        The temp file is created the way a plain ``open()`` creates a new file
+        (``0o666`` masked by the process umask, no explicit mode), then chmod'ed
+        to the existing file's permission bits when there is one, so an
+        operator-edited or bind-mounted ``registry.json`` keeps its mode across
+        persists instead of inheriting the private ``0600`` a ``mkstemp`` temp
+        file would have.
         """
         text = json.dumps(data, indent=2)
         try:
             mode: int | None = stat.S_IMODE(self.registry_path.stat().st_mode)
         except FileNotFoundError:
             mode = None
-        fd, tmp = self._open_replacement()
+        handle, tmp = self._open_replacement()
         try:
-            if mode is not None:
-                tmp.chmod(mode)
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            with handle:
+                if mode is not None:
+                    tmp.chmod(mode)
                 handle.write(text)
             tmp.replace(self.registry_path)
         except BaseException:
@@ -160,20 +160,22 @@ class Registry:
                 tmp.unlink()
             raise
 
-    def _open_replacement(self) -> tuple[int, Path]:
+    def _open_replacement(self) -> tuple[TextIO, Path]:
         """Create a fresh ``.<name>.<random>.tmp`` next to the registry file.
 
-        Like ``tempfile.mkstemp`` (``O_CREAT | O_EXCL`` on a random name) but
-        with the umask-honouring ``0o666`` mode instead of its fixed ``0600``.
+        Like ``tempfile.mkstemp`` (exclusive creation on a random name) but
+        through ``open(..., "x")`` so the file gets the umask default instead
+        of mkstemp's fixed ``0600``; an existing registry file's mode is copied
+        over afterwards by the caller.
         """
         directory = self.registry_path.parent
         for _attempt in range(_REPLACEMENT_ATTEMPTS):
             tmp = directory / f".{self.registry_path.name}.{secrets.token_hex(8)}.tmp"
             try:
-                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+                handle = open(tmp, "x", encoding="utf-8")  # noqa: SIM115, PTH123
             except FileExistsError:
                 continue
-            return fd, tmp
+            return handle, tmp
         raise FileExistsError(
             f"could not create a temp file for {self.registry_path} in {directory}"
         )

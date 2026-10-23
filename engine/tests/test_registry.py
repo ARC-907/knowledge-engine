@@ -57,7 +57,8 @@ def test_persist_preserves_an_existing_registry_json_mode(tmp_path: Path, mode: 
         reg.set_lifecycle(watch_enabled=False)
         assert _mode(registry_path) == mode, "set_lifecycle changed the file mode"
 
-        assert reg.remove("kit-a") is True
+        removed = reg.remove("kit-a")
+        assert removed is True
         assert _mode(registry_path) == mode, "remove changed the file mode"
     finally:
         reg.close()
