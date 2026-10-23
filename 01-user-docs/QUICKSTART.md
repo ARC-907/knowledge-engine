@@ -109,9 +109,9 @@ step is your own content.
 
 | Symptom | Fix |
 | --- | --- |
-| `python` not found | Install Python 3.10+ and ensure it is on PATH. On Windows the `py` launcher also works. |
-| `knowledge-engine` not found | Activate the virtualenv first (step 1). The command only exists inside it. |
+| `python` not found | Install Python 3.12 or newer and ensure it is on PATH (or let `uv` fetch one: `uv python install 3.13`). |
+| `knowledge-engine` not found | Run it through uv: `uv run --project engine knowledge-engine …`, or activate `engine/.venv` first. |
 | `reindex` reports `files: 0` | Nothing is enabled. Run `bootstrap`, then check `knowledge-engine info`. |
-| Dashboard loads but is blank | The dashboard pulls Alpine.js + Tailwind from a CDN — it needs internet on first load. For an offline dashboard see [THEMING.md](THEMING.md). |
-| Port 9210 already in use | Set `KE_PORT` to a free port before running the serve script. |
-| `uvicorn not installed` | Re-run the install script; it installs uvicorn into the virtualenv. |
+| Dashboard loads but is blank | The dashboard's assets ship inside the package (no CDN). Check the server log for `dashboard mounted at /ui`; if it is missing, reinstall with `uv sync --project engine`. |
+| Port 9210 already in use | Pass `--port <n>` to `knowledge-engine serve`, or set `KE_PORT` to a free port. |
+| `uvicorn not installed` | Re-sync the environment: `uv sync --project engine`. |

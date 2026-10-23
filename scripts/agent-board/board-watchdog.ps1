@@ -39,6 +39,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# 0.0.0.0 / :: are bind-only addresses; probe a connectable loopback instead.
+$ProbeHost = switch ($BindHost) {
+  { $_ -in @('0.0.0.0', '', '*') } { '127.0.0.1' }
+  '::'                              { '[::1]' }
+  default                           { $BindHost }
+}
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot  = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 $EngineDir = Join-Path $RepoRoot 'engine'
@@ -72,20 +78,42 @@ function Resolve-DataDir {
 
 function Test-BoardAlive {
   try {
-    $r = Invoke-RestMethod -Uri ("http://{0}:{1}/health" -f $BindHost, $Port) -TimeoutSec 5
+    $r = Invoke-RestMethod -Uri ("http://{0}:{1}/health" -f $ProbeHost, $Port) -TimeoutSec 5
     return ($r.ok -eq $true)
   } catch {
     return $false
   }
 }
 
-# PIDs listening on the port that are not our child. We never stop these.
+# Our child and every descendant. With the `uv run` launcher the child is
+# uv.exe and the actual listener is a grandchild, so the whole tree counts as ours.
+function Get-OwnPids {
+  if (-not $script:Child) { return @() }
+  $own = @($script:Child.Id)
+  try {
+    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+      Select-Object ProcessId, ParentProcessId)
+    $queue = @($script:Child.Id)
+    while ($queue.Count -gt 0) {
+      $next = @($all | Where-Object { $queue -contains $_.ParentProcessId } |
+        Select-Object -ExpandProperty ProcessId)
+      $next = @($next | Where-Object { $own -notcontains $_ })
+      $own += $next
+      $queue = $next
+    }
+  } catch {
+    # Fall back to the direct child only.
+  }
+  return $own
+}
+
+# PIDs listening on the port that are not in our process tree. We never stop these.
 function Get-ForeignListeners {
-  $ownPid = if ($script:Child) { $script:Child.Id } else { -1 }
+  $own = Get-OwnPids
   try {
     return @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
       Select-Object -ExpandProperty OwningProcess -Unique |
-      Where-Object { $_ -ne $ownPid })
+      Where-Object { $own -notcontains $_ })
   } catch {
     return @()
   }
@@ -103,8 +131,14 @@ function Start-Board {
 
 function Stop-Board {
   if ($script:Child -and -not $script:Child.HasExited) {
-    Write-Log ("stopping child PID {0}" -f $script:Child.Id)
-    Stop-Process -Id $script:Child.Id -Force -ErrorAction SilentlyContinue
+    Write-Log ("stopping child PID {0} and its process tree" -f $script:Child.Id)
+    # /T takes the whole tree down (uv.exe -> python.exe); fall back to the child alone.
+    $taskkill = Get-Command taskkill.exe -ErrorAction SilentlyContinue
+    if ($taskkill) {
+      & $taskkill.Source /PID $script:Child.Id /T /F 2>$null | Out-Null
+    } else {
+      Stop-Process -Id $script:Child.Id -Force -ErrorAction SilentlyContinue
+    }
     $script:Child.WaitForExit(5000) | Out-Null
   }
   $script:Child = $null
@@ -113,6 +147,7 @@ function Stop-Board {
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Knowledge-Engine Board Watchdog" -ForegroundColor Cyan
 Write-Host ("  Bind     : {0}:{1}" -f $BindHost, $Port) -ForegroundColor Cyan
+Write-Host ("  Probe    : http://{0}:{1}/health" -f $ProbeHost, $Port) -ForegroundColor Cyan
 Write-Host ("  Interval : {0}s" -f $CheckInterval) -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
