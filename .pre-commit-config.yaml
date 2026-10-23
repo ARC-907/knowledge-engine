@@ -16,11 +16,13 @@ repos:
       - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer
+        exclude: ^engine/src/knowledge_engine/server/static/tailwind\.css$
       - id: mixed-line-ending
         args: ["--fix=lf"]
         exclude: '\.(ps1|bat|cmd)$'
       - id: trailing-whitespace
         args: ["--markdown-linebreak-ext=md"]
+        exclude: ^engine/src/knowledge_engine/server/static/tailwind\.css$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.2

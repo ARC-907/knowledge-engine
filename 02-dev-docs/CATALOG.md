@@ -57,15 +57,14 @@ add your own under `corpus/` and register them (see
 
 ## Dashboard
 
-- `engine/src/knowledge_engine/server/static/index.html` — single-file Alpine.js + Tailwind dashboard auto-mounted at `/ui/` (Search / Registry / Board / Config tabs)
+- `engine/src/knowledge_engine/server/static/` — Alpine.js dashboard auto-mounted at `/ui/` (Search / Registry / Board / Config tabs): `index.html` (markup), `app.js` (component), `tailwind.css` (compiled, committed), `vendor/alpinejs/` (pinned)
+- `ui-src/` — Tailwind v4 build toolchain for `tailwind.css` (`npm run build:css`; dev-time only, see `01-user-docs/THEMING.md`)
 
 ## Scripts (`scripts/`)
 
-- `install.ps1` / `install.sh` — venv + editable install
-- `serve.ps1` / `serve.sh` — `KE_*` env + uvicorn launch on port 9210
+- `vendor.py` — download + SHA-384-verify the vendored dashboard assets (Alpine.js); `--check` verifies the committed files offline
 - `mcp-client-config.example.json` — MCP client wiring template
-- `update-vendor.ps1` / `update-vendor.sh` — refresh the vendored dashboard JS (Alpine.js, Tailwind)
-- `agent-board/` — optional standalone Agent Board service: `start-board.bat` (Windows launcher), `board-watchdog.ps1` (Windows watchdog), `serve-board.sh` (POSIX foreground launcher), `README.md`
+- `agent-board/` — optional standalone Agent Board service: `board-watchdog.ps1` (Windows watchdog; restarts only its own child), `README.md`
 
 ## Documentation
 

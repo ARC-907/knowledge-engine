@@ -23,12 +23,10 @@ hardening that requires.
 
 ## Localhost (the default)
 
-This is what the `serve` scripts do, and what [QUICKSTART.md](QUICKSTART.md)
-walks through:
+This is what [QUICKSTART.md](QUICKSTART.md) walks through:
 
-```pwsh
-.\scripts\serve.ps1     # Windows
-./scripts/serve.sh      # macOS / Linux
+```bash
+uv run --project engine knowledge-engine serve
 ```
 
 The server binds `127.0.0.1:9210` — reachable only from the same machine. For
@@ -62,8 +60,8 @@ Keep `--host 127.0.0.1` unless you are deliberately exposing it (next section).
 To let other machines on a trusted network reach the engine:
 
 1. **Bind a reachable address.** Change `--host 127.0.0.1` to `--host 0.0.0.0`
-   (all interfaces) or to the specific LAN IP. Set `KE_PORT` if you want a
-   different port.
+   (all interfaces) or to the specific LAN IP. Pass `--port <n>` (or set
+   `KE_PORT`) if you want a different port.
 2. **Put a reverse proxy in front.** Don't expose uvicorn directly. Run nginx,
    Caddy, or similar in front of it to terminate connections, add access
    controls, and log requests.

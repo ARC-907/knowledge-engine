@@ -60,3 +60,20 @@ mcp *args:
 # Install git hooks
 hooks:
     {{uv}} run pre-commit install
+
+# Rebuild the dashboard stylesheet (needs Node 22+; output is committed)
+ui-css:
+    npm --prefix ui-src install --no-audit --no-fund
+    npm --prefix ui-src run build:css
+
+# Browser smoke test of the dashboard (needs the `ui` group + a Playwright Chromium)
+ui-test *args:
+    cd {{engine}} && KE_UI_TESTS=1 uv run --group ui pytest -q -m ui tests/ui {{args}}
+
+# Re-download and SHA-384-verify vendored dashboard assets (Alpine.js)
+vendor:
+    {{uv}} run python scripts/vendor.py
+
+# Verify the committed vendored assets match their pinned digests (offline)
+vendor-check:
+    {{uv}} run python scripts/vendor.py --check

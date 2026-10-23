@@ -68,7 +68,7 @@ engine/                          the engine (code layer)
     app.py  mcp_server.py        compat shims re-exporting server.app / mcp.server
     core/                        paths.py (KE_HOME/KE_* path resolver), config.py (env config), registry.py (source of truth), watcher.py (auto-register)
     server/                      app.py (FastAPI factory) + api/ routes (health, registry, search, generate, board)
-      static/                    index.html — single-file Alpine.js + Tailwind dashboard (Search / Registry / Board / Config tabs), served at /ui/
+      static/                    index.html + app.js + compiled tailwind.css (built from ui-src/) — Alpine.js dashboard (Search / Registry / Board / Config tabs), served at /ui/
     mcp/                         server.py — JSON-RPC 2.0 MCP stdio server
     generation/                  provider abstraction: echo, cloud HTTP (cloud_http.py), Ollama
     retrieval/                   fts5.py (FTS5 index, bm25 + snippets) + embeddings/ (opt-in bge-m3 cosine search)

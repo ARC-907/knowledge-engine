@@ -26,6 +26,9 @@
 **/coverage.xml
 **/htmlcov
 
+# Dashboard CSS toolchain (the compiled stylesheet is committed under engine/src)
+ui-src
+
 # Build artifacts
 **/dist
 **/build

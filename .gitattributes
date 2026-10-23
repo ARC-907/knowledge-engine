@@ -14,4 +14,6 @@
 *.woff binary
 *.woff2 binary
 *.min.js -diff
+engine/src/knowledge_engine/server/static/tailwind.css -diff linguist-generated=true
+ui-src/package-lock.json -diff linguist-generated=true
 uv.lock -diff linguist-generated=true

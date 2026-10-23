@@ -12,25 +12,17 @@ checkout.
 
 ## 1. Install (≈ 3 minutes)
 
-The install script creates a virtualenv under `engine/.venv` and installs the
-engine package into it as an editable install.
-
-**Windows (PowerShell):**
-
-```pwsh
-.\scripts\install.ps1
-.\engine\.venv\Scripts\Activate.ps1
-```
-
-**macOS / Linux:**
+Install [`uv`](https://docs.astral.sh/uv/), then create the project
+virtualenv under `engine/.venv` (the engine is installed into it editable):
 
 ```bash
-./scripts/install.sh
-source engine/.venv/bin/activate
+uv sync --project engine
 ```
 
-When the script finishes you have a `knowledge-engine` command on your PATH
-(inside the activated virtualenv).
+Every command below is run through `uv run --project engine ...`; to type
+`knowledge-engine` directly instead, activate the venv
+(`source engine/.venv/bin/activate`, or `.\engine\.venv\Scripts\Activate.ps1`
+on Windows).
 
 ## 2. Bootstrap (≈ 5 seconds)
 
@@ -86,14 +78,8 @@ anything looks off.
 
 ## 5. Serve the dashboard (≈ 5 seconds)
 
-```pwsh
-# Windows
-.\scripts\serve.ps1
-```
-
 ```bash
-# macOS / Linux
-./scripts/serve.sh
+uv run --project engine knowledge-engine serve
 ```
 
 The server starts on port **9210**. Open:
@@ -105,8 +91,7 @@ In the dashboard you can type a query, see ranked results with snippets, filter
 by kind, toggle libraries on and off, and trigger a reindex — all without
 touching the CLI again.
 
-> The serve script uses port 9210. To change it, set `KE_PORT` before running
-> the script, or run `knowledge-engine serve --port <n>` directly.
+> `serve` uses port 9210. To change it, run `knowledge-engine serve --port <n>`.
 
 ## You are at the 10-minute milestone
 
@@ -124,9 +109,9 @@ step is your own content.
 
 | Symptom | Fix |
 | --- | --- |
-| `python` not found | Install Python 3.10+ and ensure it is on PATH. On Windows the `py` launcher also works. |
-| `knowledge-engine` not found | Activate the virtualenv first (step 1). The command only exists inside it. |
+| `python` not found | Install Python 3.12 or newer and ensure it is on PATH (or let `uv` fetch one: `uv python install 3.13`). |
+| `knowledge-engine` not found | Run it through uv: `uv run --project engine knowledge-engine …`, or activate `engine/.venv` first. |
 | `reindex` reports `files: 0` | Nothing is enabled. Run `bootstrap`, then check `knowledge-engine info`. |
-| Dashboard loads but is blank | The dashboard pulls Alpine.js + Tailwind from a CDN — it needs internet on first load. For an offline dashboard see [THEMING.md](THEMING.md). |
-| Port 9210 already in use | Set `KE_PORT` to a free port before running the serve script. |
-| `uvicorn not installed` | Re-run the install script; it installs uvicorn into the virtualenv. |
+| Dashboard loads but is blank | The dashboard's assets ship inside the package (no CDN). Check the server log for `dashboard mounted at /ui`; if it is missing, reinstall with `uv sync --project engine`. |
+| Port 9210 already in use | Pass `--port <n>` to `knowledge-engine serve`, or set `KE_PORT` to a free port. |
+| `uvicorn not installed` | Re-sync the environment: `uv sync --project engine`. |

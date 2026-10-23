@@ -76,6 +76,9 @@ htmlcov/
 **/dist/
 **/build/
 
+# Dashboard CSS toolchain (dev-time only; the compiled tailwind.css is committed)
+ui-src/node_modules/
+
 # --- Editors, IDEs, and local tool caches -----------------------------------
 .vscode/
 .idea/
