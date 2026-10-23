@@ -247,7 +247,7 @@ Several subsystems are **opt-in** and the lean core works without them:
   channels + types (`schemas.py`), FTS5 search + context-compressed digest
   (`store.py`), background sweeper for TTL + stale-blocker reminders
   (`sweeper.py`), provider-key vault (`keys.py`), HTTP routes + request
-  models (`agent_board/http.py`; `server/api/board_routes.py` is an alias), CLI (`knowledge-engine board ...`), and an
+  models (`agent_board/http/`; `server/api/board_routes.py` is an alias), CLI (`knowledge-engine board ...`), and an
   auto-discovered MCP tool group (`agent_board/mcp_tools/`). Optional
   standalone watchdog mode lives in `scripts/agent-board/` for headless
   deploys. Reference guide: [`AGENT-BOARD.md`](AGENT-BOARD.md).
@@ -260,7 +260,7 @@ Several subsystems are **opt-in** and the lean core works without them:
 - `tool_host/` — `host.py` registers addressable tools that agents discover and
   invoke over HTTP. Three tool kinds: `script` (run a command), `service`
   (proxy to an upstream HTTP service), `static` (serve a file or directory).
-  Built on `runtime/foundation/db.py`.
+  Built on `runtime/foundation/db/` (numbered schema migrations in `db/schema/`).
 
 If an optional layer's dependencies are absent at install time, the layer
 degrades gracefully — it is never allowed to silently break the lean core.
