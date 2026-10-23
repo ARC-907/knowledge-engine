@@ -118,8 +118,12 @@ def create_standalone_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
-    """Run the standalone service via uvicorn (``port`` default: ``KE_BOARD_STANDALONE_PORT``)."""
+def serve(host: str = "127.0.0.1", port: int | None = None, log_level: str | None = None) -> int:
+    """Run the standalone service via uvicorn.
+
+    ``port`` defaults to ``KE_BOARD_STANDALONE_PORT``; ``log_level`` (the
+    ``knowledge-engine -v/-q`` override) to ``KE_LOG_LEVEL``.
+    """
     try:
         # Only needed when actually serving; keeps `import agent_board` light.
         import uvicorn  # noqa: PLC0415
@@ -135,7 +139,7 @@ def serve(host: str = "127.0.0.1", port: int | None = None) -> int:
         host=host,
         port=port if port is not None else settings.board_standalone_port,
         factory=True,
-        log_config=uvicorn_log_config(settings.log_level),
+        log_config=uvicorn_log_config(log_level or settings.log_level),
         **uvicorn_proxy_kwargs(settings=settings),
     )
     return 0

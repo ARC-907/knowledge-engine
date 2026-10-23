@@ -1,0 +1,119 @@
+### knowledge-engine --help
+usage: knowledge-engine [-h] [-v | -q]
+                        {info,bootstrap,capabilities,reindex,watch,config,mcp,search,serve,project-context,board,board-serve} ...
+
+positional arguments:
+  {info,bootstrap,capabilities,reindex,watch,config,mcp,search,serve,project-context,board,board-serve}
+    info                Print configuration and counts
+    bootstrap           Walk corpus/ and register every folder as an entry
+    capabilities        Print runtime capability and retrieval-surface
+                        inventory
+    reindex             Rebuild FTS5 index over enabled entries
+    watch               Start watchdog: auto-register new corpus folders
+    config              Inspect the effective configuration
+    mcp                 Run the MCP server for AI clients (stdio, or
+                        streamable HTTP with --http)
+    search              Search the index
+    serve               Run the FastAPI server (uvicorn)
+    project-context     Project-specific documentation subsystem
+    board               Agent Board (post/read/search/ack/sweep/keys)
+    board-serve         Run the standalone Agent Board service (separate
+                        port).
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         More log output on stderr (-v: INFO, -vv: DEBUG).
+  -q, --quiet           Less log output on stderr (-q: ERROR, -qq: CRITICAL).
+### knowledge-engine info --help
+usage: knowledge-engine info [-h]
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine bootstrap --help
+usage: knowledge-engine bootstrap [-h]
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine capabilities --help
+usage: knowledge-engine capabilities [-h]
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine reindex --help
+usage: knowledge-engine reindex [-h]
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine watch --help
+usage: knowledge-engine watch [-h]
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine config --help
+usage: knowledge-engine config [-h] {show} ...
+
+positional arguments:
+  {show}
+    show      Print every setting's effective value (secrets masked) as JSON
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine config show --help
+usage: knowledge-engine config show [-h] [--markdown]
+
+options:
+  -h, --help  show this help message and exit
+  --markdown  Print the configuration reference table instead (01-user-
+              docs/CONFIGURATION.md)
+### knowledge-engine mcp --help
+usage: knowledge-engine mcp [-h] [--http | --selftest] [--host HOST]
+                            [--port PORT]
+
+options:
+  -h, --help   show this help message and exit
+  --http       Serve MCP over streamable HTTP at http://HOST:PORT/mcp instead
+               of stdio.
+  --selftest   Build the server, list its tools over an in-process session,
+               print a JSON summary and exit (non-zero if a base tool is
+               missing).
+  --host HOST  Bind address for --http (default 127.0.0.1).
+  --port PORT  Port for --http (default 9211).
+### knowledge-engine search --help
+usage: knowledge-engine search [-h] [--limit LIMIT] query
+
+positional arguments:
+  query
+
+options:
+  -h, --help     show this help message and exit
+  --limit LIMIT
+### knowledge-engine serve --help
+usage: knowledge-engine serve [-h] [--host HOST] [--port PORT]
+
+options:
+  -h, --help   show this help message and exit
+  --host HOST
+  --port PORT  default: $KE_PORT or 9210
+### knowledge-engine project-context --help
+usage: knowledge-engine project-context [-h] ...
+
+positional arguments:
+  pd_args     Subcommand + args (e.g. 'info', 'capabilities')
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine board --help
+usage: knowledge-engine board [-h] ...
+
+positional arguments:
+  board_args  Subcommand + args (e.g. 'status', 'post', 'read', 'search')
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine board-serve --help
+usage: knowledge-engine board-serve [-h] [--host HOST] [--port PORT]
+
+options:
+  -h, --help   show this help message and exit
+  --host HOST  default: $BOARD_HOST or 127.0.0.1
+  --port PORT  default: $BOARD_PORT or 11437

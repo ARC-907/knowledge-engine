@@ -1,12 +1,17 @@
-"""Process-level logging setup for the long-running servers.
+"""Process-level logging setup for the CLI and the long-running servers.
 
 Library modules only ever call ``logging.getLogger(__name__)``; nothing in
-the package attaches handlers at import time. The two uvicorn entry points
-(``knowledge-engine serve`` and ``knowledge-engine board-serve``) are the
-only places a handler is wired, and they do it through :func:`uvicorn_log_config`
-so the engine's own ``INFO`` lines (the startup ``CORS: allow_origins=...``
-and ``board trust: ...`` policy lines operators are told to watch) reach
-stderr next to uvicorn's.
+the package attaches handlers at import time. Handlers are wired in exactly
+two places:
+
+* :func:`configure_cli_logging` -- called once by ``knowledge-engine``'s
+  ``main()``: one stderr handler on the root logger. One-shot commands log at
+  WARNING; long-running ones (``serve``, ``board-serve``, ``mcp``, ``watch``)
+  at ``KE_LOG_LEVEL``; ``-v``/``-vv``/``-q``/``-qq`` override both.
+* :func:`uvicorn_log_config` -- the uvicorn entry points (``serve`` and
+  ``board-serve``) pass it to uvicorn so the engine's own ``INFO`` lines (the
+  startup ``CORS: allow_origins=...`` and ``board trust: ...`` policy lines
+  operators are told to watch) reach stderr next to uvicorn's.
 
 ``KE_LOG_LEVEL`` (default ``INFO``) sets the level of the ``knowledge_engine``
 logger hierarchy. Other libraries stay at ``WARNING``; uvicorn keeps its own
@@ -17,7 +22,8 @@ from __future__ import annotations
 
 import copy
 import logging
-from collections.abc import Mapping
+import sys
+from collections.abc import Callable, Mapping
 from typing import Any
 
 _logger = logging.getLogger(__name__)
@@ -25,6 +31,9 @@ _logger = logging.getLogger(__name__)
 LOG_LEVEL_ENV = "KE_LOG_LEVEL"
 DEFAULT_LOG_LEVEL = "INFO"
 PACKAGE_LOGGER = "knowledge_engine"
+#: Level of one-shot CLI commands when neither -v nor -q is given.
+CLI_DEFAULT_LEVEL = "WARNING"
+CLI_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 def resolve_log_level(env: Mapping[str, str] | None = None) -> str:
@@ -77,10 +86,73 @@ def uvicorn_log_config(level: str | None = None) -> dict[str, Any]:
     return cfg
 
 
+def cli_log_level(verbosity: int) -> str:
+    """Map ``-v`` (positive) / ``-q`` (negative) counts to a level name.
+
+    ``0`` → ``WARNING``; ``1`` → ``INFO``; ``2+`` → ``DEBUG``; ``-1`` →
+    ``ERROR``; ``-2`` or less → ``CRITICAL``.
+    """
+    if verbosity >= 2:
+        return "DEBUG"
+    if verbosity == 1:
+        return "INFO"
+    if verbosity == 0:
+        return CLI_DEFAULT_LEVEL
+    if verbosity == -1:
+        return "ERROR"
+    return "CRITICAL"
+
+
+class _StderrHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    """A stream handler bound to *the current* ``sys.stderr`` at emit time.
+
+    Test harnesses and embedding hosts swap ``sys.stderr``; holding the
+    stream object captured at configuration time would write to a stale
+    (possibly closed) file.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.setStream(sys.stderr)
+        super().emit(record)
+
+
+def configure_cli_logging(
+    override: str | None = None, *, long_running: bool = False
+) -> Callable[[], None]:
+    """Install the CLI's single stderr handler and return a function undoing it.
+
+    ``override`` (from ``-v``/``-q``) wins; otherwise long-running commands use
+    ``KE_LOG_LEVEL`` and one-shot commands ``WARNING``. The level is applied
+    to the root logger, so it covers third-party libraries too. Calling it
+    again replaces the previous CLI handler instead of adding another.
+    """
+    level_name = override or (resolve_log_level() if long_running else CLI_DEFAULT_LEVEL)
+    level = logging.getLevelNamesMapping().get(level_name, logging.WARNING)
+    root = logging.getLogger()
+    for existing in list(root.handlers):
+        if isinstance(existing, _StderrHandler):
+            root.removeHandler(existing)
+    handler = _StderrHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter(CLI_FORMAT))
+    previous_level = root.level
+    root.addHandler(handler)
+    root.setLevel(level)
+
+    def restore() -> None:
+        root.removeHandler(handler)
+        root.setLevel(previous_level)
+
+    return restore
+
+
 __all__ = [
+    "CLI_DEFAULT_LEVEL",
+    "CLI_FORMAT",
     "DEFAULT_LOG_LEVEL",
     "LOG_LEVEL_ENV",
     "PACKAGE_LOGGER",
+    "cli_log_level",
+    "configure_cli_logging",
     "resolve_log_level",
     "uvicorn_log_config",
 ]

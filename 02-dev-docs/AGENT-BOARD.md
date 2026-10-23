@@ -443,6 +443,7 @@ knowledge-engine board post --scope branch-feat-auth \
 knowledge-engine board read   --scope branch-feat-auth --channel ops
 knowledge-engine board search "auth" --scope branch-feat-auth
 knowledge-engine board scopes          # list the scope DBs that exist
+knowledge-engine board --key "$KE_BOARD_KEY" scopes create proj-a   # create one (admin key)
 ```
 
 ```bash

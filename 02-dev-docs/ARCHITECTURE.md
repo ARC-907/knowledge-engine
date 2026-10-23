@@ -64,9 +64,9 @@ corpus/                         the knowledge content (data layer)
 engine/                          the engine (code layer)
   pyproject.toml                 package metadata; `knowledge-engine` console script
   src/knowledge_engine/
-    cli.py                       `knowledge-engine` CLI entrypoint (bootstrap/capabilities/reindex/search/...)
+    cli/                         `knowledge-engine` CLI: parser + dispatch (__init__.py), corpus/serve/mcp/board/project_context command modules
     app.py  mcp_server.py        compat shims re-exporting server.app / mcp.server
-    core/                        paths.py (KE_HOME/KE_* path resolver), config.py (env config), registry.py (source of truth), watcher.py (auto-register)
+    core/                        paths.py (KE_HOME/KE_* path resolver), config.py (env config), registry.py (source of truth), watcher.py (auto-register), ollama.py (Ollama client), util/ (shared helpers)
     server/                      app.py (FastAPI factory) + api/ routes (health, registry, search, generate, board)
       static/                    index.html + app.js + compiled tailwind.css (built from ui-src/) — Alpine.js dashboard (Search / Registry / Board / Config tabs), served at /ui/
     mcp/                         server.py — JSON-RPC 2.0 MCP stdio server

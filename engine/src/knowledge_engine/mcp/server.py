@@ -175,7 +175,11 @@ def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: In
         with tool_errors("registry_get"):
             return json.dumps(registry.get(entry_id), indent=2)
 
-    for fn in (search, registry_list, registry_toggle, registry_get):
+    base = (search, registry_list, registry_toggle, registry_get)
+    # BASE_TOOLS is the public list (CLI `capabilities`, selftest); keep it honest.
+    if tuple(fn.__name__ for fn in base) != BASE_TOOLS:  # pragma: no cover - programming error
+        raise RuntimeError("mcp.server.BASE_TOOLS is out of sync with the registered base tools")
+    for fn in base:
         server.add_tool(fn, structured_output=False)
 
 

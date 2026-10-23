@@ -147,7 +147,7 @@ ignore = [
     "PLC0415", # local imports keep fixtures isolated from env
     "T20",
 ]
-"src/knowledge_engine/cli.py" = ["T20", "PLC0415"]
+"src/knowledge_engine/cli/*.py" = ["T20", "PLC0415"]
 "src/knowledge_engine/**/cli.py" = ["T20", "PLC0415"]
 "src/knowledge_engine/retrieval/embeddings/*.py" = ["T20"]
 
