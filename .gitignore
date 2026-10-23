@@ -43,8 +43,6 @@ htmlcov/
 **/*.db-shm
 **/*.db-wal
 **/engine/data/*.db
-# Default engine data dir (<KE_HOME>/.knowledge-engine/data) and project-context state
-**/.knowledge-engine/
 
 # Process bookkeeping written by the agent-board watchdog script
 **/watchdog.pid
