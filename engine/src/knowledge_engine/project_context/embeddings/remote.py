@@ -1,9 +1,11 @@
-"""Remote (off-machine) embedding provider for the project-context subsystem.
+"""Remote (off-machine) embedding provider.
 
-:class:`RemoteProvider` is gated behind ``cfg.embeddings.allow_remote_provider``.
-When that gate is False the provider raises immediately, ensuring the
-conservative default never silently ships document text to a third party. When
-permitted, it POSTs to a configured HTTP endpoint with ``httpx``. No network
+:class:`RemoteProvider` is gated behind an explicit opt-in: for project-context
+``cfg.embeddings.allow_remote_provider``; for the corpus embedding index
+``KE_EMBED_ALLOW_REMOTE`` (see :meth:`RemoteProvider.create`). When the gate is
+off the provider raises immediately, ensuring the conservative default never
+silently ships document text to a third party. When permitted, it POSTs one
+request per text to a configured HTTP endpoint with ``httpx``. No network
 access occurs at import or construction time.
 """
 
@@ -35,13 +37,42 @@ class RemoteProvider(EmbeddingProvider):
         emb = getattr(cfg, "embeddings", None)
         if emb is None or not getattr(emb, "allow_remote_provider", False):
             raise RuntimeError("RemoteProvider is disabled: set embeddings.allow_remote_provider")
-        self._endpoint = str(getattr(emb, "url", "") or "").strip().rstrip("/")
-        self._model = str(getattr(emb, "model", "") or "").strip()
-        self._dim = int(getattr(emb, "dim", 0) or 0)
+        self._configure(
+            endpoint=str(getattr(emb, "url", "") or ""),
+            model=str(getattr(emb, "model", "") or ""),
+            dim=int(getattr(emb, "dim", 0) or 0),
+        )
+
+    @classmethod
+    def create(
+        cls, *, endpoint: str, model: str, allow_remote: bool, dim: int = 0
+    ) -> RemoteProvider:
+        """Build a provider from explicit values instead of a project-context config.
+
+        ``allow_remote`` is the opt-in gate; when it is false this raises
+        :class:`RuntimeError` exactly like the config-driven constructor.
+        """
+        if not allow_remote:
+            raise RuntimeError("RemoteProvider is disabled: remote embedding is not allowed")
+        provider = cls.__new__(cls)
+        provider._configure(endpoint=endpoint, model=model, dim=dim)
+        return provider
+
+    def _configure(self, *, endpoint: str, model: str, dim: int) -> None:
+        self._endpoint = endpoint.strip().rstrip("/")
+        self._model = model.strip()
+        self._dim = max(int(dim), 0)
+
+    def __repr__(self) -> str:
+        return f"RemoteProvider(model={self._model!r})"
 
     @property
     def name(self) -> str:
         return f"remote:{self._model}" if self._model else "remote"
+
+    @property
+    def model_id(self) -> str:
+        return self._model or "remote"
 
     @property
     def dim(self) -> int:

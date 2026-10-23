@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
 from ..core.registry import REGISTRY_KINDS, RegistryKind
+from ..retrieval.hybrid import SearchMode
 
 
 def _doc(schema: dict[str, Any]) -> Any:
@@ -114,12 +115,39 @@ class SearchHit(BaseModel):
     entry_id: str
     entry_kind: str
     path: str = Field(description="Matched file, relative to the corpus root.")
-    snippet: str = Field(description="Match context; hits are wrapped in <mark>...</mark>.")
-    score: float = Field(description="BM25 rank (lower is better).")
+    snippet: str = Field(
+        description=(
+            "Match context; FTS hits are wrapped in <mark>...</mark>. A hit found only by "
+            "vector search carries a plain excerpt of its best-matching chunk."
+        )
+    )
+    score: float = Field(
+        description=(
+            "Rank score, lower is better in every mode: the BM25 rank (`fts`), the negated "
+            "cosine similarity (`vector`) or the negated fused score (`hybrid`)."
+        )
+    )
+    fused_score: float | None = Field(
+        None,
+        description="Reciprocal-rank-fusion score (higher is better); `hybrid` mode only.",
+    )
+    vector_score: float | None = Field(
+        None,
+        description=(
+            "Cosine similarity of the file's best chunk to the query (higher is better); "
+            "`vector`/`hybrid` hits found by the embedding index."
+        ),
+    )
+    fts_score: float | None = Field(
+        None, description="BM25 rank of the hit; `hybrid` hits also found by FTS."
+    )
 
 
 class SearchResponse(BaseModel):
     query: str
+    mode: SearchMode = Field(
+        "fts", description="Search mode that produced the results (`fts` unless requested)."
+    )
     count: int = Field(description="Number of hits returned.")
     results: list[SearchHit]
     syntax_fallback: bool | None = Field(
@@ -171,8 +199,23 @@ class ErrorResponse(BaseModel):
     type: str
 
 
+class EmbeddingErrorResponse(ErrorResponse):
+    """Body of a failed `vector`/`hybrid` search (409/502/503).
+
+    `type` is `embedding_index_missing`, `embedding_model_mismatch`,
+    `embedding_provider_error` or `embedding_unavailable`.
+    """
+
+    hint: str = Field("", description="What to run or set to fix it.")
+    embedding: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Context: index/query model and dimension, database path, provider.",
+    )
+
+
 __all__ = [
     "REGISTRY_KINDS",
+    "EmbeddingErrorResponse",
     "EntryIn",
     "ErrorResponse",
     "GenIn",

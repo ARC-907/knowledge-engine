@@ -1,104 +1,55 @@
-"""Cosine-similarity search over the embedding index built by build.py.
+"""Historical search entry point of the corpus embedding index (kept for compatibility).
 
-Loads chunk embeddings from SQLite, embeds the query via Ollama, returns the
-top-k most-similar chunks ranked by cosine similarity.
+:func:`search` returns the ``top`` chunks most similar to a query, as dicts
+with ``score``, ``rel_path``, ``library``, ``heading``, ``text`` (and
+``chunk_idx``). It runs :meth:`~.index.CorpusEmbeddingIndex.search` on the
+index described by the current settings; prefer that class, or
+``knowledge-engine embeddings search``, in new code.
 
-Usage:
-    python -m knowledge_engine.embeddings.search "your query" --top 10
+``python -m knowledge_engine.retrieval.embeddings.search "query" [--top N] [--library L]``
+runs ``knowledge-engine embeddings search``.
 """
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
+from typing import Any
 
-from ...core.util.sqlite import connect as sqlite_connect
-from .build import (
-    DB_PATH,
-    blob_to_embedding,
-    cosine_similarity,
-    get_embedding,
-)
+from .index import CorpusEmbeddingIndex
 
 
-def search(query: str, top: int = 10, library: str | None = None) -> list[dict]:
+def search(query: str, top: int = 10, library: str | None = None) -> list[dict[str, Any]]:
     """Return the top-N most-similar chunks for ``query``.
 
-    Parameters
-    ----------
-    query : str
-        Free-text query to embed and search against.
-    top : int
-        Max number of hits to return.
-    library : str, optional
-        If set, restrict to chunks whose file is in this top-level corpus subdirectory.
+    ``library`` restricts the search to one top-level corpus subdirectory.
+    Raises :class:`~.errors.EmbeddingIndexMissingError` (a ``FileNotFoundError``)
+    when the index has not been built, and
+    :class:`~.errors.EmbeddingModelMismatchError` when the configured model
+    differs from the index's.
     """
-    if not DB_PATH.exists():
-        raise FileNotFoundError(
-            f"No embedding index at {DB_PATH}. Run `python -m knowledge_engine.embeddings.build` first."
-        )
-
-    q_emb = get_embedding(query)
-
-    conn = sqlite_connect(DB_PATH)
-
-    if library:
-        rows = conn.execute(
-            """
-            SELECT c.text AS text, c.heading AS heading, c.embedding AS embedding,
-                   f.rel_path AS rel_path, f.library AS library
-              FROM chunks c
-              JOIN files f ON f.id = c.file_id
-             WHERE f.library = ?
-            """,
-            (library,),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT c.text AS text, c.heading AS heading, c.embedding AS embedding,
-                   f.rel_path AS rel_path, f.library AS library
-              FROM chunks c
-              JOIN files f ON f.id = c.file_id
-            """
-        ).fetchall()
-
-    scored = []
-    for row in rows:
-        emb = blob_to_embedding(row["embedding"])
-        score = cosine_similarity(q_emb, emb)
-        scored.append(
-            {
-                "score": score,
-                "rel_path": row["rel_path"],
-                "library": row["library"],
-                "heading": row["heading"],
-                "text": row["text"],
-            }
-        )
-
-    scored.sort(key=lambda r: r["score"], reverse=True)
-    conn.close()
-    return scored[:top]
+    index = CorpusEmbeddingIndex.from_settings()
+    return [hit.to_dict() for hit in index.search(query, top=top, library=library)]
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> int:
+    """``python -m knowledge_engine.retrieval.embeddings.search`` → ``knowledge-engine embeddings search``."""
     parser = argparse.ArgumentParser(description="Cosine search over the corpus embedding index.")
     parser.add_argument("query", help="The free-text query")
     parser.add_argument("--top", type=int, default=10, help="Top-N hits to return")
     parser.add_argument("--library", default=None, help="Restrict to a corpus subdirectory")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    hits = search(args.query, top=args.top, library=args.library)
-    if not hits:
-        print("No hits.")
-        return
+    from ...cli import main as cli_main  # noqa: PLC0415 - the CLI owns logging and output
 
-    for i, h in enumerate(hits, 1):
-        snippet = h["text"].replace("\n", " ")[:200]
-        print(f"[{i:2}] score={h['score']:.3f}  {h['rel_path']}  ({h['heading']})")
-        print(f"     {snippet}...")
-        print()
+    command = ["embeddings", "search", args.query, "--top", str(args.top)]
+    if args.library:
+        command += ["--library", args.library]
+    return cli_main(command)
+
+
+__all__ = ["main", "search"]
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

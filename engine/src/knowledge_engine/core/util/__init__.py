@@ -11,6 +11,8 @@ others (nothing here does I/O at import time):
 * :mod:`.proc`    -- ``run_git()``: the single ``git`` subprocess runner.
 * :mod:`.sqlite`  -- ``connect()`` with the engine's standard pragmas,
   ``transaction()`` and per-thread connection caches.
+* :mod:`.vectors` -- ``pack_vector()`` / ``unpack_vector()`` (the one embedding blob
+  format) and ``cosine()``, which refuses vectors of different dimensions.
 """
 
 from __future__ import annotations

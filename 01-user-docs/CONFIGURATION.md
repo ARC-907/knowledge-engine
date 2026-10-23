@@ -64,6 +64,18 @@ is used instead.
 | `KE_ANTHROPIC_API_KEY` | secret | *(unset)* | Default env binding for the `anthropic` board provider credential. Secret: masked by `config show`. | `agent_board.provider_registry` |
 | `KE_OPENAI_API_KEY` | secret | *(unset)* | Default env binding for the `openai` board provider credential. Secret: masked by `config show`. | `agent_board.provider_registry` |
 
+## Embeddings (semantic and hybrid search)
+
+| Variable | Type | Default | Description | Read by |
+|---|---|---|---|---|
+| `KE_EMBED_PROVIDER` | string | `ollama` | Embedding provider of the corpus embedding index: `ollama` (local Ollama at KE_OLLAMA_URL), `remote` (KE_EMBED_REMOTE_URL; needs KE_EMBED_ALLOW_REMOTE=1) or `fake` (offline, deterministic; tests and dry runs). | `retrieval.embeddings.factory` |
+| `KE_EMBED_MODEL` | string | `bge-m3:latest` | Embedding model (bge-m3 by default). The index records it and refuses vectors of another model; rebuild with `knowledge-engine embeddings build --rebuild` after changing it. | `retrieval.embeddings.factory` |
+| `KE_EMBED_BATCH` | int | `32` | Texts sent per embedding request while building the index. | `retrieval.embeddings.factory` |
+| `KE_OLLAMA_URL` | string | `http://127.0.0.1:11434` | Ollama server of the `ollama` embedding provider. | `retrieval.embeddings.factory` |
+| `KE_EMBED_REMOTE_URL` | string | *(empty)* | Endpoint of the `remote` embedding provider (POST {model, input} per text; answers {embedding} or {embeddings}). | `retrieval.embeddings.factory` |
+| `KE_EMBED_ALLOW_REMOTE` | bool | `0` | Opt-in gate of the `remote` embedding provider: corpus text is sent off-machine only when this is on. | `retrieval.embeddings.factory` |
+| `KE_EMBEDDINGS_DB` | string (optional) | *(unset)* | Corpus embedding index (SQLite). Unset: <data_dir>/embeddings.db. | `retrieval.embeddings.factory` |
+
 ## Pipeline and substrates
 
 | Variable | Type | Default | Description | Read by |
@@ -74,9 +86,6 @@ is used instead.
 | `KE_CONFIG_PATH` | string (optional) | *(unset)* | project-context TOML config file. | `project_context.config` |
 | `KE_CLASSIFIER_MODEL` | string | `qwen3:4b` | Model of the pipeline task classifier. | `runtime.pipeline.task_classifier` |
 | `KE_CLASSIFIER_ENDPOINT` | string | `http://127.0.0.1:11434/api/generate` | Endpoint of the pipeline task classifier. | `runtime.pipeline.task_classifier` |
-| `KE_OLLAMA_URL` | string | `http://127.0.0.1:11434` | Ollama server used to build embeddings. | `retrieval.embeddings.build` |
-| `KE_EMBED_MODEL` | string | `bge-m3:latest` | Embedding model. | `retrieval.embeddings.build` |
-| `KE_EMBEDDINGS_DB` | string (optional) | *(unset)* | Embeddings SQLite database. Unset: <data_dir>/embeddings.db. | `retrieval.embeddings.build` |
 
 Variables in the last section are read directly by the substrate modules named in
 *Read by*; they are listed here so the whole surface is documented in one place.

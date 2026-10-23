@@ -7,15 +7,20 @@
 1. resolve the paths from ``app.state.settings``, create the data directory,
    load the registry and open the FTS index (``app.state.config``,
    ``registry``, ``indexer``);
-2. build the generation providers (``app.state.providers``) and, unless
+2. describe the corpus embedding index for ``GET /search?mode=vector|hybrid``
+   (``app.state.embeddings``; no I/O -- the index is opened per search). A
+   provider that cannot be configured leaves it ``None`` with the reason in
+   ``app.state.embeddings_error``; ``fts`` search is unaffected;
+3. build the generation providers (``app.state.providers``) and, unless
    ``KE_PROVIDER_STARTUP_PROBE=0``, probe them on a background thread so an
    unreachable provider is reported at WARNING without delaying startup;
-3. board (unless ``KE_BOARD_ENABLED=0``): log the trust policy, create the
+4. board (unless ``KE_BOARD_ENABLED=0``): log the trust policy, create the
    app's :class:`~knowledge_engine.agent_board.sweeper.Sweeper`
    (``app.state.sweeper``), install it as the process default and start it
    when ``KE_BOARD_SWEEPER`` / the persisted flag say so;
-4. MCP over HTTP (``KE_MCP_HTTP=1``): attach a server built around this
-   lifespan's registry/indexer to the mount and run its session manager.
+5. MCP over HTTP (``KE_MCP_HTTP=1``): attach a server built around this
+   lifespan's registry/indexer/embedding index to the mount and run its
+   session manager.
 
 On shutdown the sweeper is stopped (and the previous default restored), the
 MCP session manager exits, the registry is closed and the FTS connection is closed. Optional
@@ -39,6 +44,7 @@ from ..core.registry import Registry
 from ..core.settings import Settings, env_flag
 from ..generation import ProviderRegistry
 from ..generation.factory import build_provider_registry
+from ..retrieval.embeddings.index import CorpusEmbeddingIndex, open_index
 from ..retrieval.fts5 import Indexer
 from ..runtime.foundation.config import load_dotenv_file
 
@@ -96,6 +102,11 @@ def open_engine(settings: Settings) -> tuple[Config, Registry, Indexer]:
         registry.close()
         raise
     return config, registry, indexer
+
+
+def open_embeddings(settings: Settings) -> tuple[CorpusEmbeddingIndex | None, str | None]:
+    """The corpus embedding index described by ``settings`` (no I/O), or ``(None, reason)``."""
+    return open_index(settings)
 
 
 def _start_provider_probe(providers: ProviderRegistry) -> threading.Thread:
@@ -156,6 +167,8 @@ def _stop_board(owned: Sweeper | None, previous: Sweeper | None) -> None:
 async def _start_mcp(
     app: FastAPI, stack: AsyncExitStack, config: Config, registry: Registry, indexer: Indexer
 ) -> None:
+    embeddings = getattr(app.state, "embeddings", None)
+    embeddings_error = getattr(app.state, "embeddings_error", None)
     mcp_http = getattr(app.state, "mcp_http", None)
     if mcp_http is None:
         return
@@ -163,7 +176,15 @@ async def _start_mcp(
         # Imported lazily: the MCP SDK is only loaded when the endpoint is enabled.
         from ..mcp import server as mcp_server  # noqa: PLC0415
 
-        mcp_http.attach(mcp_server.build_server(config, registry, indexer))
+        mcp_http.attach(
+            mcp_server.build_server(
+                config,
+                registry,
+                indexer,
+                embeddings=embeddings,
+                embeddings_error=embeddings_error,
+            )
+        )
         await stack.enter_async_context(mcp_http.lifespan())
     except Exception:
         _logger.exception("MCP session manager failed to start; /mcp will answer 503")
@@ -191,6 +212,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.config = config
     app.state.registry = registry
     app.state.indexer = indexer
+    app.state.embeddings, app.state.embeddings_error = open_embeddings(settings)
     owned_sweeper: Sweeper | None = None
     previous_sweeper: Sweeper | None = None
     try:
@@ -215,5 +237,6 @@ __all__ = [
     "bind_host",
     "env_truthy",
     "lifespan",
+    "open_embeddings",
     "open_engine",
 ]

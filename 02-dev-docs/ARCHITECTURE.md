@@ -97,7 +97,7 @@ The FastAPI app (`knowledge_engine.app:create_app`) serves:
 | `/registry/{id}/toggle` | PATCH | Enable/disable an entry |
 | `/registry/{id}` | DELETE | Remove an entry |
 | `/registry/lifecycle/state` | GET / PATCH | Read/update lifecycle flags |
-| `/search` | GET | FTS5 search (`?q=`, `?limit=`) |
+| `/search` | GET | Search (`?q=`, `?limit=`, `?mode=fts\|vector\|hybrid`; default `fts`) |
 | `/search/reindex` | POST | Rebuild the FTS5 index |
 | `/generate` | POST | Provider-routed text generation |
 | `/generate/providers` | GET | List available generation providers |
@@ -208,13 +208,15 @@ across threads.
 
 Several subsystems are **opt-in** and the lean core works without them:
 
-- `retrieval/embeddings/` — bge-m3 semantic search via Ollama. Build with
-  `python -m knowledge_engine.retrieval.embeddings.build`.
+- `retrieval/embeddings/` — the corpus embedding index (`index.py`,
+  `CorpusEmbeddingIndex`; bge-m3 via Ollama by default) and `retrieval/hybrid.py`
+  (`vector` / `hybrid` search modes, reciprocal rank fusion). Build with
+  `knowledge-engine embeddings build`; see 01-user-docs/EMBEDDINGS.md.
 - Ollama — every Ollama HTTP call (the `ollama` generation provider, corpus
   and project-context embeddings, the pipeline task classifier) goes through
   one client, `core/ollama.py` (`OllamaClient`: `available()`, `generate()`,
   batched `embed()`). Each consumer keeps its own variables (`OLLAMA_BASE_URL`
-  / `OLLAMA_MODEL` / `OLLAMA_TIMEOUT`, `KE_OLLAMA_URL` / `KE_EMBED_MODEL`,
+  / `OLLAMA_MODEL` / `OLLAMA_TIMEOUT`, `KE_OLLAMA_URL` / `KE_EMBED_MODEL` / `KE_EMBED_BATCH`,
   the project-context `[embeddings] url`, `KE_CLASSIFIER_ENDPOINT`); the
   module docstring lists the precedence.
 - `runtime/sandbox/` — the sandboxed-execution hook. `get_sandbox()` returns a

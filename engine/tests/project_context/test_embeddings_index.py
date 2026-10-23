@@ -221,3 +221,63 @@ def test_cluster_records_empty(
 ) -> None:
     """cluster_records returns [] when nothing is embedded."""
     assert index.cluster_records(project_conn, k=3) == []
+
+
+def test_stored_vectors_use_the_versioned_format(
+    project_conn: sqlite3.Connection,
+    provider: providers.StubProvider,
+) -> None:
+    """New rows carry the format byte; legacy headerless rows are still searchable."""
+    _insert_doc(project_conn, "a", "alpha")
+    _insert_doc(project_conn, "b", "beta")
+    index.generate(project_conn, provider)
+    blob = project_conn.execute(
+        "SELECT vector FROM doc_embeddings WHERE record_id = 'a'"
+    ).fetchone()["vector"]
+    assert blob[0] == providers.VECTOR_FORMAT_VERSION
+    # Rewrite one row the way releases before the version byte stored it.
+    legacy = blob[1:]
+    project_conn.execute("UPDATE doc_embeddings SET vector = ? WHERE record_id = 'b'", (legacy,))
+    project_conn.commit()
+    results = index.semantic_search(project_conn, provider, "alpha", limit=2)
+    assert results[0]["record_id"] == "a"
+    assert len(results) == 2
+
+
+def test_search_skips_stored_vectors_of_another_dimension(
+    project_conn: sqlite3.Connection,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A row of the same provider/model but another size is skipped, not compared."""
+    for i in range(3):
+        _insert_doc(project_conn, f"r{i}", f"body {i}")
+    index.generate(project_conn, providers.StubProvider(dim=8))
+    # Simulate a stale row: same provider/model key, vector of another dimension.
+    project_conn.execute(
+        "UPDATE doc_embeddings SET vector = ?, dim = 16 WHERE record_id = 'r2'",
+        (providers.pack_vector([0.5] * 16),),
+    )
+    project_conn.commit()
+    hits = index.semantic_search(project_conn, providers.StubProvider(dim=8), "body 0", limit=5)
+    assert [h["record_id"] for h in hits] and "r2" not in {h["record_id"] for h in hits}
+    assert "semantic_search skipped 1 stored vector" in caplog.text
+    caplog.clear()
+    neighbours = index.similar_records(project_conn, providers.StubProvider(dim=8), "r0", limit=5)
+    assert {n["record_id"] for n in neighbours} == {"r1"}
+    assert "similar_records skipped 1 stored vector" in caplog.text
+    assert index.similar_records(project_conn, providers.StubProvider(dim=8), "r2") == []
+
+
+def test_cluster_records_with_mixed_dimensions_does_not_crash(
+    project_conn: sqlite3.Connection,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Vectors of two models are never compared with each other (no exception)."""
+    for i in range(4):
+        _insert_doc(project_conn, f"r{i}", f"body {i}")
+    index.generate(project_conn, providers.StubProvider(dim=8), record_ids=["r0", "r1"])
+    index.generate(project_conn, providers.FakeProvider(dim=16), record_ids=["r2", "r3"])
+    clusters = index.cluster_records(project_conn, k=1)
+    members = sorted(rid for c in clusters for rid in c["record_ids"])
+    assert members == ["r0", "r1", "r2", "r3"]
+    assert "different dimensions" in caplog.text

@@ -20,7 +20,7 @@ import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import anyio
 from mcp import Client
@@ -31,10 +31,15 @@ from pydantic import BeforeValidator, Field
 from .. import __version__
 from ..core.config import Config
 from ..core.registry import EntryKind, Registry, RegistryValidationError
+from ..retrieval.embeddings.errors import EmbeddingError
 from ..retrieval.fts5 import Indexer
+from ..retrieval.hybrid import DEFAULT_MODE, HybridSearcher, SearchMode
 from .http import transport_security
 from .options import add_arguments, resolve_http_options
 from .toolkit import DispatchFn, register_group, tool_errors
+
+if TYPE_CHECKING:
+    from ..retrieval.embeddings.index import CorpusEmbeddingIndex
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +50,9 @@ INSTRUCTIONS = """\
 Knowledge Engine: full-text search (SQLite FTS5) over a curated corpus of \
 libraries, skills, kits and tools.
 - `search` ranks matching documents; `query` uses FTS5 syntax (words, "phrases", \
-AND/OR/NOT, prefix*), `kind` restricts results to one entry kind, `limit` caps them.
+AND/OR/NOT, prefix*), `kind` restricts results to one entry kind, `limit` caps them. \
+`mode` is `fts` (default), `vector` (semantic, needs the embedding index) or \
+`hybrid` (both, fused by reciprocal rank).
 - `registry_list` / `registry_get` inspect registry entries; `registry_toggle` \
 enables or disables one (disabled entries drop out of the index on the next reindex).
 - `project_context.*` and `board_*` tools are present when those subsystems are enabled.
@@ -130,7 +137,18 @@ def _empty_is_none(value: object) -> object:
     return None if value == "" else value
 
 
-def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: Indexer) -> None:
+def _embedding_error_result(exc: EmbeddingError) -> CallToolResult:
+    """A model-visible, structured ``isError`` result for a vector/hybrid failure."""
+    logger.warning("MCP search: %s (%s)", exc, exc.code)
+    return CallToolResult(
+        content=[TextContent(type="text", text=json.dumps({"error": exc.to_dict()}, indent=2))],
+        is_error=True,
+    )
+
+
+def _register_base_tools(
+    server: MCPServer[Any], registry: Registry, indexer: Indexer, searcher: HybridSearcher
+) -> None:
     # Names, parameters and descriptions are a public contract, frozen in
     # tests/snapshots/mcp_tools.json. Results are the same JSON text as before.
 
@@ -142,14 +160,28 @@ def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: In
             BeforeValidator(_empty_is_none),
             Field(description="Optional kind filter"),
         ] = None,
+        mode: Annotated[
+            SearchMode,
+            BeforeValidator(lambda value: DEFAULT_MODE if value in ("", None) else value),
+            Field(
+                description=(
+                    "Search mode: fts (keyword, default), vector (semantic; needs the "
+                    "embedding index) or hybrid (both, fused by reciprocal rank)"
+                )
+            ),
+        ] = DEFAULT_MODE,
     ) -> CallToolResult:
         """Full-text search across enabled libraries, skills, kits, and tools in the corpus."""
         with tool_errors("search"):
             if limit < 1:
                 raise ValueError("limit must be a positive integer")
-            hits = indexer.search(query, limit=limit, kind=kind)
+            try:
+                hits = searcher.search(query, mode=mode, limit=limit, kind=kind)
+            except EmbeddingError as exc:
+                return _embedding_error_result(exc)
             meta = getattr(hits, "meta", None) or None
-            # Same JSON text as always; an FTS5 syntax fallback is flagged in `_meta`.
+            # Same JSON text as always; an FTS5 syntax fallback (and a non-default
+            # mode) is flagged in `_meta`.
             return CallToolResult(
                 content=[TextContent(type="text", text=json.dumps(list(hits), indent=2))],
                 _meta=meta,
@@ -206,8 +238,22 @@ def _host_logging_untouched() -> Iterator[None]:
         root.removeHandler(placeholder)
 
 
+def _default_embeddings() -> tuple[CorpusEmbeddingIndex | None, str | None]:
+    """The corpus embedding index from the environment (no I/O), or ``(None, reason)``."""
+    from ..core.settings import Settings  # noqa: PLC0415 - read when the server is built
+    from ..retrieval.embeddings.index import open_index  # noqa: PLC0415
+
+    return open_index(Settings())
+
+
 def build_server(
-    config: Config, registry: Registry, indexer: Indexer, *, include_groups: bool = True
+    config: Config,
+    registry: Registry,
+    indexer: Indexer,
+    *,
+    include_groups: bool = True,
+    embeddings: CorpusEmbeddingIndex | None = None,
+    embeddings_error: str | None = None,
 ) -> MCPServer[Any]:
     """Build the ``knowledge-engine`` MCP server around existing engine objects.
 
@@ -215,12 +261,19 @@ def build_server(
     optional project-context and agent-board tool groups. A group that is
     disabled or fails to initialise is logged and skipped; a duplicate tool
     name raises ``ValueError``.
+
+    ``embeddings`` is the corpus embedding index behind ``search``'s
+    ``vector``/``hybrid`` modes; when neither it nor ``embeddings_error`` (why
+    it is unavailable) is given, it is configured from the environment.
     """
+    if embeddings is None and embeddings_error is None:
+        embeddings, embeddings_error = _default_embeddings()
+    searcher = HybridSearcher(indexer, registry, embeddings, embeddings_error=embeddings_error)
     with _host_logging_untouched():
         server: MCPServer[Any] = MCPServer(
             SERVER_NAME, version=__version__, instructions=INSTRUCTIONS
         )
-    _register_base_tools(server, registry, indexer)
+    _register_base_tools(server, registry, indexer, searcher)
     if include_groups:
         _register_optional_groups(server)
     logger.info("MCP server %s %s ready (corpus %s)", SERVER_NAME, __version__, config.corpus_root)

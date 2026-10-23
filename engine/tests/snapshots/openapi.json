@@ -90,6 +90,36 @@
         "title": "ConfigPatchIn",
         "type": "object"
       },
+      "EmbeddingErrorResponse": {
+        "description": "Body of a failed `vector`/`hybrid` search (409/502/503).\n\n`type` is `embedding_index_missing`, `embedding_model_mismatch`,\n`embedding_provider_error` or `embedding_unavailable`.",
+        "properties": {
+          "detail": {
+            "title": "Detail"
+          },
+          "embedding": {
+            "additionalProperties": true,
+            "description": "Context: index/query model and dimension, database path, provider.",
+            "title": "Embedding",
+            "type": "object"
+          },
+          "hint": {
+            "default": "",
+            "description": "What to run or set to fix it.",
+            "title": "Hint",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "type"
+        ],
+        "title": "EmbeddingErrorResponse",
+        "type": "object"
+      },
       "EntryIn": {
         "properties": {
           "auto_registered": {
@@ -749,20 +779,56 @@
             "title": "Entry Kind",
             "type": "string"
           },
+          "fts_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "BM25 rank of the hit; `hybrid` hits also found by FTS.",
+            "title": "Fts Score"
+          },
+          "fused_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Reciprocal-rank-fusion score (higher is better); `hybrid` mode only.",
+            "title": "Fused Score"
+          },
           "path": {
             "description": "Matched file, relative to the corpus root.",
             "title": "Path",
             "type": "string"
           },
           "score": {
-            "description": "BM25 rank (lower is better).",
+            "description": "Rank score, lower is better in every mode: the BM25 rank (`fts`), the negated cosine similarity (`vector`) or the negated fused score (`hybrid`).",
             "title": "Score",
             "type": "number"
           },
           "snippet": {
-            "description": "Match context; hits are wrapped in <mark>...</mark>.",
+            "description": "Match context; FTS hits are wrapped in <mark>...</mark>. A hit found only by vector search carries a plain excerpt of its best-matching chunk.",
             "title": "Snippet",
             "type": "string"
+          },
+          "vector_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cosine similarity of the file's best chunk to the query (higher is better); `vector`/`hybrid` hits found by the embedding index.",
+            "title": "Vector Score"
           }
         },
         "required": [
@@ -781,6 +847,17 @@
             "description": "Number of hits returned.",
             "title": "Count",
             "type": "integer"
+          },
+          "mode": {
+            "default": "fts",
+            "description": "Search mode that produced the results (`fts` unless requested).",
+            "enum": [
+              "fts",
+              "vector",
+              "hybrid"
+            ],
+            "title": "Mode",
+            "type": "string"
           },
           "query": {
             "title": "Query",
@@ -2837,6 +2914,23 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "description": "`fts` (default): FTS5 keyword search. `vector`: the corpus embedding index (`knowledge-engine embeddings build`). `hybrid`: both, merged by reciprocal rank fusion (k=60).",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "fts",
+              "description": "`fts` (default): FTS5 keyword search. `vector`: the corpus embedding index (`knowledge-engine embeddings build`). `hybrid`: both, merged by reciprocal rank fusion (k=60).",
+              "enum": [
+                "fts",
+                "vector",
+                "hybrid"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2850,6 +2944,16 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingErrorResponse"
+                }
+              }
+            },
+            "description": "`vector`/`hybrid`: the query model differs from the index's model."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2859,6 +2963,26 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingErrorResponse"
+                }
+              }
+            },
+            "description": "`vector`/`hybrid`: the embedding provider failed."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingErrorResponse"
+                }
+              }
+            },
+            "description": "`vector`/`hybrid`: no embedding index, or vector search not configured (also answered while the engine is not started)."
           }
         },
         "summary": "Search",

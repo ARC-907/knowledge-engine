@@ -22,10 +22,13 @@ Functions:
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from ...core.util.time import utc_now_iso
 from . import providers
+
+_logger = logging.getLogger(__name__)
 
 __all__ = [
     "cluster_records",
@@ -182,6 +185,31 @@ def _load_vectors(
     ]
 
 
+def _same_dimension(
+    pairs: list[tuple[str, list[float]]],
+    dim: int,
+    operation: str,
+) -> list[tuple[str, list[float]]]:
+    """``pairs`` whose vector has ``dim`` components; the others are skipped with a WARNING.
+
+    ``doc_embeddings`` keys rows by provider and model, but a model that changed
+    its output size (or a row written by an older release) leaves vectors that
+    cannot be compared with the query's. Comparing them would raise; skipping
+    them keeps the search answering and names what to refresh.
+    """
+    kept = [(rid, vector) for rid, vector in pairs if len(vector) == dim]
+    skipped = len(pairs) - len(kept)
+    if skipped:
+        _logger.warning(
+            "%s skipped %d stored vector(s) whose dimension differs from the query's (%d); "
+            "refresh the embeddings with one provider/model",
+            operation,
+            skipped,
+            dim,
+        )
+    return kept
+
+
 def _summaries_for(
     conn: sqlite3.Connection,
     record_ids: list[str],
@@ -216,7 +244,10 @@ def semantic_search(
         return []
 
     query_vec = provider.embed([query])[0]
-    scored = [(record_id, providers.cosine(query_vec, vector)) for record_id, vector in pairs]
+    scored = [
+        (record_id, providers.cosine(query_vec, vector))
+        for record_id, vector in _same_dimension(pairs, len(query_vec), "semantic_search")
+    ]
     scored.sort(key=lambda item: item[1], reverse=True)
     top = scored[: max(0, limit)]
 
@@ -249,7 +280,11 @@ def similar_records(
     if target is None:
         return []
 
-    scored = [(rid, providers.cosine(target, vector)) for rid, vector in pairs if rid != record_id]
+    scored = [
+        (rid, providers.cosine(target, vector))
+        for rid, vector in _same_dimension(pairs, len(target), "similar_records")
+        if rid != record_id
+    ]
     scored.sort(key=lambda item: item[1], reverse=True)
     top = scored[: max(0, limit)]
 
@@ -270,8 +305,11 @@ def cluster_records(
     existing cluster whose seed is most similar (above a fixed threshold), or
     starts a new cluster while fewer than ``k`` clusters exist, otherwise it
     falls back to the nearest seed. Vectors of every stored provider/model are
-    pooled. Returns a list of cluster dicts, each with a ``cluster`` index and a
-    ``record_ids`` list. Returns an empty list when no vectors are stored.
+    pooled; a vector is only ever compared with seeds of the same dimension
+    (vectors of different models are not comparable), and one that has no
+    comparable seed once ``k`` clusters exist joins the first cluster (logged
+    at WARNING). Returns a list of cluster dicts, each with a ``cluster`` index
+    and a ``record_ids`` list. Returns an empty list when no vectors are stored.
     """
     cur = project_conn.execute("SELECT record_id, vector FROM doc_embeddings ORDER BY record_id")
     rows = cur.fetchall()
@@ -281,15 +319,18 @@ def cluster_records(
     seeds: list[list[float]] = []
     clusters: list[list[str]] = []
     threshold = 0.5
+    dims: set[int] = set()
 
     for row in rows:
         record_id = str(row["record_id"])
         vector = providers.unpack_vector(row["vector"])
+        dims.add(len(vector))
+        comparable = [idx for idx, seed in enumerate(seeds) if len(seed) == len(vector)]
 
         best_idx = -1
         best_score = threshold
-        for idx, seed in enumerate(seeds):
-            score = providers.cosine(vector, seed)
+        for idx in comparable:
+            score = providers.cosine(vector, seeds[idx])
             if score > best_score:
                 best_score = score
                 best_idx = idx
@@ -299,11 +340,19 @@ def cluster_records(
         elif len(clusters) < k:
             seeds.append(vector)
             clusters.append([record_id])
-        else:
-            nearest = max(
-                range(len(seeds)),
-                key=lambda i: providers.cosine(vector, seeds[i]),
-            )
+        elif comparable:
+            nearest = max(comparable, key=lambda i: providers.cosine(vector, seeds[i]))
             clusters[nearest].append(record_id)
+        else:
+            clusters[0].append(record_id)
+
+    if len(dims) > 1:
+        _logger.warning(
+            "doc_embeddings holds vectors of %d different dimensions %s (several models); "
+            "clustering compared same-dimension vectors only -- refresh the embeddings "
+            "with one provider",
+            len(dims),
+            sorted(dims),
+        )
 
     return [{"cluster": idx, "record_ids": members} for idx, members in enumerate(clusters)]

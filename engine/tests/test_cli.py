@@ -42,6 +42,10 @@ COMMANDS: list[list[str]] = [
     ["config", "show"],
     ["mcp"],
     ["search"],
+    ["embeddings"],
+    ["embeddings", "build"],
+    ["embeddings", "search"],
+    ["embeddings", "status"],
     ["serve"],
     ["project-context"],
     ["board"],
@@ -91,6 +95,10 @@ def test_every_command_is_routed() -> None:
         (["config", "show"], []),
         (["mcp"], []),
         (["search"], ["q"]),
+        (["search"], ["q", "--mode", "hybrid"]),
+        (["embeddings", "build"], []),
+        (["embeddings", "search"], ["q"]),
+        (["embeddings", "status"], []),
         (["serve"], []),
         (["project-context"], ["info"]),
         (["board"], ["status"]),
@@ -99,6 +107,15 @@ def test_every_command_is_routed() -> None:
         args = parser.parse_args([*command, *extra])
         module, func = args._handler
         assert callable(cli._load_handler(module, func)), command
+
+
+def test_cli_choice_constants_match_their_sources() -> None:
+    """The CLI mirrors the search modes and provider names to stay lazy; keep them in sync."""
+    from knowledge_engine.core.settings import EMBED_PROVIDERS
+    from knowledge_engine.retrieval.hybrid import SEARCH_MODES
+
+    assert set(cli.SEARCH_MODES) == set(SEARCH_MODES)
+    assert set(cli.EMBED_PROVIDERS) == set(EMBED_PROVIDERS)
 
 
 def test_importing_the_cli_is_lazy() -> None:

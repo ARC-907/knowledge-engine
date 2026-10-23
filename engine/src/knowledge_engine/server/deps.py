@@ -16,7 +16,9 @@ from ..core.config import Config
 from ..core.registry import Registry
 from ..core.settings import Settings
 from ..generation import ProviderRegistry
+from ..retrieval.embeddings.index import CorpusEmbeddingIndex
 from ..retrieval.fts5 import Indexer
+from ..retrieval.hybrid import HybridSearcher
 
 
 def _state(request: Request, name: str) -> Any:
@@ -51,21 +53,38 @@ def get_providers(request: Request) -> ProviderRegistry:
     return providers
 
 
+def get_searcher(request: Request) -> HybridSearcher:
+    """FTS + (optional) embedding index of this app, for ``GET /search``.
+
+    The embedding index is optional: when the lifespan could not configure it,
+    ``app.state.embeddings`` is ``None`` and ``app.state.embeddings_error``
+    says why; only a ``vector``/``hybrid`` search then fails.
+    """
+    indexer: Indexer = _state(request, "indexer")
+    registry: Registry = _state(request, "registry")
+    embeddings: CorpusEmbeddingIndex | None = getattr(request.app.state, "embeddings", None)
+    error: str | None = getattr(request.app.state, "embeddings_error", None)
+    return HybridSearcher(indexer, registry, embeddings, embeddings_error=error)
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 ConfigDep = Annotated[Config, Depends(get_config)]
 RegistryDep = Annotated[Registry, Depends(get_registry)]
 IndexerDep = Annotated[Indexer, Depends(get_indexer)]
 ProvidersDep = Annotated[ProviderRegistry, Depends(get_providers)]
+SearcherDep = Annotated[HybridSearcher, Depends(get_searcher)]
 
 __all__ = [
     "ConfigDep",
     "IndexerDep",
     "ProvidersDep",
     "RegistryDep",
+    "SearcherDep",
     "SettingsDep",
     "get_config",
     "get_indexer",
     "get_providers",
     "get_registry",
+    "get_searcher",
     "get_settings",
 ]

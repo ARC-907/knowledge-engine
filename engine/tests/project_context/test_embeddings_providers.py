@@ -8,14 +8,18 @@ exercised only for their construction-time gates and pure parsing helpers; the
 from __future__ import annotations
 
 import math
+import struct
 from types import SimpleNamespace
 
 import pytest
 
 from knowledge_engine.project_context.config import EmbeddingsCfg, ProjectContextConfig
 from knowledge_engine.project_context.embeddings.providers import (
+    VECTOR_FORMAT_VERSION,
     EmbeddingProvider,
+    FakeProvider,
     StubProvider,
+    VectorDimensionError,
     cosine,
     get_provider,
     pack_vector,
@@ -124,7 +128,9 @@ def test_pack_unpack_round_trip() -> None:
     original = [0.0, 1.0, -1.0, 0.5, -0.25]
     blob = pack_vector(original)
     assert isinstance(blob, bytes)
-    assert len(blob) == len(original) * 4
+    # One format-version byte, then little-endian float32 components.
+    assert len(blob) == 1 + len(original) * 4
+    assert blob[0] == VECTOR_FORMAT_VERSION
     restored = unpack_vector(blob)
     assert len(restored) == len(original)
     for a, b in zip(original, restored, strict=True):
@@ -132,8 +138,29 @@ def test_pack_unpack_round_trip() -> None:
 
 
 def test_pack_unpack_empty() -> None:
-    assert pack_vector([]) == b""
+    assert pack_vector([]) == bytes([VECTOR_FORMAT_VERSION])
+    assert unpack_vector(pack_vector([])) == []
     assert unpack_vector(b"") == []
+
+
+def test_unpack_reads_legacy_headerless_blobs() -> None:
+    """Vectors stored before the version byte existed stay readable."""
+    legacy = struct.pack("<3f", 0.5, -1.0, 2.0)
+    assert unpack_vector(legacy) == [0.5, -1.0, 2.0]
+
+
+def test_unpack_rejects_unknown_version() -> None:
+    with pytest.raises(ValueError, match="version"):
+        unpack_vector(bytes([99]) + struct.pack("<2f", 1.0, 2.0))
+
+
+def test_pack_rejects_non_finite_and_out_of_range() -> None:
+    with pytest.raises(ValueError):
+        pack_vector([float("nan")])
+    with pytest.raises(ValueError):
+        pack_vector([float("inf")])
+    with pytest.raises(ValueError):
+        pack_vector([1e300])
 
 
 def test_unpack_rejects_bad_length() -> None:
@@ -171,8 +198,10 @@ def test_cosine_zero_vector_is_zero() -> None:
     assert cosine([0.0, 0.0], [1.0, 1.0]) == 0.0
 
 
-def test_cosine_mismatched_length_is_zero() -> None:
-    assert cosine([1.0, 2.0], [1.0]) == 0.0
+def test_cosine_mismatched_length_raises() -> None:
+    """Vectors of different models cannot be compared: refuse instead of truncating."""
+    with pytest.raises(VectorDimensionError, match=r"2 vs 1"):
+        cosine([1.0, 2.0], [1.0])
 
 
 def test_cosine_empty_is_zero() -> None:
@@ -259,3 +288,57 @@ def test_remote_allowed_constructs() -> None:
 def test_get_provider_remote_blocked_when_not_allowed() -> None:
     with pytest.raises(RuntimeError):
         get_provider(_cfg(enabled=True, provider="remote", allow_remote_provider=False))
+
+
+# --------------------------------------------------------------------------- #
+# FakeProvider / model_id
+# --------------------------------------------------------------------------- #
+
+
+def test_fake_provider_is_deterministic_unit_length_and_word_sensitive() -> None:
+    provider = FakeProvider(dim=32)
+    a1, a2, b, c = provider.embed(
+        ["the red fox runs", "the red fox runs", "a red fox sleeps", "quantum chromodynamics"]
+    )
+    assert a1 == a2
+    assert len(a1) == provider.dim == 32
+    assert math.isclose(math.sqrt(sum(x * x for x in a1)), 1.0, rel_tol=1e-9)
+    # Shared words make texts closer than unrelated ones.
+    assert cosine(a1, b) > cosine(a1, c)
+
+
+def test_fake_provider_never_returns_a_zero_vector() -> None:
+    [vector] = FakeProvider(dim=8).embed(["!!! ???"])
+    assert any(vector)
+
+
+def test_fake_provider_identity_and_validation() -> None:
+    provider = FakeProvider(dim=16)
+    assert provider.name == "fake"
+    assert provider.model_id == "fake-hash-16"
+    with pytest.raises(ValueError):
+        FakeProvider(dim=0)
+
+
+def test_get_provider_returns_fake_when_configured() -> None:
+    provider = get_provider(_cfg(enabled=True, provider="fake", dim=12))
+    assert isinstance(provider, FakeProvider)
+    assert provider.dim == 12
+
+
+def test_model_id_defaults_to_name_and_names_the_model() -> None:
+    from knowledge_engine.project_context.embeddings.local import (
+        LocalOllamaProvider,
+        OllamaProvider,
+    )
+    from knowledge_engine.project_context.embeddings.remote import RemoteProvider
+
+    assert StubProvider().model_id == "stub"
+    assert OllamaProvider is LocalOllamaProvider
+    assert LocalOllamaProvider(model="bge-m3").model_id == "bge-m3"
+    # The project-context store keys rows by provider name: unchanged.
+    assert LocalOllamaProvider(model="bge-m3").name == "ollama:bge-m3"
+    remote = RemoteProvider.create(endpoint="http://e/", model="m", allow_remote=True)
+    assert (remote.name, remote.model_id) == ("remote:m", "m")
+    with pytest.raises(RuntimeError, match="disabled"):
+        RemoteProvider.create(endpoint="http://e/", model="m", allow_remote=False)
