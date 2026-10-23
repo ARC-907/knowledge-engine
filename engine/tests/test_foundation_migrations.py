@@ -180,14 +180,14 @@ def test_wal_allows_concurrent_writers(tmp_path: Path, monkeypatch: pytest.Monke
     db.get_connection()  # create + migrate once, up front
     writers, per_writer = 6, 25
     barrier = threading.Barrier(writers, timeout=30)
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
 
     def write(n: int) -> None:
         try:
             barrier.wait()
             for i in range(per_writer):
                 mb.post_message(message_type="chatter", sender_node_id=f"w{n}", body=f"m{i}")
-        except BaseException as exc:  # pragma: no cover - failure path
+        except Exception as exc:  # pragma: no cover - failure path
             errors.append(exc)
 
     threads = [threading.Thread(target=write, args=(n,)) for n in range(writers)]

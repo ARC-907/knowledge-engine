@@ -15,7 +15,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from ...core.errors import payload_invalid
 from .. import schemas, scopes, store
-from .bodies import _SCOPE_DOC, _BoardBody, _message_field, _pop_scope, _required, _string
+from .bodies import SCOPE_DOC, _BoardBody, _message_field, _pop_scope, _required, _string
 from .trust import (
     WRITE_GATE,
     _allowed_networks,
@@ -55,7 +55,7 @@ class MessageIn(_BoardBody):
     thread_id: Annotated[Any, _message_field("thread_id")] = None
     ttl_hours: Annotated[Any, _message_field("ttl_hours")] = None
     model_id: Annotated[Any, _message_field("model_id")] = None
-    scope: Annotated[Any, _SCOPE_DOC] = None
+    scope: Annotated[Any, SCOPE_DOC] = None
 
     @model_validator(mode="after")
     def _validate_with_schema(self) -> MessageIn:
@@ -77,7 +77,7 @@ class AckIn(_BoardBody):
         None, alias="from"
     )
     acker: Annotated[Any, _string("Alias of `from`.")] = None
-    scope: Annotated[Any, _SCOPE_DOC] = None
+    scope: Annotated[Any, SCOPE_DOC] = None
 
 
 # ── Status / metadata ──────────────────────────────────────────

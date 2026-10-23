@@ -60,7 +60,6 @@ from .migrate import (
     init_schema,
 )
 from .rows import (
-    _JSON_FIELDS,
     JSON_FIELDS,
     Row,
     RowNotFoundError,
@@ -78,6 +77,9 @@ def __getattr__(name: str) -> Any:
         return Path(resolve_db_path()).resolve()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
+#: Historical private name, kept for callers that imported it.
+_JSON_FIELDS = JSON_FIELDS
 
 __all__ = [
     "BASELINE_VERSION",

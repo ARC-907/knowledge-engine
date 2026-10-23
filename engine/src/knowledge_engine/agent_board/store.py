@@ -394,10 +394,6 @@ def _like_search(
 # ── Context-compressed digest ──────────────────────────────────
 
 
-_SWEEPER_NODE_ID = digest_mod.SWEEPER_NODE_ID
-_DIGEST_SELF_TYPES = digest_mod.DIGEST_SELF_TYPES
-
-
 @_scoped
 def digest(
     channel: str | None = None,
@@ -578,9 +574,6 @@ def last_sweep() -> dict[str, Any] | None:
 
 
 # ── Helpers ────────────────────────────────────────────────────
-
-
-_has_ack = digest_mod.has_ack
 
 
 # Convenience re-exports for callers that want flat imports.

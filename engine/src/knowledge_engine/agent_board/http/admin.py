@@ -15,7 +15,7 @@ from pydantic import ConfigDict
 
 from ...core.logsafe import log_safe
 from .. import keys, provider_registry as providers, scopes, store
-from .bodies import _SCOPE_DOC, _BoardBody, _documented, _int, _pop_scope, _required, _string
+from .bodies import SCOPE_DOC, _BoardBody, _documented, _int, _pop_scope, _required, _string
 from .trust import ADMIN_GATE, _is_loopback, _peer_address, _req_sweeper, _require_admin, admin_gate
 
 _logger = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ class ConfigPatchIn(_BoardBody):
             {"type": "array", "items": {"type": "string"}, "description": CONFIG_FIELDS["channels"]}
         ),
     ] = None
-    scope: Annotated[Any, _SCOPE_DOC] = None
+    scope: Annotated[Any, SCOPE_DOC] = None
 
 
 # ── Scopes ─────────────────────────────────────────────────────

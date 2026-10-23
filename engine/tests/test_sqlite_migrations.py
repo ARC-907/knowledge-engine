@@ -158,21 +158,21 @@ def test_concurrent_migrators_apply_each_migration_once(tmp_path: Path) -> None:
     _write(d, "002_add.sql", "ALTER TABLE t ADD COLUMN extra TEXT;")
     path = tmp_path / "shared.db"
     counts: list[int] = []
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
     ke_sqlite.connect(path).close()  # create the file + switch it to WAL up front
     barrier = threading.Barrier(6, timeout=30)
 
     def worker() -> None:
         try:
             c = ke_sqlite.connect(path)
-        except BaseException as exc:  # pragma: no cover - failure path
+        except Exception as exc:  # pragma: no cover - failure path
             errors.append(exc)
             barrier.abort()
             return
         try:
             barrier.wait()
             counts.append(ke_sqlite.apply_migrations(c, d))
-        except BaseException as exc:  # pragma: no cover - failure path
+        except Exception as exc:  # pragma: no cover - failure path
             errors.append(exc)
         finally:
             c.close()
@@ -297,7 +297,8 @@ def test_cache_discard_and_failing_init(tmp_path: Path) -> None:
 
     cache = ke_sqlite.ConnectionCache(init=init)
     conn = cache.get(tmp_path / "d.db")
-    assert cache.discard(tmp_path / "d.db") == 1
+    discarded = cache.discard(tmp_path / "d.db")
+    assert discarded == 1
     with pytest.raises(sqlite3.ProgrammingError):
         conn.execute("SELECT 1")
     with pytest.raises(sqlite3.OperationalError):

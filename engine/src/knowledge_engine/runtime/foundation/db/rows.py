@@ -32,9 +32,6 @@ JSON_FIELDS: frozenset[str] = frozenset(
     }
 )
 
-#: Historical private name, kept for callers that imported it.
-_JSON_FIELDS = JSON_FIELDS
-
 #: A decoded pipeline row (JSON columns already parsed).
 Row = dict[str, Any]
 

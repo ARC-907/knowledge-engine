@@ -25,7 +25,7 @@ def _string(description: str, **extra: Any) -> Any:
     return _documented({"type": "string", "description": description, **extra})
 
 
-_SCOPE_DOC = _string(
+SCOPE_DOC = _string(
     "Optional per-scope database (project/branch/agent/loop). Overrides the `scope` query "
     "parameter when both are given."
 )
