@@ -44,7 +44,7 @@ If `corpus/registry.json` references a library that isn't present in `corpus/`, 
 - FastAPI app with health, info, search, registry, generation, and board routes; Alpine.js + compiled-Tailwind dashboard at `/ui/` (light/dark, keyboard-accessible, no CDN)
 - MCP server on the official MCP Python SDK (stdio or streamable HTTP; protocol `2026-07-28`, `initialize` clients back to `2024-11-05`) — compatible with Claude Desktop, Cursor, Continue, any MCP client
 - SQLite FTS5 indexer with `bm25` ranking + snippet highlighting; optional bge-m3 embedding index for semantic search
-- Pluggable provider abstraction (echo / Ollama / cloud HTTP stub) for generation routing
+- Pluggable provider abstraction (echo / Ollama / OpenAI-compatible cloud) for generation routing
 - Project-context, agent-board, hosted-tool, and sandbox substrates that you can populate with your own projects and agents
 - Demo corpus under `corpus/samples/`, registry definitions at `corpus/registry.json` + `corpus/registry.schema.json`
 

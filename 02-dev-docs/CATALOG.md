@@ -33,10 +33,10 @@ add your own under `corpus/` and register them (see
 - `cli.py` — `knowledge-engine` console-script entrypoint
   (`info | bootstrap | capabilities | reindex | watch | search | serve | mcp | project-context | board | board-serve`)
 - `app.py`, `mcp_server.py` — compatibility shims re-exporting `server.app` / `mcp.server` (`mcp_server` is deprecated)
-- `core/` — `config.py` (env path/URL config, `KE_*`, `OLLAMA_BASE_URL`), `registry.py` (JSON registry + SQLite mirror), `watcher.py` (`watchdog` auto-register)
-- `server/` — `app.py` (FastAPI application factory), `lifespan.py` (lifespan + board-boot helpers), and `api/` route modules: `health_routes`, `registry_routes`, `search_routes`, `generate_routes`, `board_routes`
+- `core/` — `settings.py` (typed `Settings`: every `KE_*` / `OLLAMA_*` env var; `config show`, generates `01-user-docs/CONFIGURATION.md`), `config.py` (path view over `Settings`), `errors.py` (shared HTTP exception handlers), `registry.py` (JSON registry + SQLite mirror), `watcher.py` (`watchdog` auto-register)
+- `server/` — `app.py` (I/O-free FastAPI application factory), `lifespan.py` (opens/closes the registry, index, providers, board sweeper and MCP mount), `deps.py` (`Depends` providers), `schemas.py` (request/response models), and `api/` route modules: `health_routes`, `registry_routes`, `search_routes`, `generate_routes`, `board_routes` (alias of `agent_board/http.py`)
 - `mcp/server.py` — MCP server on the official MCP Python SDK, stdio + streamable HTTP (protocol `2026-07-28`; `initialize` clients back to `2024-11-05`); `mcp/toolkit.py` mounts the legacy JSON-schema tool groups
-- `generation/` — provider abstraction: `base.py` (Provider contract + `ProviderRegistry`), `EchoProvider` + `CloudHTTPProvider` (`cloud_http.py`), `OllamaProvider` (`ollama_provider.py`)
+- `generation/` — provider abstraction: `base.py` (Provider contract + `ProviderRegistry`), `EchoProvider` + `CloudHTTPProvider` (OpenAI-compatible, `cloud_http.py`), `OllamaProvider` (`ollama_provider.py`), `factory.py` (registry from `Settings`)
 - `retrieval/` — `fts5.py` (SQLite FTS5 indexer with `bm25` ranking + snippet highlighting) + opt-in bge-m3 embeddings (`embeddings/build.py` + `search.py`)
 - `project_context/` — opt-in project/lane documentation subsystem: scanner, ingest, embeddings, git context, pointers, registry; `mcp_tools/` group + `knowledge-engine project-context` CLI
 - `agent_board/` — first-class coordination surface: `schemas.py`, `scopes.py`, `store.py`, `keys.py`, `provider_registry.py`, `sweeper.py`, `service.py`, `cli.py`, `mcp_tools/` (auto-discovered MCP tool group)

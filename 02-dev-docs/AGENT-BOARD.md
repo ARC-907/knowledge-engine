@@ -390,11 +390,12 @@ engine/src/knowledge_engine/
     schemas.py         channels + types + validators
     store.py           store facade (FTS5, digest, ack)
     keys.py            provider-key vault
-    sweeper.py         background loop
+    sweeper.py         background loop (Sweeper object, owned by the app lifespan)
+    http.py            FastAPI router mounted at /board, trust gate, request models
     service.py         optional standalone FastAPI
     cli.py             knowledge-engine board ... subcommands
     mcp_tools/         15 MCP tools auto-discovered
-  server/api/board_routes.py  FastAPI routes mounted at /board
+  server/api/board_routes.py  compatibility alias of agent_board/http.py
 scripts/agent-board/
   board-watchdog.ps1   Windows watchdog
 engine/tests/

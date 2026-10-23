@@ -229,8 +229,8 @@ Several subsystems are **opt-in** and the lean core works without them:
   `runtime/pipeline/message_board` into a fully-tooled product: schema-validated
   channels + types (`schemas.py`), FTS5 search + context-compressed digest
   (`store.py`), background sweeper for TTL + stale-blocker reminders
-  (`sweeper.py`), provider-key vault (`keys.py`), HTTP routes
-  (`server/api/board_routes.py`), CLI (`knowledge-engine board ...`), and an
+  (`sweeper.py`), provider-key vault (`keys.py`), HTTP routes + request
+  models (`agent_board/http.py`; `server/api/board_routes.py` is an alias), CLI (`knowledge-engine board ...`), and an
   auto-discovered MCP tool group (`agent_board/mcp_tools/`). Optional
   standalone watchdog mode lives in `scripts/agent-board/` for headless
   deploys. Reference guide: [`AGENT-BOARD.md`](AGENT-BOARD.md).
