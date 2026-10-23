@@ -81,6 +81,10 @@ test = [
 build = [
     "twine>=6.0",
 ]
+# Browser smoke test of the dashboard (engine/tests/ui); opt in with KE_UI_TESTS=1.
+ui = [
+    "playwright>=1.56",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/knowledge_engine"]
@@ -201,6 +205,7 @@ filterwarnings = [
 markers = [
     "slow: tests that take more than a second",
     "network: tests that need a live Ollama or HTTP endpoint (skipped in CI)",
+    "ui: browser (Playwright) smoke tests of the dashboard; run with KE_UI_TESTS=1",
 ]
 
 [tool.coverage.run]

@@ -66,6 +66,10 @@ ui-css:
     npm --prefix ui-src install --no-audit --no-fund
     npm --prefix ui-src run build:css
 
+# Browser smoke test of the dashboard (needs the `ui` group + a Playwright Chromium)
+ui-test *args:
+    cd {{engine}} && KE_UI_TESTS=1 uv run --group ui pytest -q -m ui tests/ui {{args}}
+
 # Re-download and SHA-384-verify vendored dashboard assets (Alpine.js)
 vendor:
     python3 scripts/vendor.py
