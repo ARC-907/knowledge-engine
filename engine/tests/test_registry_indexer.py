@@ -158,7 +158,7 @@ def test_reload_picks_up_out_of_band_edits(tmp_path: Path) -> None:
 
 
 def test_register_corpus_folders_counts_sorted_and_single_write(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     from knowledge_engine.core import watcher
 
@@ -176,11 +176,15 @@ def test_register_corpus_folders_counts_sorted_and_single_write(
         real_write(data)
 
     monkeypatch.setattr(registry, "_write_json", counting)
-    counts = watcher.register_corpus_folders(config, registry)
-    assert counts == {"library": 2, "skill": 0, "kit": 0, "tool": 1, "skipped": 1}
+    with caplog.at_level(logging.WARNING, logger="knowledge_engine.core.watcher"):
+        counts = watcher.register_corpus_folders(config, registry)
+    # Two folders share the slug "alpha": as before the refactor the later one
+    # wins and both count as added, but the collision is now logged.
+    assert counts == {"library": 3, "skill": 0, "kit": 0, "tool": 1, "skipped": 0}
     assert writes == [1]
     assert [e["id"] for e in registry.list("library")] == ["library-alpha", "library-zeta"]
-    assert registry.get("library-alpha")["name"] == "ALPHA"  # type: ignore[index]
+    assert registry.get("library-alpha")["name"] == "alpha"  # type: ignore[index]
+    assert "duplicate corpus slug 'library-alpha'" in caplog.text
     assert registry.get("tool-my-tool")["path"] == "capabilities/My Tool"  # type: ignore[index]
 
     changed: list[int] = []
@@ -251,16 +255,36 @@ def test_quote_phrase_escapes_quotes() -> None:
     assert quote_phrase('say "hi"') == '"say ""hi"""'
 
 
-def test_unrecoverable_error_is_logged_not_silent(
-    indexed: tuple[Indexer, Registry], caplog: pytest.LogCaptureFixture
+def test_broken_index_propagates_instead_of_claiming_a_syntax_fallback(
+    indexed: tuple[Indexer, Registry],
 ) -> None:
     indexer, _ = indexed
     with indexer._lock:
         indexer._conn.execute("DROP TABLE docs")
+    # Not a query problem: the error reaches the caller (the HTTP layer maps
+    # sqlite3.OperationalError to 503) rather than an empty "fallback" result.
+    with pytest.raises(sqlite3.OperationalError):
+        indexer.search("fox")
+
+
+def test_unparseable_query_after_phrase_retry_is_logged_not_silent(
+    indexed: tuple[Indexer, Registry],
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    indexer, _ = indexed
+    calls: list[list[Any]] = []
+
+    def always_syntax_error(sql: str, params: list[Any]) -> list[Any]:
+        calls.append(list(params))
+        raise sqlite3.OperationalError('fts5: syntax error near "*"')
+
+    monkeypatch.setattr(indexer, "_run", always_syntax_error)
     with caplog.at_level(logging.WARNING, logger="knowledge_engine.retrieval.fts5"):
-        hits = indexer.search("fox")
+        hits = indexer.search("fox AND")
     assert hits == []
     assert hits.syntax_fallback is True
+    assert len(calls) == 2
     assert "FTS5 search failed" in caplog.text
 
 

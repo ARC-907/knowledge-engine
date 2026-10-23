@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import logging
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -147,10 +148,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # The pipeline .env used to be loaded as an import side effect; do it
     # explicitly, before any subcommand reads its settings.
-    load_dotenv_file()
+    loaded = load_dotenv_file()
     verbosity = args.verbose - args.quiet
     args.log_level_override = cli_log_level(verbosity) if verbosity else None
     restore = configure_cli_logging(args.log_level_override, long_running=args.cmd in LONG_RUNNING)
+    if loaded:
+        # load_dotenv_file() ran before the handler existed; say it now (-v shows it).
+        logging.getLogger(__name__).info(
+            "pipeline .env: loaded %d variable(s): %s", len(loaded), ", ".join(sorted(loaded))
+        )
     try:
         module, func = args._handler
         return _load_handler(module, func)(args, parser)
@@ -163,8 +169,6 @@ def __getattr__(name: str) -> Any:
     # importing ``knowledge_engine.cli`` stays cheap and side-effect free.
     if name in {"BASE_MCP_TOOLS", "_capability_inventory", "_bootstrap"}:
         return getattr(importlib.import_module(f"{__name__}.corpus"), name)
-    if name == "_env_port":
-        return importlib.import_module(f"{__name__}.serve")._env_port
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

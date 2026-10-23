@@ -138,7 +138,6 @@ def test_legacy_module_attributes() -> None:
 
     assert cli.BASE_MCP_TOOLS == ["search", "registry_list", "registry_toggle", "registry_get"]
     assert callable(_capability_inventory)
-    assert callable(cli._env_port)
     assert callable(cli._bootstrap)
     with pytest.raises(AttributeError):
         _ = cli.nope  # type: ignore[attr-defined]

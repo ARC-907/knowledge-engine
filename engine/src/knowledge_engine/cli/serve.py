@@ -5,25 +5,8 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import sys
 
 _logger = logging.getLogger(__name__)
-
-
-def _env_port(env_var: str, fallback: int) -> int:
-    """Default port for a serve command: ``env_var`` when set to an integer, else ``fallback``.
-
-    Keeps the ``KE_PORT`` knob the old serve scripts honoured; a non-integer
-    value is reported on stderr and ignored rather than aborting startup.
-    """
-    raw = os.environ.get(env_var, "").strip()
-    if not raw:
-        return fallback
-    try:
-        return int(raw)
-    except ValueError:
-        print(f"ignoring non-integer {env_var}={raw!r}; using port {fallback}", file=sys.stderr)
-        return fallback
 
 
 def cmd_serve(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:

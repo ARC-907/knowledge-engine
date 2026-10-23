@@ -45,6 +45,21 @@ class SearchResults(list[dict[str, Any]]):
         return {"syntax_fallback": True} if self.syntax_fallback else {}
 
 
+_FTS5_QUERY_ERROR_MARKERS = (
+    "fts5: syntax error",
+    "syntax error",
+    "unknown special query",
+    "unterminated string",
+    "no such column",
+)
+
+
+def _is_fts5_query_error(exc: sqlite3.OperationalError) -> bool:
+    """True when ``exc`` is FTS5 rejecting the MATCH expression (not a DB fault)."""
+    message = str(exc).lower()
+    return any(marker in message for marker in _FTS5_QUERY_ERROR_MARKERS)
+
+
 def quote_phrase(query: str) -> str:
     """``query`` as a single FTS5 string (phrase) literal: ``"..."`` with ``"`` doubled."""
     return '"' + query.replace('"', '""') + '"'
@@ -195,12 +210,19 @@ class Indexer:
         try:
             rows = self._run(sql, params)
         except sqlite3.OperationalError as exc:
+            if not _is_fts5_query_error(exc):
+                # A locked, missing or corrupt index is not a query problem:
+                # let it propagate so the HTTP layer answers 503 instead of
+                # claiming a syntax fallback.
+                raise
             _logger.debug("FTS5 rejected query %r (%s); retrying as a phrase", query, exc)
             fallback = True
             params[0] = quote_phrase(query)
             try:
                 rows = self._run(sql, params)
             except sqlite3.OperationalError as retry_exc:
+                if not _is_fts5_query_error(retry_exc):
+                    raise
                 _logger.warning("FTS5 search failed for query %r: %s", query, retry_exc)
                 rows = []
         return SearchResults(

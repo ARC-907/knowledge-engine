@@ -52,19 +52,28 @@ def register_corpus_folders(config: Config, registry: Registry) -> dict[str, int
             if not child.is_dir() or child.name.startswith("."):
                 continue
             entry_id = f"{kind}-{slugify(child.name)}"
-            if entry_id in claimed or registry.get(entry_id):
+            if registry.get(entry_id):
                 counts["skipped"] += 1
                 continue
-            claimed.add(entry_id)
-            pending.append(
-                RegistryEntry(
-                    id=entry_id,
-                    kind=kind,
-                    name=child.name,
-                    path=child.relative_to(root).as_posix(),
-                    auto_registered=True,
-                )
+            entry = RegistryEntry(
+                id=entry_id,
+                kind=kind,
+                name=child.name,
+                path=child.relative_to(root).as_posix(),
+                auto_registered=True,
             )
+            if entry_id in claimed:
+                # Two folders slugify to the same id. Historically the later
+                # folder won (and both counted as added); keep that, loudly,
+                # and keep the entry's position in the sorted walk.
+                log.warning(
+                    "duplicate corpus slug %r: %s replaces an earlier folder", entry_id, child
+                )
+                index = next(i for i, e in enumerate(pending) if e.id == entry_id)
+                pending[index] = entry
+            else:
+                claimed.add(entry_id)
+                pending.append(entry)
             counts[kind] += 1
     registry.upsert_many(pending)
     for entry in pending:

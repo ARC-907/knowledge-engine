@@ -150,7 +150,7 @@ class OllamaClient:
             raise OllamaError(f"invalid base URL {self.base_url!r}: {exc}") from exc
         except _REQUEST_ERRORS as exc:
             raise OllamaError(f"request failed: {type(exc).__name__}") from exc
-        if response.status_code >= 400:
+        if not 200 <= response.status_code < 300:
             _logger.warning("ollama: HTTP %d from %s%s", response.status_code, self.base_url, path)
             raise OllamaError(
                 f"upstream returned HTTP {response.status_code}", status_code=response.status_code
