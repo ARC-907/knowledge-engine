@@ -34,6 +34,7 @@ from ..core.errors import install_exception_handlers
 from ..core.http import install_cors, parse_cors_origins, uvicorn_proxy_kwargs
 from ..core.logging_config import uvicorn_log_config
 from ..core.settings import Settings
+from ..runtime.foundation.config import load_dotenv_file
 from . import http as board_http, sweeper as kb_sweeper
 
 _logger = logging.getLogger(__name__)
@@ -148,6 +149,7 @@ def main() -> int:
         "--port", type=int, default=None, help="Port (default: KE_BOARD_STANDALONE_PORT or 11437)."
     )
     args = p.parse_args()
+    load_dotenv_file()
     return serve(host=args.host, port=args.port)
 
 

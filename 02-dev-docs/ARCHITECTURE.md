@@ -224,7 +224,11 @@ Several subsystems are **opt-in** and the lean core works without them:
   the same `run()` signature from that factory. Disabled by default.
 - `runtime/foundation/` — YAML config loader (`config.py`) + SQLite WAL backbone
   (`db.py`). The shared base for the pipeline and tool-host layers. Lives under
-  `$KE_PIPELINE_ROOT` (default: `./pipeline`); SQLite at `$KE_PIPELINE_DB`
+  `$KE_PIPELINE_ROOT` (default: `./pipeline`, resolved when first needed, not
+  at import). `$KE_PIPELINE_ROOT/.env` is loaded explicitly by
+  `config.load_dotenv_file()` from the `knowledge-engine` CLI, the MCP server
+  entry point and the HTTP app's lifespan (variables already set win);
+  importing the package never touches `os.environ`. SQLite at `$KE_PIPELINE_DB`
   (default: `$KE_DATA_DIR/pipeline.db`). The DB path is resolved
   **dynamically** on every `get_connection()` (`db.resolve_db_path`), not
   frozen at import — so the backbone can be re-pointed at a different

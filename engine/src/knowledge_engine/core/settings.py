@@ -407,7 +407,8 @@ class Settings(BaseSettings):
     pipeline_root: str | None = _env(
         "KE_PIPELINE_ROOT",
         None,
-        "Pipeline root (YAML config and .env). Unset: ./pipeline.",
+        "Pipeline root (YAML config, and the .env the CLI/MCP server/app load at startup). "
+        "Unset: ./pipeline.",
         section="substrate",
         read_by="runtime.foundation.config",
     )

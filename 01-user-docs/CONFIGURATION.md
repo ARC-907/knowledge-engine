@@ -69,7 +69,7 @@ is used instead.
 | Variable | Type | Default | Description | Read by |
 |---|---|---|---|---|
 | `KE_PIPELINE_DB` | string (optional) | *(unset)* | Board/pipeline SQLite database. Unset: <data_dir>/pipeline.db. | `runtime.foundation.db` |
-| `KE_PIPELINE_ROOT` | string (optional) | *(unset)* | Pipeline root (YAML config and .env). Unset: ./pipeline. | `runtime.foundation.config` |
+| `KE_PIPELINE_ROOT` | string (optional) | *(unset)* | Pipeline root (YAML config, and the .env the CLI/MCP server/app load at startup). Unset: ./pipeline. | `runtime.foundation.config` |
 | `KE_CONFIG_DIR` | string (optional) | *(unset)* | Pipeline YAML config directory. Unset: <KE_PIPELINE_ROOT>/config. | `runtime.foundation.config` |
 | `KE_CONFIG_PATH` | string (optional) | *(unset)* | project-context TOML config file. | `project_context.config` |
 | `KE_CLASSIFIER_MODEL` | string | `qwen3:4b` | Model of the pipeline task classifier. | `runtime.pipeline.task_classifier` |

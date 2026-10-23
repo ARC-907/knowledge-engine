@@ -48,7 +48,20 @@ from ..runtime.foundation import config, db as db_mod
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_ROOT = config.PIPELINE_ROOT
+
+def _pipeline_root() -> Path:
+    """The pipeline root: a module-level ``PIPELINE_ROOT`` override, else resolved now."""
+    override = globals().get("PIPELINE_ROOT")
+    return Path(override) if override is not None else config.pipeline_root()
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562: ``PIPELINE_ROOT`` used to be frozen at import; it is now
+    # resolved on access (assigning the attribute still overrides it).
+    if name == "PIPELINE_ROOT":
+        return config.pipeline_root()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 _VALID_KINDS = {"script", "service", "static"}
 
@@ -357,7 +370,7 @@ def invoke_script(
         logger.warning("tool %s: interpreter %r denied (not allowlisted)", tool_id, first_word)
         return {"ok": False, "error": f"Interpreter '{first_word}' not in allowed list"}
 
-    working_dir = tool.get("working_dir") or str(PIPELINE_ROOT)
+    working_dir = tool.get("working_dir") or str(_pipeline_root())
     inline = _as_bool(tool.get("allow_inline"))
     if inline:
         script_label = "<inline mode>"
@@ -459,7 +472,7 @@ def _check_script_argv(
     base = Path(working_dir)
     try:
         script = (base / first_arg).resolve()
-        roots = [base.resolve(), Path(PIPELINE_ROOT).resolve()]
+        roots = [base.resolve(), _pipeline_root().resolve()]
     except (OSError, RuntimeError, ValueError) as exc:
         return f"Script path '{first_arg}' cannot be resolved: {exc}"
     if not any(script.is_relative_to(root) for root in roots):

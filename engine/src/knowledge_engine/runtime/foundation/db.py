@@ -29,7 +29,6 @@ from typing import Any
 from ...core import paths as engine_paths
 from ...core.util.sqlite import connect as sqlite_connect
 from ...core.util.time import utc_now_iso
-from . import config  # noqa: F401  — ensures .env is loaded before DB path resolves
 
 _logger = logging.getLogger(__name__)
 
@@ -116,10 +115,14 @@ def active_scope_db_path() -> str | None:
     return _scope_db_path.get()
 
 
-# Back-compat module attribute. Reflects the import-time default; callers
-# that need the live value must use ``resolve_db_path()`` / ``current_db_path()``
-# (``get_connection`` already does). Kept so existing references don't break.
-DB_PATH = Path(resolve_db_path()).resolve()
+def __getattr__(name: str) -> Any:
+    # Back-compat module attribute ``DB_PATH`` (PEP 562): resolved on access
+    # rather than at import, so importing this module touches neither the
+    # environment nor the filesystem. Prefer ``resolve_db_path()``.
+    if name == "DB_PATH":
+        return Path(resolve_db_path()).resolve()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 _local = threading.local()
 

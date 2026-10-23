@@ -3,14 +3,24 @@
 Reads YAML config files from the pipeline config directory and provides typed
 access to pipeline configuration.
 
-Env vars:
-    KE_PIPELINE_ROOT  (default: ./pipeline)
-    KE_CONFIG_DIR     (default: $KE_PIPELINE_ROOT/config)
+Env vars (read when a function needs them, never at import):
+    KE_PIPELINE_ROOT  (default: <cwd>/pipeline)   -- :func:`pipeline_root`
+    KE_CONFIG_DIR     (default: $KE_PIPELINE_ROOT/config)   -- :func:`config_dir`
+
+``.env`` files are loaded explicitly with :func:`load_dotenv_file`; the CLI
+(``knowledge-engine ...``), the MCP server entry point and the HTTP app's
+lifespan call it for ``<pipeline root>/.env`` at startup. Importing this
+module does not touch ``os.environ``.
+
+``PIPELINE_ROOT`` / ``CONFIG_DIR`` remain readable as module attributes for
+older callers; each access resolves the current value.
 """
 
 from __future__ import annotations
 
+import logging
 import os
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -19,22 +29,74 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]  # optional dependency; checked before use
 
-# ── Resolve pipeline root from env vars ───────────────────────────────
-PIPELINE_ROOT = Path(os.environ.get("KE_PIPELINE_ROOT", str(Path.cwd() / "pipeline"))).resolve()
-CONFIG_DIR = Path(os.environ.get("KE_CONFIG_DIR", str(PIPELINE_ROOT / "config"))).resolve()
+_logger = logging.getLogger(__name__)
 
-# ── Load .env on import (stdlib, no dotenv dependency) ─────
-_env_file = PIPELINE_ROOT / ".env"
-if _env_file.exists():
-    with _env_file.open(encoding="utf-8") as _f:
-        for _line in _f:
-            _line = _line.strip()
-            if not _line or _line.startswith("#") or "=" not in _line:
-                continue
-            _key, _, _val = _line.partition("=")
-            _key, _val = _key.strip(), _val.strip()
-            if _key and _key not in os.environ:  # don't override system env
-                os.environ[_key] = _val
+PIPELINE_ROOT_ENV = "KE_PIPELINE_ROOT"
+CONFIG_DIR_ENV = "KE_CONFIG_DIR"
+DOTENV_FILENAME = ".env"
+
+
+def pipeline_root(env: Mapping[str, str] | None = None) -> Path:
+    """``KE_PIPELINE_ROOT`` (resolved), else ``<cwd>/pipeline``."""
+    source = os.environ if env is None else env
+    return Path(source.get(PIPELINE_ROOT_ENV, str(Path.cwd() / "pipeline"))).resolve()
+
+
+def config_dir(env: Mapping[str, str] | None = None) -> Path:
+    """``KE_CONFIG_DIR`` (resolved), else ``<pipeline root>/config``."""
+    source = os.environ if env is None else env
+    return Path(source.get(CONFIG_DIR_ENV, str(pipeline_root(source) / "config"))).resolve()
+
+
+def default_dotenv_path() -> Path:
+    """The ``.env`` file historically loaded for the pipeline: ``<pipeline root>/.env``."""
+    return pipeline_root() / DOTENV_FILENAME
+
+
+def load_dotenv_file(
+    path: Path | str | None = None,
+    *,
+    environ: MutableMapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Load ``KEY=VALUE`` lines from ``path`` into the environment.
+
+    ``path`` defaults to :func:`default_dotenv_path`. A missing file is not an
+    error. Blank lines, ``#`` comments and lines without ``=`` are skipped;
+    keys and values are stripped. Variables already set in the environment
+    always win (a ``.env`` never overrides the real environment). Returns the
+    variables that were set (values are never logged).
+    """
+    target = Path(path) if path is not None else default_dotenv_path()
+    env = os.environ if environ is None else environ
+    try:
+        text = target.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        _logger.warning("could not read %s: %s", target, exc)
+        return {}
+    loaded: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if key and key not in env:  # don't override the real environment
+            env[key] = value
+            loaded[key] = value
+    if loaded:
+        _logger.info("loaded %d variable(s) from %s: %s", len(loaded), target, ", ".join(loaded))
+    return loaded
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562: the historical import-time constants, now resolved on access.
+    if name == "PIPELINE_ROOT":
+        return pipeline_root()
+    if name == "CONFIG_DIR":
+        return config_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _load_yaml(filename: str) -> dict[str, Any]:
@@ -43,7 +105,7 @@ def _load_yaml(filename: str) -> dict[str, Any]:
         raise ImportError(
             "PyYAML is required for the pipeline config loader. `pip install pyyaml`."
         )
-    path = CONFIG_DIR / filename
+    path = config_dir() / filename
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
     with path.open(encoding="utf-8") as f:
@@ -56,7 +118,7 @@ def _write_yaml(filename: str, data: dict[str, Any]) -> Path:
         raise ImportError(
             "PyYAML is required for the pipeline config writer. `pip install pyyaml`."
         )
-    path = CONFIG_DIR / filename
+    path = config_dir() / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="\n") as f:
         yaml.safe_dump(data, f, sort_keys=False, allow_unicode=False)

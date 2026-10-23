@@ -260,7 +260,10 @@ async def selftest(server: MCPServer[Any]) -> dict[str, Any]:
 
 def run(args: argparse.Namespace) -> int:
     """Run the server as selected by the ``knowledge-engine mcp`` flags."""
+    from ..runtime.foundation.config import load_dotenv_file  # noqa: PLC0415 - entry point only
+
     configure_logging()
+    load_dotenv_file()
     config = Config.from_env()
     # The Indexer opens its SQLite file eagerly; a fresh KE_DATA_DIR must exist
     # first (Config.from_env() itself never touches the filesystem).
