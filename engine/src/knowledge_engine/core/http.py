@@ -282,10 +282,10 @@ __all__ = [
     "BodyTooLargeError",
     "IPAddress",
     "IPNetwork",
+    "allowed_proxy_networks",
     "cors_origins",
     "install_cors",
     "parse_cidrs",
     "trust_proxy_enabled",
-    "trusted_proxies",
     "uvicorn_proxy_kwargs",
 ]

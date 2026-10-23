@@ -56,9 +56,9 @@ from ...core.http import (
     LOOPBACK_NETS as _LOOPBACK_NETS,
     IPAddress,
     IPNetwork,
+    allowed_proxy_networks as _allowed_proxy_networks,
     parse_cidrs as _parse_cidrs,
     trust_proxy_enabled as _trust_proxy_enabled,
-    allowed_proxy_networks as _allowed_proxy_networks,
 )
 from ...core.logsafe import log_safe
 

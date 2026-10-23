@@ -406,6 +406,23 @@ def test_body_cap_applies_to_standalone_app() -> None:
 
 
 @pytest.mark.usefixtures("board_env")
+def test_declared_length_413_carries_cors_grant_for_allowed_origin() -> None:
+    """The body-cap middleware sits inside CORS, so its 413 is not opaque."""
+    with TestClient(create_app(), client=LOOPBACK) as client:
+        r = client.post(
+            "/board/messages",
+            content=b"{}",
+            headers={
+                "Content-Type": "application/json",
+                "Origin": "http://localhost:9210",
+                "Content-Length": str(board_routes.MAX_REQUEST_BODY_BYTES + 10),
+            },
+        )
+        assert r.status_code == 413
+        assert r.headers["access-control-allow-origin"] == "http://localhost:9210"
+
+
+@pytest.mark.usefixtures("board_env")
 def test_body_cap_leaves_non_board_routes_alone() -> None:
     with TestClient(create_app(), client=LOOPBACK) as client:
         big = {"id": "k", "kind": "kit", "name": "x" * 2_000, "path": "kits/x"}

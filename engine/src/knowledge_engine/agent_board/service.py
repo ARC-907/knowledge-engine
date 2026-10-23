@@ -92,12 +92,14 @@ def create_standalone_app() -> FastAPI:
     # who want browser access from a non-loopback origin set
     # KE_BOARD_CORS_ORIGINS explicitly; the peer-trust gate still applies
     # at the route layer.
-    install_cors(app, _resolve_cors_origins(), env_var=CORS_ORIGINS_ENV)
     app.add_middleware(
         BodySizeLimitMiddleware,
         max_bytes=board_routes.MAX_REQUEST_BODY_BYTES,
         path_prefix="/board",
     )
+    # CORS is registered after the body cap so it ends up outermost
+    # (``add_middleware`` is LIFO) and a 413 still carries the CORS grant.
+    install_cors(app, _resolve_cors_origins(), env_var=CORS_ORIGINS_ENV)
     app.include_router(board_routes.router, prefix="/board", tags=["board"])
 
     @app.get("/health")

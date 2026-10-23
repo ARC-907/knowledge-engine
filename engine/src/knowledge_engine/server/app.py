@@ -82,8 +82,6 @@ def create_app() -> FastAPI:
         version=__version__,
         lifespan=lifespan,
     )
-    install_cors(app, cors_origins(CORS_ORIGINS_ENV), env_var=CORS_ORIGINS_ENV)
-
     app.state.config = config
     app.state.registry = registry
     app.state.indexer = indexer
@@ -113,6 +111,11 @@ def create_app() -> FastAPI:
             )
         except Exception:
             _logger.exception("agent board failed to mount; continuing without it")
+
+    # Registered last so CORSMiddleware is the outermost layer (``add_middleware``
+    # is LIFO): a 413 written by the body cap then still carries the CORS grant
+    # for an allowed browser origin instead of surfacing as an opaque error.
+    install_cors(app, cors_origins(CORS_ORIGINS_ENV), env_var=CORS_ORIGINS_ENV)
 
     # Static dashboard (served at /ui)
     _mount_dashboard(app)
