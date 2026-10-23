@@ -11,6 +11,9 @@ SDK migration.
 Arguments are validated against the advertised JSON schema before the dispatch
 function runs, and every failure becomes an ``isError`` tool result rather than
 a protocol error or a dead server process (see :func:`tool_errors`).
+
+The SDK-free pieces both subsystems share (result envelopes, ``*_tools``
+module discovery) live in :mod:`.tool_groups` and are re-exported here.
 """
 
 from __future__ import annotations
@@ -31,10 +34,16 @@ from mcp.shared.exceptions import MCPError
 from mcp.types import CallToolResult
 from pydantic import ValidationError
 
-logger = logging.getLogger(__name__)
+from .tool_groups import (
+    DispatchFn,
+    collect_group,
+    error_result,
+    iter_tool_modules,
+    status_result,
+    text_result,
+)
 
-DispatchFn = Callable[[str, dict[str, Any], Any], Any]
-"""``dispatch(name, arguments, context) -> {"content": [...]}`` (an MCP result envelope)."""
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -207,4 +216,13 @@ def register_group(
     return [name for name, *_ in prepared]
 
 
-__all__ = ["DispatchFn", "register_group", "tool_errors"]
+__all__ = [
+    "DispatchFn",
+    "collect_group",
+    "error_result",
+    "iter_tool_modules",
+    "register_group",
+    "status_result",
+    "text_result",
+    "tool_errors",
+]

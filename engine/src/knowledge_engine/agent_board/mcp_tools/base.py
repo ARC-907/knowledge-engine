@@ -1,40 +1,20 @@
 """Shared scaffolding for agent-board MCP tool modules.
 
-Result envelopes match the project-context pattern so dispatching looks the same
-to the MCP server. Lightweight context object exposes the store + keys so
+Result envelopes come from :mod:`knowledge_engine.mcp.tool_groups` (shared with
+project-context) so dispatching looks the same to the MCP server. Lightweight context object exposes the store + keys so
 modules don't need to re-import everything.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any
 
+from ...mcp.tool_groups import error_result, status_result, text_result
 from .. import keys, store, sweeper
 
 _logger = logging.getLogger(__name__)
-
-# ── MCP result envelopes ─────────────────────────────────────────────
-
-
-def text_result(obj: Any) -> dict[str, Any]:
-    """Wrap a JSON-serializable object as an MCP text content envelope."""
-    return {"content": [{"type": "text", "text": json.dumps(obj, indent=2, default=str)}]}
-
-
-def status_result(status: str, **extra: Any) -> dict[str, Any]:
-    payload = {"status": status}
-    payload.update(extra)
-    return text_result(payload)
-
-
-def error_result(message: str, **extra: Any) -> dict[str, Any]:
-    payload = {"error": message}
-    payload.update(extra)
-    return text_result(payload)
-
 
 # ── Per-call context ─────────────────────────────────────────────────
 

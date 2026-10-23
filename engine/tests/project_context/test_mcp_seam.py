@@ -77,3 +77,53 @@ def test_server_merges_without_breaking_base(tmp_path: Path, monkeypatch) -> Non
     assert {"search", "registry_list", "registry_toggle", "registry_get"} <= names
     # project-context capability tools merged in
     assert "project_context.capabilities" in names
+
+
+def test_tool_context_opens_one_registry_connection_under_concurrency(tmp_path: Path) -> None:
+    import threading
+
+    from knowledge_engine.project_context import db as pddb
+
+    cfg = ProjectContextConfig()
+    ctx = _ctx(tmp_path, cfg)
+    opened: list[object] = []
+    real_connect = pddb.connect
+    barrier = threading.Barrier(8)
+
+    def counting_connect(path: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        conn = real_connect(path, **kwargs)  # type: ignore[arg-type]
+        opened.append(conn)
+        return conn
+
+    pddb.connect = counting_connect  # type: ignore[assignment]
+    try:
+        seen: list[object] = []
+
+        def worker() -> None:
+            barrier.wait()
+            seen.append(ctx.registry_conn())
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    finally:
+        pddb.connect = real_connect  # type: ignore[assignment]
+        ctx.close()
+    assert len(opened) == 1
+    assert len({id(conn) for conn in seen}) == 1
+
+
+def test_tool_groups_share_the_mcp_envelopes() -> None:
+    from knowledge_engine.agent_board.mcp_tools import base as board_base
+    from knowledge_engine.mcp import tool_groups, toolkit
+    from knowledge_engine.project_context.mcp_tools import base as pc_base
+
+    assert pc_base.text_result is tool_groups.text_result is board_base.text_result
+    assert pc_base.status_result is board_base.status_result is toolkit.status_result
+    assert board_base.error_result is toolkit.error_result
+    assert json.loads(tool_groups.status_result("off", why="x")["content"][0]["text"]) == {
+        "status": "off",
+        "why": "x",
+    }
