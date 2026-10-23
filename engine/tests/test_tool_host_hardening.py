@@ -421,9 +421,7 @@ def tool_db(tmp_path: Path):
     path = tmp_path / "pipeline.db"
     with db_mod.using_db(path) as resolved:
         yield resolved
-    conn = db_mod._local.connections.pop(resolved, None)
-    if conn is not None:
-        conn.close()
+    db_mod.close_connection(resolved)
 
 
 def test_register_and_update_persist_new_fields(tool_db) -> None:
@@ -511,9 +509,7 @@ def test_legacy_table_is_migrated_and_old_rows_use_defaults(tmp_path: Path, monk
             assert {"allow_inline", "allowed_methods", "allowed_headers"} <= cols
             tool = host.get_tool("legacy")
         finally:
-            conn = db_mod._local.connections.pop(resolved, None)
-            if conn is not None:
-                conn.close()
+            db_mod.close_connection(resolved)
 
     assert tool is not None
     assert tool["allow_inline"] == 0
