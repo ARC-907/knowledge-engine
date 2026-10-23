@@ -25,13 +25,17 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import secrets
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from ..core import paths
+from ..core.logsafe import log_safe
 from ..runtime.foundation import db
 
 _logger = logging.getLogger(__name__)
@@ -56,6 +60,17 @@ VALID_PERMISSIONS: frozenset[str] = frozenset(
         "admin",
     }
 )
+
+MASTER_KEY_FILENAME = "board-master-key.txt"
+
+# Every SELECT against ``agent_api_keys`` names its columns so ``key_hash``
+# never leaves this module — not in API responses, not in logs, not in the
+# dicts handed to the HTTP layer.
+_KEY_COLUMNS = (
+    "key_id, display_name, created_by, enabled, is_master, "
+    "created_at, updated_at, last_used_at, expires_at, notes"
+)
+_PERMISSION_COLUMNS = "perm_id, key_id, resource_type, resource_id, permission, enabled, created_at"
 
 
 # ── Raw key generation + hashing ───────────────────────────────
@@ -109,6 +124,13 @@ def create_key(
         ),
     )
     conn.commit()
+    _logger.info(
+        "board key created: key_id=%s label=%r master=%s created_by=%s",
+        log_safe(key_id),
+        log_safe(display_name),
+        is_master,
+        log_safe(created_by),
+    )
 
     return {
         "key_id": key_id,
@@ -129,7 +151,7 @@ def verify_key(raw_key: str) -> dict[str, Any] | None:
     now = _now_iso()
 
     row = conn.execute(
-        """SELECT * FROM agent_api_keys
+        f"""SELECT {_KEY_COLUMNS} FROM agent_api_keys
            WHERE key_hash = ? AND enabled = 1
              AND (expires_at IS NULL OR expires_at > ?)""",
         (key_hash, now),
@@ -148,19 +170,18 @@ def verify_key(raw_key: str) -> dict[str, Any] | None:
 
 
 def get_key(key_id: str) -> dict[str, Any] | None:
+    """Key metadata by id (never the hash), or None."""
     conn = db.get_connection()
-    row = conn.execute("SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)).fetchone()
+    row = conn.execute(
+        f"SELECT {_KEY_COLUMNS} FROM agent_api_keys WHERE key_id = ?", (key_id,)
+    ).fetchone()
     return db.dict_from_row(row)
 
 
 def list_keys(include_master: bool = True) -> list[dict[str, Any]]:
     """Return all keys without hashes. `include_master=False` hides master keys."""
     conn = db.get_connection()
-    sql = (
-        "SELECT key_id, display_name, created_by, enabled, is_master, "
-        "created_at, updated_at, last_used_at, expires_at, notes "
-        "FROM agent_api_keys"
-    )
+    sql = f"SELECT {_KEY_COLUMNS} FROM agent_api_keys"
     if not include_master:
         sql += " WHERE is_master = 0"
     sql += " ORDER BY created_at DESC"
@@ -210,7 +231,7 @@ def toggle_key(key_id: str) -> dict[str, Any] | None:
     enabled master exists, is always allowed.
     """
     conn = db.get_connection()
-    row = conn.execute("SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)).fetchone()
+    row = conn.execute("SELECT enabled FROM agent_api_keys WHERE key_id = ?", (key_id,)).fetchone()
     if row is None:
         return None
     # Refuse if this toggle would zero enabled masters. Re-enabling a
@@ -225,8 +246,10 @@ def toggle_key(key_id: str) -> dict[str, Any] | None:
         (new_state, _now_iso(), key_id),
     )
     conn.commit()
-    updated = conn.execute("SELECT * FROM agent_api_keys WHERE key_id = ?", (key_id,)).fetchone()
-    return db.dict_from_row(updated)
+    _logger.info(
+        "board key %s: key_id=%s", "enabled" if new_state else "disabled", log_safe(key_id)
+    )
+    return get_key(key_id)
 
 
 def delete_key(key_id: str) -> bool:
@@ -241,7 +264,10 @@ def delete_key(key_id: str) -> bool:
     conn.execute("DELETE FROM agent_key_permissions WHERE key_id = ?", (key_id,))
     cursor = conn.execute("DELETE FROM agent_api_keys WHERE key_id = ?", (key_id,))
     conn.commit()
-    return cursor.rowcount > 0
+    deleted = cursor.rowcount > 0
+    if deleted:
+        _logger.info("board key revoked: key_id=%s", log_safe(key_id))
+    return deleted
 
 
 # ── Permission CRUD ────────────────────────────────────────────
@@ -269,6 +295,13 @@ def grant_permission(
         (perm_id, key_id, resource_type, resource_id, permission, now),
     )
     conn.commit()
+    _logger.info(
+        "board permission granted: key_id=%s %s:%s=%s",
+        log_safe(key_id),
+        log_safe(resource_type),
+        log_safe(resource_id),
+        log_safe(permission),
+    )
 
     return {
         "perm_id": perm_id,
@@ -285,13 +318,16 @@ def revoke_permission(perm_id: str) -> bool:
     conn = db.get_connection()
     cursor = conn.execute("DELETE FROM agent_key_permissions WHERE perm_id = ?", (perm_id,))
     conn.commit()
-    return cursor.rowcount > 0
+    revoked = cursor.rowcount > 0
+    if revoked:
+        _logger.info("board permission revoked: perm_id=%s", log_safe(perm_id))
+    return revoked
 
 
 def list_permissions(key_id: str) -> list[dict[str, Any]]:
     conn = db.get_connection()
     rows = conn.execute(
-        """SELECT * FROM agent_key_permissions
+        f"""SELECT {_PERMISSION_COLUMNS} FROM agent_key_permissions
            WHERE key_id = ?
            ORDER BY resource_type, resource_id""",
         (key_id,),
@@ -317,7 +353,7 @@ def check_permission(
         return True
 
     rows = conn.execute(
-        """SELECT * FROM agent_key_permissions
+        """SELECT permission FROM agent_key_permissions
            WHERE key_id = ? AND enabled = 1
              AND (resource_type = ? OR resource_type = '*')
              AND (resource_id = ? OR resource_id = '*')""",
@@ -366,37 +402,50 @@ def ensure_master_key() -> dict[str, Any] | None:
             # between the SELECT and the INSERT. Surface "already exists".
             return None
         grant_permission(key_data["key_id"], "*", "*", "admin")
+        _logger.warning("board master key bootstrapped: key_id=%s", log_safe(key_data["key_id"]))
 
-        # Best-effort file write — never raise from bootstrap.
+        # Best-effort file write — never raise from bootstrap; the raw key
+        # is still in the return value.
         try:
-            key_file = paths.ensure_data_dir() / "board-master-key.txt"
-            key_file.write_text(
-                "Knowledge-Engine Agent Board — Master Key\n"
-                f"Created: {key_data['created_at']}\n"
-                f"Key ID:  {key_data['key_id']}\n"
-                f"Raw Key: {key_data['raw_key']}\n"
-                "\n"
-                "Full admin access to all board resources. Store securely and\n"
-                "delete this file after copying the raw key.\n",
-                encoding="utf-8",
-            )
-            # Tighten file perms on POSIX so the key isn't world-readable.
-            try:
-                key_file.chmod(0o600)
-            except OSError:
-                _logger.warning(
-                    "could not restrict permissions on board master key file %s",
-                    key_file,
-                    exc_info=True,
-                )
+            _write_master_key_file(paths.ensure_data_dir() / MASTER_KEY_FILENAME, key_data)
         except Exception:
             _logger.warning("could not write board master key file", exc_info=True)
 
         return key_data
 
 
+def _write_master_key_file(key_file: Path, key_data: dict[str, Any]) -> None:
+    """Write the one-time master-key note with mode 0600 from the first byte.
+
+    ``O_CREAT | O_EXCL`` with an explicit mode means the file never exists
+    world-readable, however permissive the umask. A leftover file from an
+    earlier bootstrap (whose key is dead) is removed first; a path that is
+    not a regular file is left alone and logged.
+    """
+    content = (
+        "Knowledge-Engine Agent Board — Master Key\n"
+        f"Created: {key_data['created_at']}\n"
+        f"Key ID:  {key_data['key_id']}\n"
+        f"Raw Key: {key_data['raw_key']}\n"
+        "\n"
+        "Full admin access to all board resources. Store securely and\n"
+        "delete this file after copying the raw key.\n"
+    )
+    if key_file.is_symlink() or (key_file.exists() and not key_file.is_file()):
+        _logger.warning("not writing master key file: %s is not a regular file", key_file)
+        return
+    if key_file.exists():
+        _logger.warning("replacing stale master key file %s", key_file)
+        key_file.unlink()
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(key_file, flags, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(content)
+    _logger.info("board master key written to %s (mode 0600)", key_file)
+
+
 def get_key_summary(key_id: str) -> dict[str, Any] | None:
-    """Get key info with all its permissions."""
+    """Get key info (never the hash) with all its permissions."""
     key = get_key(key_id)
     if key is None:
         return None
@@ -404,11 +453,89 @@ def get_key_summary(key_id: str) -> dict[str, Any] | None:
     return key
 
 
+def has_master_key() -> bool:
+    """True if at least one enabled master key exists."""
+    conn = db.get_connection()
+    row = conn.execute(
+        "SELECT 1 FROM agent_api_keys WHERE is_master = 1 AND enabled = 1 LIMIT 1"
+    ).fetchone()
+    return row is not None
+
+
+# ── Authorization decisions shared by HTTP and MCP ─────────────
+
+
+@dataclass(frozen=True)
+class AuthDecision:
+    """Outcome of a key check. ``status`` mirrors the HTTP code a route
+    would answer with (401 missing/invalid, 403 insufficient); MCP callers
+    only need ``ok`` / ``detail``."""
+
+    ok: bool
+    status: int = 200
+    detail: str = ""
+    key_id: str | None = None
+
+    @classmethod
+    def allow(cls, key_id: str | None = None) -> AuthDecision:
+        return cls(True, 200, "", key_id)
+
+    @classmethod
+    def deny(cls, status: int, detail: str) -> AuthDecision:
+        return cls(False, status, detail)
+
+
+def authorize_key(raw_key: str | None, permission: str, resource_id: str = "*") -> AuthDecision:
+    """Validate a presented key and check it holds ``permission`` on the board.
+
+    Master keys pass every check (see :func:`check_permission`).
+    """
+    raw = (raw_key or "").strip()
+    if not raw:
+        return AuthDecision.deny(401, "Missing X-Board-Key header")
+    record = verify_key(raw)
+    if record is None:
+        _logger.warning("board auth: invalid or expired key presented")
+        return AuthDecision.deny(401, "Invalid or expired key")
+    if not check_permission(record["key_id"], "board", resource_id, permission):
+        _logger.warning(
+            "board auth: key_id=%s lacks board:%s permission",
+            log_safe(record["key_id"]),
+            log_safe(permission),
+        )
+        return AuthDecision.deny(403, f"Key lacks board:{permission} permission")
+    return AuthDecision.allow(record["key_id"])
+
+
+def authorize_write(
+    raw_key: str | None, *, loopback: bool, require_key: bool, resource_id: str = "*"
+) -> AuthDecision:
+    """The WRITE gate, identical for HTTP posts/acks and MCP post tools.
+
+    * ``require_key`` is the persisted ``require_key_for_post`` flag.
+    * With the flag off, writes from trusted peers are keyless (the caller
+      has already passed the peer-trust gate).
+    * With the flag on, loopback peers stay keyless **unless they present a
+      key**, in which case it must be valid; everyone else must present a
+      key with ``board:write``. The MCP stdio server is a local process and
+      counts as loopback.
+    """
+    if not require_key:
+        return AuthDecision.allow()
+    if loopback and not (raw_key or "").strip():
+        return AuthDecision.allow()
+    return authorize_key(raw_key, "write", resource_id)
+
+
 __all__ = [
     "KEY_PREFIX",
+    "MASTER_KEY_FILENAME",
     "VALID_PERMISSIONS",
     "VALID_RESOURCE_TYPES",
+    "AuthDecision",
     "LastMasterKeyError",
+    "authorize_key",
+    "authorize_write",
     "check_permission",
     "create_key",
     "delete_key",
@@ -417,6 +544,7 @@ __all__ = [
     "get_key",
     "get_key_summary",
     "grant_permission",
+    "has_master_key",
     "list_keys",
     "list_permissions",
     "revoke_permission",

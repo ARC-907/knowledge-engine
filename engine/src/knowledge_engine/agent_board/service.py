@@ -7,10 +7,9 @@ surface (no /search, no /registry, no dashboard). Reuses the same
 Default port 11437 was picked to avoid colliding with the engine's 9210.
 Override with `KE_BOARD_STANDALONE_PORT` or `--port`.
 
-CORS is restricted by default to the same origins that the peer-trust
-gate allows (localhost + Tailscale CGNAT). Extend or override via the
-`KE_BOARD_CORS_ORIGINS` env var (comma-separated list, or `*` to allow
-any origin — not recommended).
+CORS is restricted by default to loopback origins (the same list the
+engine app uses). Extend or override via the `KE_BOARD_CORS_ORIGINS` env
+var (comma-separated list, or `*` to allow any origin — not recommended).
 
 Use `python -m knowledge_engine.agent_board.service` or
 `knowledge-engine board-serve --port N` to start it.
@@ -20,16 +19,16 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from .. import __version__
+from ..core.http import BodySizeLimitMiddleware, cors_origins, install_cors, uvicorn_proxy_kwargs
+from ..core.logging_config import uvicorn_log_config
 from . import sweeper as kb_sweeper
 
 _logger = logging.getLogger(__name__)
@@ -44,6 +43,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     two never both run a pass. `KE_BOARD_SWEEPER=0` skips it, matching the
     embedded engine's lifespan.
     """
+    try:
+        from ..server.api import board_routes  # noqa: PLC0415
+
+        board_routes.log_trust_policy()
+    except Exception:
+        _logger.exception("could not log board trust policy")
     try:
         if kb_sweeper.env_override() is False:
             _logger.info("standalone sweeper disabled by %s", kb_sweeper.SWEEPER_ENV)
@@ -60,25 +65,16 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             _logger.exception("standalone sweeper failed to stop cleanly")
 
 
+CORS_ORIGINS_ENV = "KE_BOARD_CORS_ORIGINS"
+
+
 def _resolve_cors_origins() -> list[str]:
     """Default to loopback origins. `KE_BOARD_CORS_ORIGINS=*` opts into
     permissive CORS for users who need it (and accept the implications);
-    a comma-separated list overrides the default explicitly.
+    a comma-separated list overrides the default explicitly. Shares its
+    parser and defaults with the engine app (``core.http.cors_origins``).
     """
-    raw = os.environ.get("KE_BOARD_CORS_ORIGINS", "").strip()
-    if not raw:
-        return [
-            "http://127.0.0.1",
-            "http://localhost",
-            # Cover the common dev/preview ports without committing to *.
-            "http://127.0.0.1:9210",
-            "http://localhost:9210",
-            "http://127.0.0.1:11437",
-            "http://localhost:11437",
-        ]
-    if raw == "*":
-        return ["*"]
-    return [o.strip() for o in raw.split(",") if o.strip()]
+    return cors_origins(CORS_ORIGINS_ENV)
 
 
 def create_standalone_app() -> FastAPI:
@@ -97,12 +93,13 @@ def create_standalone_app() -> FastAPI:
     # KE_BOARD_CORS_ORIGINS explicitly; the peer-trust gate still applies
     # at the route layer.
     app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_resolve_cors_origins(),
-        allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Board-Key"],
+        BodySizeLimitMiddleware,
+        max_bytes=board_routes.MAX_REQUEST_BODY_BYTES,
+        path_prefix="/board",
     )
+    # CORS is registered after the body cap so it ends up outermost
+    # (``add_middleware`` is LIFO) and a 413 still carries the CORS grant.
+    install_cors(app, _resolve_cors_origins(), env_var=CORS_ORIGINS_ENV)
     app.include_router(board_routes.router, prefix="/board", tags=["board"])
 
     @app.get("/health")
@@ -120,11 +117,16 @@ def serve(host: str = "127.0.0.1", port: int = 11437) -> int:
     except ImportError:
         sys.stderr.write("uvicorn not installed; pip install knowledge-engine\n")
         return 1
+    # Same wiring as `knowledge-engine serve`: a root handler so the board's
+    # INFO policy lines reach stderr, and uvicorn's proxy-header handling
+    # bound to KE_TRUST_PROXY / KE_TRUSTED_PROXIES instead of its own default.
     uvicorn.run(
         "knowledge_engine.agent_board.service:create_standalone_app",
         host=host,
         port=port,
         factory=True,
+        log_config=uvicorn_log_config(),
+        **uvicorn_proxy_kwargs(),
     )
     return 0
 

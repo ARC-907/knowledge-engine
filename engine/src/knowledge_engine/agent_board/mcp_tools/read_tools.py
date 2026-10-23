@@ -150,6 +150,15 @@ def tools() -> list[dict[str, Any]]:
 
 
 def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[str, Any]:
+    try:
+        return _dispatch(name, args, ctx)
+    except ValueError as exc:
+        # Malformed scope names (see ``scopes.validate_scope``) and bad
+        # numeric arguments both surface as a tool error, not a crash.
+        return error_result(str(exc))
+
+
+def _dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[str, Any]:
     scope = args.get("scope") or None
     if name == "board_read":
         msgs = store.poll(

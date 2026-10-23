@@ -2,7 +2,7 @@
 
 A *scope* is a short key naming an isolation boundary: a project, a branch,
 a worktree, an agent, or an agentic loop. Each scope maps to its own SQLite
-file under ``<data_dir>/board-scopes/{slug}.db`` — a self-contained
+file under ``<data_dir>/board-scopes/{name}.db`` — a self-contained
 engine-block of board state (messages, FTS index, key vault, config,
 sweeper lease). Scopes share one process but nothing else: a post to
 ``branch-feat-auth`` is invisible to ``branch-main`` unless an agent
@@ -18,32 +18,77 @@ Resolution flows through ``foundation.db.using_db`` (a ContextVar), so
 setting a scope routes the board, queue, key vault, and sweeper underneath
 it with no per-call argument plumbing.
 
+Lifecycle rules (see ``store._scoped``):
+
+* Scope names must match :data:`SCOPE_NAME_RE` — lowercase letters, digits,
+  ``_`` and ``-``, 1-64 characters, starting with a letter or digit. Anything
+  else is rejected with ``ValueError`` before it touches the filesystem.
+* **Reads never create a scope.** An unknown scope reads as empty.
+* Scopes are created by a message post, an admin config update, or the
+  explicit ``PUT /board/scopes/{name}`` route — and only while fewer than
+  ``KE_BOARD_MAX_SCOPES`` (default 64) exist.
+
 The default (unscoped) board remains the shared ``pipeline.db`` — passing
 ``scope=None`` anywhere is fully backward compatible.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 import re
 from pathlib import Path
 
 from ..core import paths
+from ..core.logsafe import log_safe
+from ..runtime.foundation import db
 
-# Scope keys are operator/agent-supplied, so they're slugified before they
-# ever touch the filesystem. Only a conservative charset survives; anything
-# else collapses to a hyphen. This blocks path traversal (`../`), absolute
-# paths, drive letters, and NTFS/POSIX reserved characters.
+_logger = logging.getLogger(__name__)
+
+# Strict allow-list for scope names supplied over HTTP / MCP / CLI. Scope
+# names become file names, so the charset is deliberately conservative: no
+# dots (hidden files, traversal), no slashes, no uppercase, no whitespace.
+SCOPE_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+# Legacy normaliser kept for callers that pre-process free-form keys.
 _SAFE_CHARS = re.compile(r"[^a-z0-9._-]+")
 _MAX_SLUG_LEN = 80
 SCOPES_DIRNAME = "board-scopes"
 
+MAX_SCOPES_ENV = "KE_BOARD_MAX_SCOPES"
+DEFAULT_MAX_SCOPES = 64
+
+
+class ScopeLimitError(ValueError):
+    """Raised when creating a scope would exceed ``KE_BOARD_MAX_SCOPES``."""
+
+
+def validate_scope(scope: str) -> str:
+    """Return ``scope`` unchanged if it is a valid scope name.
+
+    Raises ``ValueError`` otherwise. This is the only gate between an
+    operator/agent-supplied key and a path under :func:`scopes_root`.
+    """
+    if not isinstance(scope, str) or not scope:
+        raise ValueError("scope must be a non-empty string")
+    if not SCOPE_NAME_RE.fullmatch(scope):
+        raise ValueError(
+            f"invalid scope {scope!r}: must match {SCOPE_NAME_RE.pattern} "
+            "(lowercase letters, digits, '_' and '-'; max 64 characters)"
+        )
+    return scope
+
 
 def slugify_scope(scope: str) -> str:
-    """Normalize a scope key to a filesystem-safe slug.
+    """Normalize a free-form key to a filesystem-safe slug.
 
     Lowercases, replaces runs of unsafe characters with a single hyphen,
     strips leading/trailing separators and dots (no hidden files, no
     traversal), and caps length. Raises ``ValueError`` on an empty result.
+
+    Routing no longer slugifies implicitly — a scope must already satisfy
+    :func:`validate_scope`. Clients that want to derive a scope from a
+    branch name or path can run it through this helper first.
     """
     if not scope or not scope.strip():
         raise ValueError("scope must be a non-empty string")
@@ -57,8 +102,29 @@ def slugify_scope(scope: str) -> str:
     return slug
 
 
+def max_scopes() -> int:
+    """The scope cap from ``KE_BOARD_MAX_SCOPES`` (default 64; ``0`` = unlimited).
+
+    A non-integer value is logged and falls back to the default.
+    """
+    raw = os.environ.get(MAX_SCOPES_ENV, "").strip()
+    if not raw:
+        return DEFAULT_MAX_SCOPES
+    try:
+        value = int(raw)
+    except ValueError:
+        _logger.warning(
+            "ignoring non-integer %s=%r; using %d",
+            MAX_SCOPES_ENV,
+            log_safe(raw),
+            DEFAULT_MAX_SCOPES,
+        )
+        return DEFAULT_MAX_SCOPES
+    return max(value, 0)
+
+
 def scopes_root() -> Path:
-    """Directory that holds per-scope DB files (created on demand).
+    """Directory that holds per-scope DB files (created on first write).
 
     Lives under the engine data dir resolved by ``core.paths`` — the same
     directory that holds the default ``pipeline.db``.
@@ -66,22 +132,62 @@ def scopes_root() -> Path:
     return paths.resolve_data_dir() / SCOPES_DIRNAME
 
 
-def scope_db_path(scope: str) -> str:
+def scope_db_path(scope: str, *, create: bool = False) -> str:
     """Absolute path to the SQLite file backing ``scope``.
 
-    The parent directory is created lazily here; the DB + schema are created
-    by ``foundation.db.get_connection`` on first use under ``using_db``.
+    With ``create=False`` (the default) this is a pure computation: nothing
+    is touched on disk. With ``create=True`` the parent directory is made
+    and the scope cap is enforced for a scope that does not exist yet; the
+    DB file + schema are then created by ``foundation.db.get_connection``
+    on first use under ``using_db``.
     """
-    slug = slugify_scope(scope)
+    name = validate_scope(scope)
     root = scopes_root()
-    root.mkdir(parents=True, exist_ok=True)
-    return str((root / f"{slug}.db").resolve())
+    target = root / f"{name}.db"
+    if create and not target.exists():
+        limit = max_scopes()
+        existing = len(list_scopes())
+        if limit and existing >= limit:
+            _logger.warning(
+                "refusing to create scope %r: %d scopes exist, %s=%d",
+                log_safe(name),
+                existing,
+                MAX_SCOPES_ENV,
+                limit,
+            )
+            raise ScopeLimitError(
+                f"scope limit reached ({existing}/{limit}); raise {MAX_SCOPES_ENV} "
+                "or remove unused scope databases"
+            )
+        root.mkdir(parents=True, exist_ok=True)
+        _logger.info("creating board scope %r at %s", log_safe(name), target)
+    return str(target.resolve())
+
+
+def scope_exists(scope: str) -> bool:
+    """True if ``scope`` already has a database file (never creates one)."""
+    return Path(scope_db_path(scope)).exists()
+
+
+def create_scope(scope: str) -> dict[str, object]:
+    """Explicitly create ``scope`` (idempotent).
+
+    Returns ``{"scope", "db_path", "created"}``; ``created`` is False when
+    the scope already existed. Raises ``ValueError`` on a bad name and
+    :class:`ScopeLimitError` at the cap.
+    """
+    existed = scope_exists(scope)
+    path = scope_db_path(scope, create=True)
+    if not existed:
+        with db.using_db(path):
+            db.get_connection()
+    return {"scope": scope, "db_path": path, "created": not existed}
 
 
 def list_scopes() -> list[dict[str, object]]:
     """List known scopes by scanning the scopes directory for ``*.db`` files.
 
-    Returns ``[{"scope": slug, "db_path": str, "size_bytes": int}, ...]``.
+    Returns ``[{"scope": name, "db_path": str, "size_bytes": int}, ...]``.
     SQLite sidecar files (``-wal`` / ``-shm``) are ignored.
     """
     root = scopes_root()
@@ -103,10 +209,18 @@ def scope_db_paths() -> list[str]:
 
 
 __all__ = [
+    "DEFAULT_MAX_SCOPES",
+    "MAX_SCOPES_ENV",
     "SCOPES_DIRNAME",
+    "SCOPE_NAME_RE",
+    "ScopeLimitError",
+    "create_scope",
     "list_scopes",
+    "max_scopes",
     "scope_db_path",
     "scope_db_paths",
+    "scope_exists",
     "scopes_root",
     "slugify_scope",
+    "validate_scope",
 ]

@@ -9,11 +9,11 @@ from importlib import resources
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
 from ..core.config import Config
+from ..core.http import BodySizeLimitMiddleware, cors_origins, install_cors
 from ..core.registry import Registry
 from ..generation import ProviderRegistry
 from ..generation.cloud_http import CloudHTTPProvider, EchoProvider
@@ -28,6 +28,11 @@ _logger = logging.getLogger(__name__)
 # so they are present in wheels and editable installs alike.
 DASHBOARD_PACKAGE = "knowledge_engine.server"
 DASHBOARD_DIRNAME = "static"
+
+# Browser origins allowed to call the API cross-origin. Defaults to loopback;
+# the dashboard at /ui is same-origin and needs no entry. ``*`` only when
+# written explicitly.
+CORS_ORIGINS_ENV = "KE_CORS_ORIGINS"
 
 
 def dashboard_dir() -> Path | None:
@@ -77,14 +82,6 @@ def create_app() -> FastAPI:
         version=__version__,
         lifespan=lifespan,
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
     app.state.config = config
     app.state.registry = registry
     app.state.indexer = indexer
@@ -105,8 +102,20 @@ def create_app() -> FastAPI:
             from .api import board_routes  # noqa: PLC0415
 
             app.include_router(board_routes.router, prefix="/board", tags=["board"])
+            # Streamed-body cap for /board: ``Content-Length`` is checked in the
+            # routes too, but only this middleware stops a chunked upload.
+            app.add_middleware(
+                BodySizeLimitMiddleware,
+                max_bytes=board_routes.MAX_REQUEST_BODY_BYTES,
+                path_prefix="/board",
+            )
         except Exception:
             _logger.exception("agent board failed to mount; continuing without it")
+
+    # Registered last so CORSMiddleware is the outermost layer (``add_middleware``
+    # is LIFO): a 413 written by the body cap then still carries the CORS grant
+    # for an allowed browser origin instead of surfacing as an opaque error.
+    install_cors(app, cors_origins(CORS_ORIGINS_ENV), env_var=CORS_ORIGINS_ENV)
 
     # Static dashboard (served at /ui)
     _mount_dashboard(app)

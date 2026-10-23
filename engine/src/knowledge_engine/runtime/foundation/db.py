@@ -604,6 +604,42 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _backfill_messages_fts_once(conn)
 
 
+BOARD_CONFIG_DEFAULT_CHANNELS: tuple[str, ...] = (
+    "ops",
+    "research",
+    "project",
+    "worktree",
+    "branch",
+    "library",
+    "planning",
+    "execution",
+    "testing",
+    "chatter",
+)
+
+# Values seeded into the ``board_config`` singleton row on first boot. Also
+# what a read of a not-yet-created scope reports, so the two never drift.
+BOARD_CONFIG_DEFAULTS: dict[str, int] = {
+    "engine_port": 9210,
+    "standalone_port": 11437,
+    "sweep_interval_s": 60,
+    "stale_blocker_hours": 2,
+    "digest_interval_minutes": 60,
+    "max_messages_before_prune": 5000,
+    "default_ttl_hours": 168,
+    "sweeper_enabled": 1,
+    "require_key_for_post": 0,
+}
+
+
+def default_board_config() -> dict[str, Any]:
+    """The ``board_config`` row as it would be seeded, without touching a DB."""
+    cfg: dict[str, Any] = {"id": 1, **BOARD_CONFIG_DEFAULTS}
+    cfg["channels_json"] = json.dumps(list(BOARD_CONFIG_DEFAULT_CHANNELS))
+    cfg["updated_at"] = None
+    return cfg
+
+
 def seed_board_config(conn: sqlite3.Connection) -> None:
     """Insert the singleton board_config row on first boot. Idempotent.
 
@@ -614,28 +650,27 @@ def seed_board_config(conn: sqlite3.Connection) -> None:
     if row is not None:
         return
     now = datetime.now(UTC).isoformat()
-    default_channels = json.dumps(
-        [
-            "ops",
-            "research",
-            "project",
-            "worktree",
-            "branch",
-            "library",
-            "planning",
-            "execution",
-            "testing",
-            "chatter",
-        ]
-    )
+    defaults = BOARD_CONFIG_DEFAULTS
     conn.execute(
         """INSERT INTO board_config (
             id, engine_port, standalone_port, sweep_interval_s,
             stale_blocker_hours, digest_interval_minutes,
             max_messages_before_prune, default_ttl_hours,
             sweeper_enabled, require_key_for_post, channels_json, updated_at
-        ) VALUES (1, 9210, 11437, 60, 2, 60, 5000, 168, 1, 0, ?, ?)""",
-        (default_channels, now),
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            defaults["engine_port"],
+            defaults["standalone_port"],
+            defaults["sweep_interval_s"],
+            defaults["stale_blocker_hours"],
+            defaults["digest_interval_minutes"],
+            defaults["max_messages_before_prune"],
+            defaults["default_ttl_hours"],
+            defaults["sweeper_enabled"],
+            defaults["require_key_for_post"],
+            json.dumps(list(BOARD_CONFIG_DEFAULT_CHANNELS)),
+            now,
+        ),
     )
     conn.commit()
 

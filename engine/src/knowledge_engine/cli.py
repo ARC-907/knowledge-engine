@@ -286,7 +286,21 @@ def main() -> int:
         except ImportError:
             print("uvicorn not installed; pip install knowledge-engine", file=sys.stderr)
             return 1
-        uvicorn.run("knowledge_engine.app:create_app", host=args.host, port=args.port, factory=True)
+        from .core.http import uvicorn_proxy_kwargs
+        from .core.logging_config import uvicorn_log_config
+
+        # Logging: uvicorn's default config wires only its own loggers, so the
+        # engine's INFO policy lines would never be emitted. Proxy headers:
+        # uvicorn trusts loopback X-Forwarded-For by default, which would
+        # contradict KE_TRUST_PROXY; derive both from the same env vars.
+        uvicorn.run(
+            "knowledge_engine.app:create_app",
+            host=args.host,
+            port=args.port,
+            factory=True,
+            log_config=uvicorn_log_config(),
+            **uvicorn_proxy_kwargs(),
+        )
         return 0
 
     return 0

@@ -2,15 +2,23 @@
 
 Five tools — one generic poster (`board_post`) plus four shorthand convenience
 tools matching the typical agent-coordination verbs.
+
+Every tool is a WRITE and runs through the same gate as
+``POST /board/messages`` (see ``base.BoardContext.write_gate``): the MCP
+server is a local process and counts as a loopback peer, so writes are
+keyless unless the operator turned `require_key_for_post` on **and** the
+caller supplies a `board_key`, which is then validated.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .base import BoardContext, error_result, store, text_result
+from .base import BOARD_KEY_INPUT, BoardContext, error_result, store, text_result, write_gate
 
 GROUP = "board.post"
+
+_KEY_NOTE = " Accepts an optional board_key (validated only when require_key_for_post is on)."
 
 
 def tools() -> list[dict[str, Any]]:
@@ -53,9 +61,10 @@ def tools() -> list[dict[str, Any]]:
                 "description": (
                     "Optional isolation key (project / branch / agent / loop). "
                     "Routes the post to that scope's own database; omit for the "
-                    "shared board."
+                    "shared board. Must match ^[a-z0-9][a-z0-9_-]{0,63}$."
                 ),
             },
+            **BOARD_KEY_INPUT,
         },
         "required": ["message_type", "sender_node_id", "body"],
     }
@@ -66,13 +75,13 @@ def tools() -> list[dict[str, Any]]:
             "description": (
                 "Post a schema-validated message to the agent board. Channels: "
                 "ops, research, project, worktree, branch, library, planning, "
-                "execution, testing, chatter (extend via /board/config)."
+                "execution, testing, chatter (extend via /board/config)." + _KEY_NOTE
             ),
             "inputSchema": msg_input_schema,
         },
         {
             "name": "board_claim",
-            "description": "Shorthand for posting a task claim (message_type='claim').",
+            "description": "Shorthand for posting a task claim (message_type='claim')." + _KEY_NOTE,
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -80,13 +89,14 @@ def tools() -> list[dict[str, Any]]:
                     "task_id": {"type": "string"},
                     "sender_role": {"type": "string"},
                     "channel": {"type": "string", "default": "ops"},
+                    **BOARD_KEY_INPUT,
                 },
                 "required": ["sender_node_id", "task_id"],
             },
         },
         {
             "name": "board_release",
-            "description": "Shorthand for releasing a claim (message_type='release').",
+            "description": "Shorthand for releasing a claim (message_type='release')." + _KEY_NOTE,
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -94,6 +104,7 @@ def tools() -> list[dict[str, Any]]:
                     "task_id": {"type": "string"},
                     "reason": {"type": "string"},
                     "channel": {"type": "string", "default": "ops"},
+                    **BOARD_KEY_INPUT,
                 },
                 "required": ["sender_node_id", "task_id"],
             },
@@ -102,7 +113,7 @@ def tools() -> list[dict[str, Any]]:
             "name": "board_blocker",
             "description": (
                 "Shorthand for a blocker (requires_ack=true). The sweeper will "
-                "emit reminders if unacked past the stale threshold."
+                "emit reminders if unacked past the stale threshold." + _KEY_NOTE
             ),
             "inputSchema": {
                 "type": "object",
@@ -112,18 +123,22 @@ def tools() -> list[dict[str, Any]]:
                     "description": {"type": "string"},
                     "channel": {"type": "string", "default": "ops"},
                     "subject": {"type": "string"},
+                    **BOARD_KEY_INPUT,
                 },
                 "required": ["sender_node_id", "description"],
             },
         },
         {
             "name": "board_ack",
-            "description": "Acknowledge a message by id. Appends caller to ack_by list.",
+            "description": "Acknowledge a message by id. Appends caller to ack_by list."
+            + _KEY_NOTE,
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "message_id": {"type": "string"},
                     "acker": {"type": "string", "description": "Caller identity (e.g. node id)."},
+                    "scope": {"type": "string"},
+                    **BOARD_KEY_INPUT,
                 },
                 "required": ["message_id", "acker"],
             },
@@ -131,7 +146,18 @@ def tools() -> list[dict[str, Any]]:
     ]
 
 
+_WRITE_TOOLS = frozenset(
+    {"board_post", "board_claim", "board_release", "board_blocker", "board_ack"}
+)
+
+
 def dispatch(name: str, args: dict[str, Any], ctx: BoardContext | None) -> dict[str, Any]:
+    if name not in _WRITE_TOOLS:
+        return error_result(f"unknown tool: {name}")
+    args = dict(args)
+    refused = write_gate(ctx, args)
+    if refused is not None:
+        return refused
     try:
         if name == "board_post":
             # `scope` routes the write to a per-scope DB; it isn't a message

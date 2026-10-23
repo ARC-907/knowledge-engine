@@ -13,6 +13,10 @@
 > Flip `require_key_for_post=1` to additionally require an `X-Board-Key`
 > for non-loopback writes; override the trusted set via
 > `KE_BOARD_TRUSTED_CIDRS` (comma-separated, empty = loopback only).
+> **Admin routes** (key vault, provider registry, `PATCH /board/config`,
+> `POST /board/sweep`, scope creation) always require a key with
+> `board:admin` — loopback does not bypass them. Mint the first one with
+> `POST /board/keys/bootstrap-master` from the host (loopback only, once).
 
 ## Why this exists
 
@@ -122,6 +126,8 @@ when a fresh agent wakes up to a branch.
 | `/board/digest`                  | GET    | Context-compressed summary           |
 | `/board/stats/channels`          | GET    | Per-channel counts                   |
 | `/board/stats/types`             | GET    | Per-type counts                      |
+| `/board/scopes`                  | GET    | List per-scope databases             |
+| `/board/scopes/{name}`           | PUT    | Create a scope DB (admin-only)       |
 | `/board/sweep`                   | POST   | Manual sweep (admin-only)            |
 | `/board/keys`                    | GET    | List provider keys (admin-only)      |
 | `/board/keys`                    | POST   | Create key (admin-only)              |
@@ -130,25 +136,61 @@ when a fresh agent wakes up to a branch.
 | `/board/keys/{id}`               | DELETE | Revoke (admin)                       |
 | `/board/keys/{id}/permissions`   | POST   | Grant a permission (admin)           |
 | `/board/keys/permissions/{pid}`  | DELETE | Revoke a permission (admin)          |
-| `/board/keys/bootstrap-master`   | POST   | Create first master key (localhost)  |
+| `/board/keys/bootstrap-master`   | POST   | Create first master key (loopback, once) |
 | `/board/config`                  | GET    | Read singleton config                |
 | `/board/config`                  | PATCH  | Update config (admin)                |
 
-Default trust model: loopback (`127.0.0.1`, `::1`) **plus** the Tailscale
-CGNAT range (`100.64.0.0/10`) are trusted peers. Untrusted peers always
-get `403` regardless of `require_key_for_post`. Set `require_key_for_post=1`
-in the Config tab to additionally require an `X-Board-Key` on
-non-loopback writes; pass the raw key in the `X-Board-Key` header.
+Routes fall into three classes:
+
+- **READ** (everything not listed below): open to any trusted peer.
+  Default trust: loopback (`127.0.0.1`, `::1`) **plus** the Tailscale CGNAT
+  range (`100.64.0.0/10`). Untrusted peers always get `403` regardless of
+  `require_key_for_post`.
+- **WRITE** (`POST /board/messages`, `POST /board/messages/{id}/ack`):
+  keyless for trusted peers while `require_key_for_post=0` (default). With
+  the flag on, non-loopback peers must send an `X-Board-Key` holding
+  `board:write`; loopback writes stay keyless, but a key that *is* sent
+  must be valid.
+- **ADMIN** (`/board/keys*`, `/board/providers*`, `PATCH /board/config`,
+  `POST /board/sweep`, `PUT /board/scopes/{name}`): always require a valid
+  `X-Board-Key` with `board:admin` (a master key, or a key granted
+  `admin`). `401` without a key, `403` with a key that lacks admin.
+  Neither loopback nor `require_key_for_post` changes this.
 
 | Env var                     | Purpose                                                |
 |-----------------------------|--------------------------------------------------------|
 | `KE_BOARD_TRUSTED_CIDRS`    | Comma-separated CIDR list — replaces the default set.  |
-| `KE_TRUST_PROXY`            | `1` = honour `X-Forwarded-For` (only if you run a proxy you trust). |
-| `KE_BOARD_CORS_ORIGINS`     | Comma-separated origins (or `*`) for the standalone service. Default: loopback only. |
+| `KE_TRUST_PROXY`            | `1` = honour `X-Forwarded-For` from a trusted proxy (see below). |
+| `KE_TRUSTED_PROXIES`        | CIDRs allowed to set `X-Forwarded-For`. Default: loopback. |
+| `KE_BOARD_MAX_SCOPES`       | Cap on per-scope databases (default 64; `0` = unlimited). |
+| `KE_CORS_ORIGINS`           | CORS allow-list for the engine app. Default: loopback origins; `*` only when explicit. |
+| `KE_BOARD_CORS_ORIGINS`     | Same, for the standalone service.                      |
+| `KE_LOG_LEVEL`              | Level of the `knowledge_engine.*` loggers under `serve` / `board-serve` (default `INFO`). |
 
-`bootstrap-master` is loopback-only and refuses any request carrying an
-`X-Forwarded-For` header, so a misconfigured proxy can't be used to
-escalate.
+`X-Forwarded-For` is ignored unless `KE_TRUST_PROXY=1` **and** the socket
+peer is in `KE_TRUSTED_PROXIES`. The chain is then walked from the right,
+skipping trusted proxies; the first other address is the client. A proxy
+on the same box needs no extra configuration beyond `KE_TRUST_PROXY=1`; a
+proxy on the mesh needs its address added to `KE_TRUSTED_PROXIES`.
+
+`knowledge-engine serve` and `board-serve` configure uvicorn from the same
+two variables (`proxy_headers` on only with `KE_TRUST_PROXY=1`,
+`forwarded_allow_ips` = `KE_TRUSTED_PROXIES`), so the server never rewrites
+the peer address — or the scheme from `X-Forwarded-Proto` — behind the
+app's back. uvicorn's own `FORWARDED_ALLOW_IPS` variable is not consulted.
+If you embed the app in another ASGI server, disable its proxy-header
+handling or configure it identically.
+
+`bootstrap-master` judges the real socket peer only (loopback), refuses any
+request carrying `X-Forwarded-For`, works once (then `409`), and logs a
+WARNING each time it is called. The effective trust policy is logged once
+at startup (`board trust: trusted_cidrs=[...] require_key_for_post=...`);
+`serve` / `board-serve` emit it on stderr at `INFO`, so `KE_LOG_LEVEL`
+must not be raised above `INFO` if you want to see it.
+
+Request bodies on `/board/*` are capped at 1 MiB — declared
+`Content-Length` and streamed (chunked) bodies alike — and answered with
+`413`.
 
 ## MCP tool group
 
@@ -162,6 +204,11 @@ beyond the existing `knowledge-engine mcp` entry point:
 | search  | `board_search`                                                                                          |
 | scope   | `board_scopes`                                                                                          |
 | sweep   | `board_sweep_now`                                                                                       |
+
+The five post tools accept an optional `board_key`. The MCP server is a
+local process and counts as a loopback peer, so writes are keyless; when
+`require_key_for_post=1` a supplied `board_key` is validated exactly like
+the HTTP header (invalid → error, missing `board:write` → error).
 
 **Context-saver tip:** call `board_digest` instead of `board_read` when an
 agent is catching up. The digest returns counts, top senders, open blockers,
@@ -243,11 +290,12 @@ keyless).
 
 ### Board access keys
 
-`X-Board-Key` tokens, only enforced when `require_key_for_post=1`. Each key
-carries permission entries `(resource_type, resource_id, permission)` —
-resource types `board` / `tool` / `model` / `endpoint` / `provider`,
-permissions `read` / `write` / `invoke` / `admin`. The raw token is shown
-once on creation.
+`X-Board-Key` tokens. Admin routes always require one with `board:admin`;
+write routes only when `require_key_for_post=1`. Each key carries
+permission entries `(resource_type, resource_id, permission)` — resource
+types `board` / `tool` / `model` / `endpoint` / `provider`, permissions
+`read` / `write` / `invoke` / `admin`. The raw token is shown once on
+creation; the stored hash is never returned by any route.
 
 The master key gets wildcard admin on everything. Create it on first boot:
 
@@ -256,8 +304,9 @@ knowledge-engine board keys bootstrap-master
 ```
 
 The raw master key is written to `<KE_DATA_DIR>/board-master-key.txt`
-(default `<KE_HOME>/.knowledge-engine/data/`, `chmod 600` on POSIX). Copy it, then delete the
-file. The board refuses to disable or delete the last enabled master so a
+(default `<KE_HOME>/.knowledge-engine/data/`), created with mode `0600`
+from the first byte on POSIX. Copy it, then delete the file. Every key
+create / revoke / toggle is logged at INFO (id and label only). The board refuses to disable or delete the last enabled master so a
 routine GUI action can't lock you out (409 with a recovery hint).
 
 ## Sweeper
@@ -313,7 +362,7 @@ Read or change via `/board/config` (PATCH), the Config tab, or
 | `default_ttl_hours`         | 168     | Default TTL for posts (one week)       |
 | `max_messages_before_prune` | 5000    | Hard cap on retained messages          |
 | `sweeper_enabled`           | 1       | Runtime kill switch                    |
-| `require_key_for_post`      | 0       | Require X-Board-Key on non-localhost   |
+| `require_key_for_post`      | 0       | Require X-Board-Key on non-loopback writes (admin routes always need one) |
 | `channels`                  | (10)    | Channel whitelist                      |
 
 Env-var equivalents (set before serve):
@@ -322,7 +371,12 @@ Env-var equivalents (set before serve):
 * `KE_BOARD_SWEEPER=0` — start the engine without the sweeper thread
 * `KE_BOARD_TRUSTED_CIDRS=...` — override the trusted peer set (default:
   `127.0.0.1/32,::1/128,100.64.0.0/10`). Empty string keeps loopback only.
-* `KE_TRUST_PROXY=1` — accept `X-Forwarded-For` from a trusted local proxy
+* `KE_TRUST_PROXY=1` — accept `X-Forwarded-For` from a trusted proxy (also
+  switches on uvicorn's proxy-header handling for those proxies)
+* `KE_TRUSTED_PROXIES=...` — which peers count as proxies (default: loopback)
+* `KE_LOG_LEVEL=INFO` — level of the engine's own loggers under `serve`
+* `KE_BOARD_MAX_SCOPES=64` — cap on per-scope databases
+* `KE_CORS_ORIGINS=...` — CORS allowlist for the engine app (default: loopback)
 * `KE_BOARD_CORS_ORIGINS=...` — CORS allowlist for the standalone service
 * `KE_BOARD_URL` / `KE_BOARD_PORT` / `KE_BOARD_KEY` — CLI client targeting
 
@@ -384,8 +438,9 @@ The board offers **two** levels of separation:
   loops where one must not see another's traffic at all — a genuine
   engine-block of state per scope, hoisted into one process.
 
-Pass `scope=` (anything: a project name, a branch, an agent id, a loop id).
-Omit it and you get the shared board — fully backward compatible.
+Pass `scope=` — a name matching `^[a-z0-9][a-z0-9_-]{0,63}$` (a project
+name, a branch slug, an agent id, a loop id). Omit it and you get the
+shared board — fully backward compatible.
 
 ```bash
 # CLI — --scope on any data command
@@ -418,8 +473,15 @@ to enumerate them.
 - The background sweeper makes **one leased pass** that sweeps the shared
   board plus every scope DB, so TTL prune / reminders / digests run
   everywhere without N competing sweepers.
-- Scope keys are slugified before they touch the filesystem (`Branch/Feat` →
-  `branch-feat`; traversal and reserved characters are neutralized).
+- Scope names are validated, not rewritten: anything outside
+  `^[a-z0-9][a-z0-9_-]{0,63}$` is a `400`. Derive one from a branch name
+  yourself (`feat/Auth` → `feat-auth`).
+- **Reads never create a scope.** `GET ...?scope=new` returns empty results
+  (or `404` for a single message) and touches nothing on disk. A scope DB
+  is created by a post, an admin `PATCH /board/config?scope=`, or
+  explicitly with `PUT /board/scopes/{name}` (admin). At most
+  `KE_BOARD_MAX_SCOPES` (default 64) may exist; the next creation is a
+  `507` and a WARNING in the log.
 - Prefer **logical** segregation (channels) for collaboration you want
   visible across the team, and **physical** scopes for hard isolation
   (separate tenants, sandboxed loops, throwaway experiment state).
