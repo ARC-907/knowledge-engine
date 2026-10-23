@@ -9,14 +9,12 @@
 *.py[cod]
 *$py.class
 *.so
-.Python
 **/*.egg-info/
 
-# Virtual environments
+# Virtual environments (uv creates engine/.venv)
 **/.venv/
 **/venv/
 **/env/
-engine/.venv/
 
 # Tool caches
 **/.pytest_cache/
@@ -24,42 +22,28 @@ engine/.venv/
 **/.mypy_cache/
 **/.hypothesis/
 
-# Coverage output
+# Coverage output (pytest --cov; CI writes engine/coverage.xml)
 .coverage
 .coverage.*
 coverage.xml
-engine/coverage.xml
 htmlcov/
 
 # --- Runtime data and state -------------------------------------------------
 # Default per-installation data directory (indexes, board databases, project
-# context stores). Created next to the corpus or project being served.
+# context stores): <KE_HOME>/.knowledge-engine/, also used by the compose stack.
 **/.knowledge-engine/
 
-**/state/
 **/logs/
 **/*.log
 **/*.db
 **/*.db-shm
 **/*.db-wal
-**/engine/data/*.db
 
 # Process bookkeeping written by the agent-board watchdog script
 **/watchdog.pid
 
-# Optional-layer runtime state (sandbox / execution adapters, local routing)
-**/sandbox_adapter/state/
-**/sandbox_adapter/identity/
-**/routing_local/data/
-
 # Sanitized sample logs used as test fixtures are tracked on purpose.
 !engine/tests/fixtures/sample_project/logs/
-
-# --- Generated graph artifacts (regenerable) --------------------------------
-**/corpus/.graph/graph.html
-**/corpus/.graph/graph.json
-**/corpus/.graph/GRAPH_REPORT.md
-**/corpus/.graph/native.json
 
 # --- Secrets ----------------------------------------------------------------
 .env
@@ -82,14 +66,12 @@ ui-src/node_modules/
 # --- Editors, IDEs, and local tool caches -----------------------------------
 .vscode/
 .idea/
-# Obsidian vault configuration and workspace state
+# Obsidian vault configuration, if the corpus is opened as a vault
 .obsidian/
-# Cloudflare Wrangler local cache
-.wrangler/
 
-# Local scratch and superseded material
-archive/
-legacy/
+# Local scratch and superseded material (repository root only)
+/archive/
+/legacy/
 
 # --- OS files ---------------------------------------------------------------
 .DS_Store
