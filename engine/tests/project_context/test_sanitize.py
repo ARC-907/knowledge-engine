@@ -255,6 +255,39 @@ def test_env_export_of_secret_name_counts_once() -> None:
     assert result.redactions == 1
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # YAML / INI multi-line scalars: the value sits on the line after the separator.
+        ("api_token:\n  s3cr3tValue123", "api_token:\n  <REDACTED:SECRET>"),
+        ("password:\nhunter2", "password:\n<REDACTED:SECRET>"),
+        ("DB_PASSWORD =\n  hunter2", "DB_PASSWORD =\n  <REDACTED:SECRET>"),
+        ("secret:\r\n\tcrlfValue9 next", "secret:\r\n\t<REDACTED:SECRET> next"),
+        ("token:\n  'quotedNextLine' rest", "token:\n  '<REDACTED:SECRET>' rest"),
+    ],
+)
+def test_assignment_value_on_next_line_redacted(text: str, expected: str) -> None:
+    """Regression: a value on the line after ``key:`` / ``key=`` is still a secret."""
+    result = sanitize(text, _cfg())
+    assert result.text == expected
+    assert result.redactions == 1
+
+
+def test_assignment_separator_does_not_span_blank_lines() -> None:
+    """A blank line ends the assignment; the paragraph after it is not a value."""
+    text = "password:\n\nThis paragraph is prose."
+    result = sanitize(text, _cfg())
+    assert result.text == text
+    assert result.redactions == 0
+
+
+def test_assignment_on_next_line_does_not_swallow_next_key() -> None:
+    """``TOKEN=`` followed by another key on the next line redacts that key's value."""
+    result = sanitize("TOKEN=\ndb_token: yamlSecret4", _cfg())
+    assert "yamlSecret4" not in result.text
+    assert "db_token:" in result.text
+
+
 # ── idempotency ──────────────────────────────────────────────────────
 
 _SAMPLES: list[tuple[str, str]] = [
@@ -270,6 +303,7 @@ _SAMPLES: list[tuple[str, str]] = [
     ("{'password': 'pyDictSecret2'}", "pyDictSecret2"),
     ("PASSWORD=assignSecret3", "assignSecret3"),
     ("db_token: yamlSecret4", "yamlSecret4"),
+    ("api_token:\n  multiLineSecret7", "multiLineSecret7"),
     ("https://alice:urlSecret5@example.com/repo.git", "urlSecret5"),
     ("export SOME_VAR=envSecret6", "envSecret6"),
     (_pem("RSA PRIVATE KEY"), _PEM_BODY[0]),

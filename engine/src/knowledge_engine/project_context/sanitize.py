@@ -172,13 +172,15 @@ _RULES: tuple[Rule, ...] = (
         replacement=r"\g<prefix>\g<name>\g<sep>\g<quote>" + _placeholder("env"),
     ),
     # Generic NAME_API_KEY= / token= / secret= / password= assignments. Matches an
-    # optional quote and the value up to the next whitespace/quote. The
-    # separator stays on one line and the value may not itself be a secret key.
+    # optional quote and the value up to the next whitespace/quote. The value may
+    # follow the separator on the same line or on the next one (YAML/INI
+    # multi-line scalars), but the separator may not span blank lines and the
+    # value may not itself be a secret key.
     Rule(
         name="secret_assignment",
         pattern=re.compile(
             rf"(?P<key>\b{_CREDENTIAL_NAME}\b)"
-            r"(?P<sep>[ \t]*[:=][ \t]*)"
+            r"(?P<sep>[ \t]*[:=][ \t]*(?:\r?\n[ \t]*)?)"
             r"(?P<quote>['\"]?)" + _NOT_REDACTED + _NOT_A_CREDENTIAL_NAME + r"[^\s'\"]+"
             r"(?=(?P=quote))",
             re.IGNORECASE,
