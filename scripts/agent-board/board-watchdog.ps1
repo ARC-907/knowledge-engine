@@ -73,7 +73,12 @@ function Resolve-Launcher {
 
 function Resolve-DataDir {
   if ($env:KE_DATA_DIR) { return $env:KE_DATA_DIR }
-  return (Join-Path $env:LOCALAPPDATA 'knowledge-engine')
+  # LOCALAPPDATA is unset for service accounts and some non-interactive sessions.
+  $base = $env:LOCALAPPDATA
+  if (-not $base) { $base = [Environment]::GetFolderPath('LocalApplicationData') }
+  if (-not $base) { $base = $env:ProgramData }
+  if (-not $base) { $base = $EngineDir }
+  return (Join-Path $base 'knowledge-engine')
 }
 
 function Test-BoardAlive {
@@ -134,10 +139,21 @@ function Stop-Board {
     Write-Log ("stopping child PID {0} and its process tree" -f $script:Child.Id)
     # /T takes the whole tree down (uv.exe -> python.exe); fall back to the child alone.
     $taskkill = Get-Command taskkill.exe -ErrorAction SilentlyContinue
+    $killed = $false
     if ($taskkill) {
-      & $taskkill.Source /PID $script:Child.Id /T /F 2>$null | Out-Null
-    } else {
-      Stop-Process -Id $script:Child.Id -Force -ErrorAction SilentlyContinue
+      # Native stderr output is a terminating error under ErrorActionPreference=Stop
+      # on Windows PowerShell 5.1; never let a failed kill take the watchdog down.
+      try {
+        & $taskkill.Source /PID $script:Child.Id /T /F 2>&1 | Out-Null
+        $killed = ($LASTEXITCODE -eq 0)
+      } catch {
+        $killed = $false
+      }
+    }
+    if (-not $killed) {
+      foreach ($ownPid in (Get-OwnPids)) {
+        Stop-Process -Id $ownPid -Force -ErrorAction SilentlyContinue
+      }
     }
     $script:Child.WaitForExit(5000) | Out-Null
   }

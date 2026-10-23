@@ -195,9 +195,7 @@ def main() -> int:
 
     sp = sub.add_parser("serve", help="Run the FastAPI server (uvicorn)")
     sp.add_argument("--host", default="127.0.0.1")
-    sp.add_argument(
-        "--port", type=int, default=_env_port("KE_PORT", 9210), help="default: $KE_PORT or 9210"
-    )
+    sp.add_argument("--port", type=int, default=None, help="default: $KE_PORT or 9210")
 
     pd = sub.add_parser("project-context", help="Project-specific documentation subsystem")
     pd.add_argument(
@@ -215,8 +213,8 @@ def main() -> int:
         "board-serve",
         help="Run the standalone Agent Board service (separate port).",
     )
-    abs_serve.add_argument("--host", default="127.0.0.1")
-    abs_serve.add_argument("--port", type=int, default=11437)
+    abs_serve.add_argument("--host", default=None, help="default: $BOARD_HOST or 127.0.0.1")
+    abs_serve.add_argument("--port", type=int, default=None, help="default: $BOARD_PORT or 11437")
 
     args = parser.parse_args()
 
@@ -233,7 +231,10 @@ def main() -> int:
     if args.cmd == "board-serve":
         from .agent_board.service import serve as board_serve
 
-        return board_serve(host=args.host, port=args.port)
+        # The removed serve-board.sh honoured BOARD_HOST/BOARD_PORT; keep those knobs.
+        host = args.host or os.environ.get("BOARD_HOST", "").strip() or "127.0.0.1"
+        port = args.port if args.port is not None else _env_port("BOARD_PORT", 11437)
+        return board_serve(host=host, port=port)
 
     if args.cmd == "mcp":
         from .mcp.server import run as mcp_run
@@ -305,6 +306,7 @@ def main() -> int:
         return 0
 
     if args.cmd == "serve":
+        port = args.port if args.port is not None else _env_port("KE_PORT", 9210)
         try:
             import uvicorn
         except ImportError:
@@ -324,7 +326,7 @@ def main() -> int:
         uvicorn.run(
             "knowledge_engine.app:create_app",
             host=args.host,
-            port=args.port,
+            port=port,
             factory=True,
             log_config=uvicorn_log_config(),
             **uvicorn_proxy_kwargs(),

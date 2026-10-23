@@ -60,7 +60,8 @@ def sha384_b64(data: bytes) -> str:
 
 def download(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "knowledge-engine-vendor/1"})
-    with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_S) as resp:  # noqa: S310 - pinned https URLs
+    # S310: the URLs come from the pinned ASSETS table (https only), never from input.
+    with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_S) as resp:  # noqa: S310
         return resp.read()
 
 
@@ -134,7 +135,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     action = check_asset if args.check else fetch_asset
-    ok = all([action(asset, args.vendor_dir) for asset in assets])  # noqa: C419 - run every asset
+    # C419: the list is deliberate so every asset is processed, not short-circuited.
+    ok = all([action(asset, args.vendor_dir) for asset in assets])  # noqa: C419
     if not ok:
         print("\nOne or more vendored assets failed verification.", file=sys.stderr)
         return 1

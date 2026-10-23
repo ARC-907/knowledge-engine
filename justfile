@@ -72,8 +72,8 @@ ui-test *args:
 
 # Re-download and SHA-384-verify vendored dashboard assets (Alpine.js)
 vendor:
-    python3 scripts/vendor.py
+    {{uv}} run python scripts/vendor.py
 
 # Verify the committed vendored assets match their pinned digests (offline)
 vendor-check:
-    python3 scripts/vendor.py --check
+    {{uv}} run python scripts/vendor.py --check

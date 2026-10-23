@@ -8,6 +8,8 @@ Chromium that Playwright can drive, and runs only with ``KE_UI_TESTS=1``::
 
 The engine is served by uvicorn in a background thread from ``create_app()``
 over a temporary corpus, so the test is offline and leaves no state behind.
+Set ``KE_UI_CHROMIUM=/path/to/chrome`` to force a specific Chromium binary
+instead of the one Playwright resolves from ``PLAYWRIGHT_BROWSERS_PATH``.
 """
 
 from __future__ import annotations
