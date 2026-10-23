@@ -35,6 +35,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..core import paths
+from ..core.logsafe import log_safe
 from ..runtime.foundation import db
 
 _logger = logging.getLogger(__name__)
@@ -125,10 +126,10 @@ def create_key(
     conn.commit()
     _logger.info(
         "board key created: key_id=%s label=%r master=%s created_by=%s",
-        key_id,
-        display_name,
+        log_safe(key_id),
+        log_safe(display_name),
         is_master,
-        created_by,
+        log_safe(created_by),
     )
 
     return {
@@ -245,7 +246,9 @@ def toggle_key(key_id: str) -> dict[str, Any] | None:
         (new_state, _now_iso(), key_id),
     )
     conn.commit()
-    _logger.info("board key %s: key_id=%s", "enabled" if new_state else "disabled", key_id)
+    _logger.info(
+        "board key %s: key_id=%s", "enabled" if new_state else "disabled", log_safe(key_id)
+    )
     return get_key(key_id)
 
 
@@ -263,7 +266,7 @@ def delete_key(key_id: str) -> bool:
     conn.commit()
     deleted = cursor.rowcount > 0
     if deleted:
-        _logger.info("board key revoked: key_id=%s", key_id)
+        _logger.info("board key revoked: key_id=%s", log_safe(key_id))
     return deleted
 
 
@@ -294,10 +297,10 @@ def grant_permission(
     conn.commit()
     _logger.info(
         "board permission granted: key_id=%s %s:%s=%s",
-        key_id,
-        resource_type,
-        resource_id,
-        permission,
+        log_safe(key_id),
+        log_safe(resource_type),
+        log_safe(resource_id),
+        log_safe(permission),
     )
 
     return {
@@ -317,7 +320,7 @@ def revoke_permission(perm_id: str) -> bool:
     conn.commit()
     revoked = cursor.rowcount > 0
     if revoked:
-        _logger.info("board permission revoked: perm_id=%s", perm_id)
+        _logger.info("board permission revoked: perm_id=%s", log_safe(perm_id))
     return revoked
 
 
@@ -399,7 +402,7 @@ def ensure_master_key() -> dict[str, Any] | None:
             # between the SELECT and the INSERT. Surface "already exists".
             return None
         grant_permission(key_data["key_id"], "*", "*", "admin")
-        _logger.warning("board master key bootstrapped: key_id=%s", key_data["key_id"])
+        _logger.warning("board master key bootstrapped: key_id=%s", log_safe(key_data["key_id"]))
 
         # Best-effort file write — never raise from bootstrap; the raw key
         # is still in the return value.
@@ -496,7 +499,9 @@ def authorize_key(raw_key: str | None, permission: str, resource_id: str = "*") 
         return AuthDecision.deny(401, "Invalid or expired key")
     if not check_permission(record["key_id"], "board", resource_id, permission):
         _logger.warning(
-            "board auth: key_id=%s lacks board:%s permission", record["key_id"], permission
+            "board auth: key_id=%s lacks board:%s permission",
+            log_safe(record["key_id"]),
+            log_safe(permission),
         )
         return AuthDecision.deny(403, f"Key lacks board:{permission} permission")
     return AuthDecision.allow(record["key_id"])

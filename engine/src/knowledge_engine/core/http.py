@@ -7,7 +7,7 @@
 * :class:`BodySizeLimitMiddleware` caps a streamed request body. The
   ``Content-Length`` header is a fast path only; chunked uploads are counted
   as they arrive and aborted with ``413`` the moment they exceed the cap.
-* :func:`trust_proxy_enabled` / :func:`trusted_proxies` read the
+* :func:`trust_proxy_enabled` / :func:`allowed_proxy_networks` read the
   ``X-Forwarded-For`` policy (``KE_TRUST_PROXY``, ``KE_TRUSTED_PROXIES``) that
   the board's trust gate applies, and :func:`uvicorn_proxy_kwargs` turns the
   same policy into uvicorn's ``proxy_headers`` / ``forwarded_allow_ips`` so the
@@ -124,7 +124,7 @@ def trust_proxy_enabled(env: Mapping[str, str] | None = None) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
-def trusted_proxies(env: Mapping[str, str] | None = None) -> list[IPNetwork]:
+def allowed_proxy_networks(env: Mapping[str, str] | None = None) -> list[IPNetwork]:
     """Addresses allowed to speak for their clients via `X-Forwarded-For`.
 
     Defaults to loopback: the common case is a reverse proxy on the same
@@ -151,7 +151,7 @@ def uvicorn_proxy_kwargs(env: Mapping[str, str] | None = None) -> dict[str, Any]
     from ``KE_TRUSTED_PROXIES``. ``FORWARDED_ALLOW_IPS`` is not consulted.
     """
     enabled = trust_proxy_enabled(env)
-    allow = [str(net) for net in trusted_proxies(env)] if enabled else []
+    allow = [str(net) for net in allowed_proxy_networks(env)] if enabled else []
     return {"proxy_headers": enabled, "forwarded_allow_ips": allow}
 
 

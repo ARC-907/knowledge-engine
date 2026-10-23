@@ -40,6 +40,7 @@ import re
 from pathlib import Path
 
 from ..core import paths
+from ..core.logsafe import log_safe
 from ..runtime.foundation import db
 
 _logger = logging.getLogger(__name__)
@@ -113,7 +114,10 @@ def max_scopes() -> int:
         value = int(raw)
     except ValueError:
         _logger.warning(
-            "ignoring non-integer %s=%r; using %d", MAX_SCOPES_ENV, raw, DEFAULT_MAX_SCOPES
+            "ignoring non-integer %s=%r; using %d",
+            MAX_SCOPES_ENV,
+            log_safe(raw),
+            DEFAULT_MAX_SCOPES,
         )
         return DEFAULT_MAX_SCOPES
     return max(value, 0)
@@ -146,7 +150,7 @@ def scope_db_path(scope: str, *, create: bool = False) -> str:
         if limit and existing >= limit:
             _logger.warning(
                 "refusing to create scope %r: %d scopes exist, %s=%d",
-                name,
+                log_safe(name),
                 existing,
                 MAX_SCOPES_ENV,
                 limit,
@@ -156,7 +160,7 @@ def scope_db_path(scope: str, *, create: bool = False) -> str:
                 "or remove unused scope databases"
             )
         root.mkdir(parents=True, exist_ok=True)
-        _logger.info("creating board scope %r at %s", name, target)
+        _logger.info("creating board scope %r at %s", log_safe(name), target)
     return str(target.resolve())
 
 

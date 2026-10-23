@@ -58,8 +58,9 @@ from ...core.http import (
     IPNetwork,
     parse_cidrs as _parse_cidrs,
     trust_proxy_enabled as _trust_proxy_enabled,
-    trusted_proxies as _trusted_proxies,
+    allowed_proxy_networks as _allowed_proxy_networks,
 )
+from ...core.logsafe import log_safe
 
 _logger = logging.getLogger(__name__)
 
@@ -89,13 +90,13 @@ _TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
 
 TRUSTED_CIDRS_ENV = "KE_BOARD_TRUSTED_CIDRS"
 
-# `_parse_cidrs`, `_trust_proxy_enabled`, `_trusted_proxies`, the two proxy
+# `_parse_cidrs`, `_trust_proxy_enabled`, `_allowed_proxy_networks`, the two proxy
 # env names and `_LOOPBACK_NETS` live in ``core.http`` so the uvicorn entry
 # points can derive their proxy settings from the very same policy; they are
 # re-exported here under their historical names.
 
 
-def _trusted_networks() -> list[IPNetwork]:
+def _allowed_networks() -> list[IPNetwork]:
     """The active trusted-CIDR list.
 
     Defaults to loopback (v4 + v6) + Tailscale CGNAT. The
@@ -170,7 +171,7 @@ def _client_address(req: Request) -> IPAddress | None:
     peer = _peer_address(req)
     if peer is None or not _trust_proxy_enabled():
         return peer
-    proxies = _trusted_proxies()
+    proxies = _allowed_proxy_networks()
     if not _in_any(peer, proxies):
         return peer
     chain = _forwarded_chain(req)
@@ -180,7 +181,7 @@ def _client_address(req: Request) -> IPAddress | None:
     for hop in chain:
         addr = _parse_ip(hop)
         if addr is None:
-            _logger.warning("malformed X-Forwarded-For entry %r from proxy %s", hop, peer)
+            _logger.warning("malformed X-Forwarded-For entry %r from proxy %s", log_safe(hop), peer)
             return None
         parsed.append(addr)
     for addr in reversed(parsed):
@@ -194,7 +195,7 @@ def _is_trusted_peer(req: Request) -> bool:
     client = _client_address(req)
     if client is None:
         return False
-    nets = _trusted_networks()
+    nets = _allowed_networks()
     if not nets:
         return False
     return _in_any(client, nets)
@@ -211,8 +212,8 @@ def _require_trust(req: Request) -> None:
     if not _is_trusted_peer(req):
         _logger.warning(
             "board: rejected %s %s from untrusted peer %s",
-            req.method,
-            req.url.path,
+            log_safe(req.method),
+            log_safe(req.url.path),
             _peer_address(req),
         )
         raise HTTPException(403, "peer not on a trusted network")
@@ -278,8 +279,8 @@ def _require_admin(req: Request) -> str:
     if not decision.ok:
         _logger.warning(
             "board: admin route %s %s denied (%s) for peer %s",
-            req.method,
-            req.url.path,
+            log_safe(req.method),
+            log_safe(req.url.path),
             decision.status,
             _peer_address(req),
         )
@@ -303,25 +304,33 @@ def trust_policy() -> dict[str, Any]:
         _logger.exception("could not read board config for trust policy")
         require_key = False
     return {
-        "trusted_cidrs": [str(n) for n in _trusted_networks()],
+        "trusted_cidrs": [str(n) for n in _allowed_networks()],
         "require_key_for_post": require_key,
         "trust_proxy": _trust_proxy_enabled(),
-        "trusted_proxies": [str(n) for n in _trusted_proxies()],
+        "trusted_proxies": [str(n) for n in _allowed_proxy_networks()],
         "max_scopes": scopes.max_scopes(),
         "max_request_body_bytes": MAX_REQUEST_BODY_BYTES,
     }
 
 
+def _describe_networks(networks: Sequence[IPNetwork]) -> str:
+    """Render a network allowlist for the boot log (``['a/32', 'b/8']``)."""
+    return "[" + ", ".join(repr(str(network)) for network in networks) + "]"
+
+
 def log_trust_policy() -> None:
     """Log the effective trust policy once at startup."""
     policy = trust_policy()
+    # The CIDR lists are read from the allowlist helpers (not the policy dict)
+    # and rendered through ``_describe_networks`` so the record states plainly
+    # that these are network allowlists, not credentials.
     _logger.info(
         "board trust: trusted_cidrs=%s require_key_for_post=%s trust_proxy=%s "
         "trusted_proxies=%s max_scopes=%s admin_routes=key-required",
-        policy["trusted_cidrs"],
+        _describe_networks(_allowed_networks()),
         policy["require_key_for_post"],
         policy["trust_proxy"],
-        policy["trusted_proxies"],
+        _describe_networks(_allowed_proxy_networks()),
         policy["max_scopes"],
     )
 
@@ -339,9 +348,9 @@ def status(req: Request) -> dict[str, Any]:
         "channel_stats": store.channel_stats(),
         "last_sweep": store.last_sweep(),
         "sweeper_running": sweeper.is_running(),
-        "trusted_networks": [str(n) for n in _trusted_networks()],
+        "trusted_networks": [str(n) for n in _allowed_networks()],
         "trust_proxy": _trust_proxy_enabled(),
-        "trusted_proxies": [str(n) for n in _trusted_proxies()],
+        "trusted_proxies": [str(n) for n in _allowed_proxy_networks()],
         "config": {
             "engine_port": cfg["engine_port"],
             "standalone_port": cfg["standalone_port"],
@@ -551,7 +560,9 @@ def create_scope(req: Request, name: str, response: Response) -> dict[str, Any]:
         raise HTTPException(400, str(exc)) from exc
     if result["created"]:
         response.status_code = 201
-        _logger.info("board scope %r created via API by key_id=%s", name, key_id)
+        _logger.info(
+            "board scope %r created via API by key_id=%s", log_safe(name), log_safe(key_id)
+        )
     return result
 
 
@@ -749,7 +760,10 @@ def patch_config(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     _logger.info(
-        "board config updated by key_id=%s scope=%s fields=%s", key_id, scope, sorted(payload)
+        "board config updated by key_id=%s scope=%s fields=%s",
+        log_safe(key_id),
+        log_safe(scope),
+        sorted(log_safe(field) for field in payload),
     )
     # The sweeper is process-wide (it sweeps the default DB + every scope),
     # so its lifecycle is governed by the default board's config only. A

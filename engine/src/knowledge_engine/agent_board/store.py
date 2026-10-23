@@ -24,7 +24,7 @@ import logging
 import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
@@ -107,8 +107,12 @@ def _scoped[R](fn: Callable[..., R]) -> _Scoped[R]:
     read of a scope that has none returns its empty value without touching
     the filesystem. A malformed scope name raises ``ValueError`` either way.
 
-    The wrapping is applied once at module load (see the loop near the
-    bottom of this file) so each function body stays scope-agnostic.
+    Applied as a plain decorator on every public read/write/config function
+    so each body stays scope-agnostic. Internal cross-calls (digest -> poll,
+    post -> load_config) go through the wrapped module-level names, which
+    inherit the active scope context instead of re-routing. Pure-maintenance
+    helpers used only by the sweeper (``record_sweep``, ``last_sweep``) are
+    left unwrapped: the sweeper sets the scope context itself.
     """
     creates = fn.__name__ in _SCOPE_CREATORS
     empty = _EMPTY_FOR_UNKNOWN_SCOPE.get(fn.__name__)
@@ -126,23 +130,10 @@ def _scoped[R](fn: Callable[..., R]) -> _Scoped[R]:
     return wrapper
 
 
-if TYPE_CHECKING:
-    # Static mirror of the wrapping loop at the bottom of this file: the loop
-    # rebinds names through ``globals()``, which type checkers cannot follow, so
-    # each function in ``_SCOPED_FUNCTIONS`` is marked with this decorator to give
-    # callers the ``scope=`` keyword. It is a no-op at runtime.
-    def _accepts_scope[R](fn: Callable[..., R]) -> _Scoped[R]: ...
-
-else:
-
-    def _accepts_scope(fn):
-        return fn
-
-
 # ── Config (singleton row) ─────────────────────────────────────
 
 
-@_accepts_scope
+@_scoped
 def load_config() -> dict[str, Any]:
     """Return the current board_config singleton as a dict."""
     conn = db.get_connection()
@@ -175,7 +166,7 @@ _CONFIG_INT_FIELDS = frozenset(
 )
 
 
-@_accepts_scope
+@_scoped
 def update_config(patch: dict[str, Any]) -> dict[str, Any]:
     """Apply a partial update to board_config. Returns the new state."""
     if not patch:
@@ -208,7 +199,7 @@ def update_config(patch: dict[str, Any]) -> dict[str, Any]:
 # ── Post / Read facades ────────────────────────────────────────
 
 
-@_accepts_scope
+@_scoped
 def post_with_validation(payload: dict[str, Any]) -> dict[str, Any]:
     """Schema-validate then post. Returns the created message or raises.
 
@@ -240,12 +231,12 @@ def post_with_validation(payload: dict[str, Any]) -> dict[str, Any]:
     return msg or {}
 
 
-@_accepts_scope
+@_scoped
 def read(message_id: str) -> dict[str, Any] | None:
     return mb.read_message(message_id)
 
 
-@_accepts_scope
+@_scoped
 def poll(
     since: str | None = None,
     channel: str | None = None,
@@ -266,7 +257,7 @@ def poll(
     )
 
 
-@_accepts_scope
+@_scoped
 def relevant_for(
     node_id: str,
     role: str | None = None,
@@ -286,7 +277,7 @@ def relevant_for(
 # ── Threading ──────────────────────────────────────────────────
 
 
-@_accepts_scope
+@_scoped
 def thread_messages(
     correlation_id: str | None = None,
     thread_id: str | None = None,
@@ -331,7 +322,7 @@ def _fts5_quote(query: str) -> str:
     return '"' + query.replace('"', '""') + '"'
 
 
-@_accepts_scope
+@_scoped
 def search_messages(
     query: str,
     channel: str | None = None,
@@ -421,7 +412,7 @@ _SWEEPER_NODE_ID = "board-sweeper"
 _DIGEST_SELF_TYPES = frozenset({"digest"})
 
 
-@_accepts_scope
+@_scoped
 def digest(
     channel: str | None = None,
     since: str | None = None,
@@ -508,7 +499,7 @@ def digest(
 # ── Sweeper inputs ─────────────────────────────────────────────
 
 
-@_accepts_scope
+@_scoped
 def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
     """Blockers that are requires_ack=1, unacked, and older than threshold."""
     cutoff = (datetime.now(UTC) - timedelta(hours=threshold_hours)).isoformat()
@@ -524,7 +515,7 @@ def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
     return db.rows_to_dicts(rows)
 
 
-@_accepts_scope
+@_scoped
 def ack_message(message_id: str, acker: str) -> dict[str, Any] | None:
     """Append `acker` to ack_by JSON list. Returns the updated message.
 
@@ -567,7 +558,7 @@ def ack_message(message_id: str, acker: str) -> dict[str, Any] | None:
 # ── Stats ──────────────────────────────────────────────────────
 
 
-@_accepts_scope
+@_scoped
 def channel_stats() -> list[dict[str, Any]]:
     """Per-channel counts for the dashboard."""
     conn = db.get_connection()
@@ -585,7 +576,7 @@ def channel_stats() -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-@_accepts_scope
+@_scoped
 def type_stats(channel: str | None = None) -> list[dict[str, Any]]:
     """Per-message-type counts, optionally scoped to a channel."""
     conn = db.get_connection()
@@ -604,7 +595,7 @@ def type_stats(channel: str | None = None) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-@_accepts_scope
+@_scoped
 def total_count() -> int:
     return mb.message_count()
 
@@ -612,12 +603,12 @@ def total_count() -> int:
 # ── Maintenance passthroughs ───────────────────────────────────
 
 
-@_accepts_scope
+@_scoped
 def prune_expired() -> int:
     return mb.prune_expired()
 
 
-@_accepts_scope
+@_scoped
 def prune_by_count(max_messages: int) -> int:
     return mb.prune_by_count(max_messages)
 
@@ -671,37 +662,6 @@ def _has_ack(msg: dict[str, Any]) -> bool:
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
-
-
-# ── Scope wrapping ─────────────────────────────────────────────
-# Apply @_scoped to every public read/write/config function so each gains
-# an optional keyword-only `scope=`. Done in one place so the bodies above
-# stay scope-agnostic and internal cross-calls (digest→poll, post→load_config)
-# inherit the active scope context instead of re-routing. Pure-maintenance
-# helpers used only by the sweeper (`record_sweep`, `last_sweep`) are left
-# unwrapped — the sweeper sets the scope context itself. Keep this tuple in
-# sync with the ``@_accepts_scope`` markers above (typing only).
-_SCOPED_FUNCTIONS = (
-    "load_config",
-    "update_config",
-    "post_with_validation",
-    "read",
-    "poll",
-    "relevant_for",
-    "thread_messages",
-    "search_messages",
-    "digest",
-    "get_unacked_blockers",
-    "ack_message",
-    "channel_stats",
-    "type_stats",
-    "total_count",
-    "prune_expired",
-    "prune_by_count",
-)
-for _name in _SCOPED_FUNCTIONS:
-    globals()[_name] = _scoped(globals()[_name])
-del _name
 
 
 # Convenience re-exports for callers that want flat imports.

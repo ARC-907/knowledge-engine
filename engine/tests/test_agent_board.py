@@ -402,9 +402,9 @@ def test_trust_gate_loopback_and_tailscale(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     # Default trusted set is loopback + Tailscale CGNAT.
     os.environ.pop("KE_BOARD_TRUSTED_CIDRS", None)
-    from knowledge_engine.server.api.board_routes import _trusted_networks
+    from knowledge_engine.server.api.board_routes import _allowed_networks
 
-    nets = _trusted_networks()
+    nets = _allowed_networks()
     assert any(str(n) == "127.0.0.1/32" for n in nets)
     assert any(str(n) == "::1/128" for n in nets)
     assert any(str(n) == "100.64.0.0/10" for n in nets)
@@ -414,9 +414,9 @@ def test_trust_gate_env_override(tmp_path: Path) -> None:
     _env(tmp_path / "corpus", tmp_path / "data")
     os.environ["KE_BOARD_TRUSTED_CIDRS"] = "10.0.0.0/8, 127.0.0.1/32"
     try:
-        from knowledge_engine.server.api.board_routes import _trusted_networks
+        from knowledge_engine.server.api.board_routes import _allowed_networks
 
-        nets = _trusted_networks()
+        nets = _allowed_networks()
         # Override replaces the default — Tailscale is no longer trusted.
         assert any(str(n) == "10.0.0.0/8" for n in nets)
         assert any(str(n) == "127.0.0.1/32" for n in nets)
@@ -431,8 +431,8 @@ def test_trust_gate_untrusted_peer_rejected(tmp_path: Path) -> None:
     os.environ["KE_BOARD_TRUSTED_CIDRS"] = "127.0.0.1/32,::1/128"
     try:
         from knowledge_engine.server.api.board_routes import (
+            _allowed_networks,
             _is_trusted_peer,
-            _trusted_networks,
         )
 
         class _MockReq:
@@ -442,7 +442,7 @@ def test_trust_gate_untrusted_peer_rejected(tmp_path: Path) -> None:
             client = _C()
             headers: ClassVar[dict[str, str]] = {}
 
-        assert _trusted_networks()
+        assert _allowed_networks()
         assert _is_trusted_peer(_MockReq()) is False
     finally:
         os.environ.pop("KE_BOARD_TRUSTED_CIDRS", None)
