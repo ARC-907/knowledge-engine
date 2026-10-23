@@ -40,7 +40,9 @@ def register_corpus_folders(config: Config, registry: Registry) -> dict[str, int
         if not folder.is_dir():
             continue
         try:
-            children = sorted(folder.iterdir())
+            # Sort by name (not Path): Path ordering is case-insensitive on
+            # Windows, which would make the registration order platform-dependent.
+            children = sorted(folder.iterdir(), key=lambda child: child.name)
         except OSError as exc:
             log.warning("cannot list corpus folder %s: %s", folder, exc)
             continue
