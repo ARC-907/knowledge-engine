@@ -309,6 +309,11 @@ from the first byte on POSIX. Copy it, then delete the file. Every key
 create / revoke / toggle is logged at INFO (id and label only). The board refuses to disable or delete the last enabled master so a
 routine GUI action can't lock you out (409 with a recovery hint).
 
+A key's `last_used_at` (shown by `GET /board/keys`) is refreshed at most once
+per 60 seconds per key (`keys.LAST_USED_RESOLUTION_SECONDS`), so a busy key
+does not turn every authenticated request into a database write; the value is
+accurate to that resolution.
+
 ## Sweeper
 
 Every `sweep_interval_s` seconds (default 60), the sweeper:
