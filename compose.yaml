@@ -13,15 +13,23 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # The service runs as this UID/GID inside the container. Set KE_UID/KE_GID
+      # to your own ids (KE_UID=$(id -u) KE_GID=$(id -g) docker compose build) if
+      # you want the container to write to a bind-mounted ./corpus.
+      args:
+        KE_UID: "${KE_UID:-10001}"
+        KE_GID: "${KE_GID:-10001}"
     image: knowledge-engine:local
     ports:
       # Loopback only. The engine has no built-in authentication; put a
       # reverse proxy with auth/TLS in front before exposing it further.
       - "127.0.0.1:9210:9210"
     volumes:
-      # Read-only corpus. Drop ":ro" if you want registry edits made through
-      # the dashboard/API or `knowledge-engine bootstrap` written back to
-      # ./corpus/registry.json.
+      # Read-only corpus; it must already contain registry.json (run
+      # `knowledge-engine bootstrap` once against a writable mount first).
+      # Registry edits through the dashboard/API or `bootstrap` need a writable
+      # mount AND a container user that owns ./corpus: drop ":ro" and build
+      # with KE_UID/KE_GID matching the owner of ./corpus (see above).
       - ./corpus:/data/corpus:ro
       - ke-data:/data/.knowledge-engine
     environment:

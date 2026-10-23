@@ -106,8 +106,9 @@ it's open-source software — read the code, open an issue, or fork it.
 
 ## Will there be updates?
 
-The roadmap includes in-app multi-user authentication. Versioning follows semver across the engine package, MCP
-protocol, and registry schema — see [CHANGELOG.md](../02-dev-docs/CHANGELOG.md).
+The roadmap includes in-app multi-user authentication. Versioning follows
+semver across the engine package, MCP protocol, and registry schema — see
+[CHANGELOG.md](../02-dev-docs/CHANGELOG.md).
 
 ## Something's broken / behaving oddly
 
