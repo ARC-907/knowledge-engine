@@ -60,6 +60,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     board_sweeper: ModuleType | None = None
     if env_truthy("KE_BOARD_ENABLED", default=True):
         try:
+            from .api import board_routes  # noqa: PLC0415
+
+            board_routes.log_trust_policy()
+        except Exception:
+            _logger.exception("could not log board trust policy; continuing")
+        try:
             # Optional subsystem, imported lazily so a broken board never blocks boot.
             from ..agent_board import sweeper as _sweeper  # noqa: PLC0415
 

@@ -6,6 +6,23 @@ import os
 from pathlib import Path
 from typing import ClassVar
 
+# The board judges the real socket peer, so the test client must present a
+# loopback address (Starlette's default is the literal "testclient").
+LOOPBACK = ("127.0.0.1", 50000)
+
+
+def _admin_headers() -> dict[str, str]:
+    """Bootstrap a master key directly in the vault and return its header.
+
+    Admin routes always require a key with ``board:admin``; tests that hit
+    them call this first.
+    """
+    from knowledge_engine.agent_board import keys
+
+    master = keys.ensure_master_key()
+    assert master is not None
+    return {"X-Board-Key": master["raw_key"]}
+
 
 def _env(corpus: Path, data: Path) -> None:
     """Point the engine at a tmp corpus + tmp data dir + per-test pipeline DB.
@@ -272,7 +289,7 @@ def test_board_http_status_and_post(tmp_path: Path) -> None:
     from knowledge_engine.app import create_app
 
     app = create_app()
-    with TestClient(app) as client:
+    with TestClient(app, client=LOOPBACK) as client:
         r = client.get("/board/status")
         assert r.status_code == 200
         body = r.json()
@@ -306,7 +323,7 @@ def test_board_http_rejects_invalid_payload(tmp_path: Path) -> None:
     from knowledge_engine.app import create_app
 
     app = create_app()
-    with TestClient(app) as client:
+    with TestClient(app, client=LOOPBACK) as client:
         r = client.post("/board/messages", json={"channel": "ops"})
         assert r.status_code == 400
         assert "message_type" in r.json()["detail"]
@@ -320,7 +337,7 @@ def test_board_http_search_route(tmp_path: Path) -> None:
     from knowledge_engine.app import create_app
 
     app = create_app()
-    with TestClient(app) as client:
+    with TestClient(app, client=LOOPBACK) as client:
         client.post(
             "/board/messages",
             json={
@@ -594,7 +611,7 @@ def test_http_request_body_size_cap(tmp_path: Path) -> None:
     from knowledge_engine.app import create_app
 
     app = create_app()
-    with TestClient(app) as client:
+    with TestClient(app, client=LOOPBACK) as client:
         oversized_body = "x" * 10
         # Forge a content-length header far above the cap; the middleware
         # rejects before parsing the body.
@@ -690,7 +707,7 @@ def test_http_status_route_rejects_untrusted(tmp_path: Path) -> None:
         from knowledge_engine.app import create_app
 
         app = create_app()
-        with TestClient(app) as client:
+        with TestClient(app, client=LOOPBACK) as client:
             r = client.get("/board/status")
             assert r.status_code == 403
     finally:
@@ -909,10 +926,11 @@ def test_http_toggle_last_master_returns_409(tmp_path: Path) -> None:
 
     master = keys.ensure_master_key()
     assert master is not None
+    headers = {"X-Board-Key": master["raw_key"]}
 
     app = create_app()
-    with TestClient(app) as client:
-        r = client.patch(f"/board/keys/{master['key_id']}/toggle")
+    with TestClient(app, client=LOOPBACK) as client:
+        r = client.patch(f"/board/keys/{master['key_id']}/toggle", headers=headers)
         assert r.status_code == 409, r.text
         assert "last enabled master" in r.json()["detail"]
 
@@ -928,10 +946,11 @@ def test_http_delete_last_master_returns_409(tmp_path: Path) -> None:
 
     master = keys.ensure_master_key()
     assert master is not None
+    headers = {"X-Board-Key": master["raw_key"]}
 
     app = create_app()
-    with TestClient(app) as client:
-        r = client.request("DELETE", f"/board/keys/{master['key_id']}")
+    with TestClient(app, client=LOOPBACK) as client:
+        r = client.request("DELETE", f"/board/keys/{master['key_id']}", headers=headers)
         assert r.status_code == 409, r.text
         assert "last enabled master" in r.json()["detail"]
 
@@ -1009,7 +1028,7 @@ def test_lifespan_starts_and_stops_cleanly(tmp_path: Path) -> None:
     from knowledge_engine.app import create_app
 
     app = create_app()
-    with TestClient(app) as client:
+    with TestClient(app, client=LOOPBACK) as client:
         assert client.get("/health").status_code == 200
         # Sweeper should be running while the app is in scope.
         assert sweeper.is_running()
@@ -1142,7 +1161,7 @@ def test_http_scope_isolation(tmp_path: Path) -> None:
     from knowledge_engine.app import create_app
 
     app = create_app()
-    with TestClient(app) as client:
+    with TestClient(app, client=LOOPBACK) as client:
         r = client.post(
             "/board/messages?scope=proj-a",
             json={
@@ -1172,7 +1191,7 @@ def test_http_post_scope_in_body(tmp_path: Path) -> None:
     from knowledge_engine.app import create_app
 
     app = create_app()
-    with TestClient(app) as client:
+    with TestClient(app, client=LOOPBACK) as client:
         r = client.post(
             "/board/messages",
             json={
@@ -1290,19 +1309,24 @@ def test_provider_registry_empty_by_default(tmp_path: Path) -> None:
 
 
 def test_http_both_vaults_empty_on_fresh_install(tmp_path: Path) -> None:
-    """GET /board/keys and /board/providers both empty on a fresh engine."""
+    """GET /board/keys and /board/providers both empty on a fresh engine.
+
+    The vault routes are admin-only, so the master key is bootstrapped
+    first; ``GET /board/keys`` hides master keys, so the list is still empty.
+    """
     _env(tmp_path / "corpus", tmp_path / "data")
     from fastapi.testclient import TestClient
 
     from knowledge_engine.app import create_app
 
+    headers = _admin_headers()
     app = create_app()
-    with TestClient(app) as client:
-        rk = client.get("/board/keys")
+    with TestClient(app, client=LOOPBACK) as client:
+        rk = client.get("/board/keys", headers=headers)
         assert rk.status_code == 200, rk.text
         assert rk.json() == []
 
-        rp = client.get("/board/providers")
+        rp = client.get("/board/providers", headers=headers)
         assert rp.status_code == 200, rp.text
         body = rp.json()
         assert body["providers"] == []
@@ -1397,8 +1421,9 @@ def test_http_provider_register_and_remove(tmp_path: Path) -> None:
 
     from knowledge_engine.app import create_app
 
+    headers = _admin_headers()
     app = create_app()
-    with TestClient(app) as client:
+    with TestClient(app, client=LOOPBACK, headers=headers) as client:
         r = client.post(
             "/board/providers",
             json={
