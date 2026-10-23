@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -34,8 +33,12 @@ def resolve_log_level(env: Mapping[str, str] | None = None) -> str:
     Unknown names are reported at WARNING and replaced by the default rather
     than aborting startup over a typo.
     """
-    source = os.environ if env is None else env
-    raw = source.get(LOG_LEVEL_ENV, "").strip().upper()
+    if env is None:
+        # The typed settings layer validates the level (and warns) itself.
+        from .settings import Settings  # noqa: PLC0415 - keep this module import-light
+
+        return Settings().log_level
+    raw = env.get(LOG_LEVEL_ENV, "").strip().upper()
     if not raw:
         return DEFAULT_LOG_LEVEL
     if raw in logging.getLevelNamesMapping():

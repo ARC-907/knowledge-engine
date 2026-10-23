@@ -21,11 +21,16 @@ import json
 import logging
 import os
 from collections.abc import Awaitable, Callable, Mapping, MutableMapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
+
+from .settings import env_flag
+
+if TYPE_CHECKING:
+    from .settings import Settings
 
 _logger = logging.getLogger(__name__)
 
@@ -54,7 +59,12 @@ def cors_origins(env_var: str, env: Mapping[str, str] | None = None) -> list[str
     list of origins, trimmed, blanks dropped.
     """
     source = os.environ if env is None else env
-    raw = source.get(env_var, "").strip()
+    return parse_cors_origins(source.get(env_var, ""))
+
+
+def parse_cors_origins(raw: str | None) -> list[str]:
+    """Parse a raw CORS allow-list value (see :func:`cors_origins`)."""
+    raw = (raw or "").strip()
     if not raw:
         return list(DEFAULT_CORS_ORIGINS)
     if raw == "*":
@@ -117,14 +127,30 @@ def parse_cidrs(raw: str | None) -> list[IPNetwork]:
     return out
 
 
-def trust_proxy_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """``KE_TRUST_PROXY`` is truthy (``1``/``true``/``yes``/``on``)."""
-    source = os.environ if env is None else env
-    raw = source.get(TRUST_PROXY_ENV, "")
-    return raw.strip().lower() in ("1", "true", "yes", "on")
+def trust_proxy_enabled(
+    env: Mapping[str, str] | None = None, *, settings: Settings | None = None
+) -> bool:
+    """``KE_TRUST_PROXY`` is truthy (``1``/``true``/``yes``/``on``).
+
+    Reads ``env`` when given, else ``settings`` (default: the current
+    environment through :class:`~knowledge_engine.core.settings.Settings`).
+    """
+    if env is not None:
+        return env_flag(env.get(TRUST_PROXY_ENV), default=False)
+    return _settings(settings).trust_proxy
 
 
-def allowed_proxy_networks(env: Mapping[str, str] | None = None) -> list[IPNetwork]:
+def _settings(settings: Settings | None) -> Settings:
+    if settings is not None:
+        return settings
+    from .settings import Settings  # noqa: PLC0415 - avoid a module-level cycle
+
+    return Settings()
+
+
+def allowed_proxy_networks(
+    env: Mapping[str, str] | None = None, *, settings: Settings | None = None
+) -> list[IPNetwork]:
     """Addresses allowed to speak for their clients via `X-Forwarded-For`.
 
     Defaults to loopback: the common case is a reverse proxy on the same
@@ -132,14 +158,15 @@ def allowed_proxy_networks(env: Mapping[str, str] | None = None) -> list[IPNetwo
     for proxies elsewhere on the mesh. Every address listed here is trusted
     to append `X-Forwarded-For` honestly.
     """
-    source = os.environ if env is None else env
-    raw = source.get(TRUSTED_PROXIES_ENV)
+    raw = env.get(TRUSTED_PROXIES_ENV) if env is not None else _settings(settings).trusted_proxies
     if raw is not None:
         return parse_cidrs(raw)
     return list(LOOPBACK_NETS)
 
 
-def uvicorn_proxy_kwargs(env: Mapping[str, str] | None = None) -> dict[str, Any]:
+def uvicorn_proxy_kwargs(
+    env: Mapping[str, str] | None = None, *, settings: Settings | None = None
+) -> dict[str, Any]:
     """``uvicorn.run`` keyword arguments matching the app's forwarding policy.
 
     uvicorn defaults to ``proxy_headers=True`` with loopback as the trusted
@@ -150,8 +177,10 @@ def uvicorn_proxy_kwargs(env: Mapping[str, str] | None = None) -> dict[str, Any]
     headers are honoured only when ``KE_TRUST_PROXY`` is on, and then only
     from ``KE_TRUSTED_PROXIES``. ``FORWARDED_ALLOW_IPS`` is not consulted.
     """
-    enabled = trust_proxy_enabled(env)
-    allow = [str(net) for net in allowed_proxy_networks(env)] if enabled else []
+    if env is None:
+        settings = _settings(settings)
+    enabled = trust_proxy_enabled(env, settings=settings)
+    allow = [str(net) for net in allowed_proxy_networks(env, settings=settings)] if enabled else []
     return {"proxy_headers": enabled, "forwarded_allow_ips": allow}
 
 
@@ -286,6 +315,7 @@ __all__ = [
     "cors_origins",
     "install_cors",
     "parse_cidrs",
+    "parse_cors_origins",
     "trust_proxy_enabled",
     "uvicorn_proxy_kwargs",
 ]
