@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import importlib.metadata
 from pathlib import Path
+from typing import Any
 
+import anyio
 import pytest
 from fastapi.testclient import TestClient
+from mcp import Client
 
 DIST_VERSION = importlib.metadata.version("knowledge-engine")
 
@@ -42,12 +45,24 @@ def test_health_info_and_openapi_report_distribution_version() -> None:
 
 @pytest.mark.usefixtures("engine_env")
 def test_mcp_server_info_reports_distribution_version() -> None:
-    from knowledge_engine.mcp.server import Server
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry
+    from knowledge_engine.mcp.server import build_server
+    from knowledge_engine.retrieval.fts5 import Indexer
 
-    resp = Server().handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    config = Config.from_env()
+    config.ensure_dirs()
+    registry = Registry(config.registry_path, config.data_dir / "registry.db")
+    server = build_server(config, registry, Indexer(config, registry), include_groups=False)
 
-    assert resp is not None
-    assert resp["result"]["serverInfo"] == {"name": "knowledge-engine", "version": DIST_VERSION}
+    async def server_info() -> Any:
+        async with Client(server) as client:
+            return client.server_info
+
+    info = anyio.run(server_info)
+
+    assert info is not None
+    assert (info.name, info.version) == ("knowledge-engine", DIST_VERSION)
 
 
 @pytest.mark.usefixtures("engine_env")

@@ -69,6 +69,7 @@ def test_server_merges_without_breaking_base(tmp_path: Path, monkeypatch) -> Non
     from knowledge_engine.retrieval.fts5 import Indexer
 
     config = Config.from_env()
+    config.ensure_dirs()  # Config.from_env() never touches the filesystem.
     registry = Registry(config.registry_path, config.data_dir / "registry.db")
     server = build_server(config, registry, Indexer(config, registry))
     names = {t.name for t in anyio.run(server.list_tools)}
