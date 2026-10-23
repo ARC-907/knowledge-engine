@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org)
 [![Status: v2.0](https://img.shields.io/badge/status-v2.0-blue.svg)](02-dev-docs/CHANGELOG.md)
-[![MCP protocol](https://img.shields.io/badge/MCP-2024--11--05-7C3AED.svg)](https://modelcontextprotocol.io)
+[![MCP protocol](https://img.shields.io/badge/MCP-2026--07--28-7C3AED.svg)](https://modelcontextprotocol.io)
 ![FTS5 + bge-m3](https://img.shields.io/badge/search-FTS5%20%2B%20bge--m3-003B57.svg?logo=sqlite&logoColor=white)
 
 > Self-hosted knowledge engine for your markdown notes. Search them from Claude Desktop, Cursor, or any MCP client. Run the dashboard locally, point it at your own corpus.
@@ -47,7 +47,7 @@ If `corpus/registry.json` references a library that isn't present in `corpus/`, 
 ## What's in the box
 
 - FastAPI app with health, info, search, registry, generation, and board routes; single-file Alpine.js + Tailwind dashboard at `/ui/`
-- MCP stdio server (JSON-RPC 2.0, protocol `2024-11-05`) — compatible with Claude Desktop, Cursor, Continue, any MCP client
+- MCP server on the official MCP Python SDK (stdio or streamable HTTP; protocol `2026-07-28`, `initialize` clients back to `2024-11-05`) — compatible with Claude Desktop, Cursor, Continue, any MCP client
 - SQLite FTS5 indexer with `bm25` ranking + snippet highlighting; optional bge-m3 embedding index for semantic search
 - Pluggable provider abstraction (echo / Ollama / cloud HTTP stub) for generation routing
 - Project-context, agent-board, hosted-tool, and sandbox substrates that you can populate with your own projects and agents
@@ -56,7 +56,9 @@ If `corpus/registry.json` references a library that isn't present in `corpus/`, 
 ## MCP server
 
 ```pwsh
-knowledge-engine mcp   # JSON-RPC 2.0 over stdio, protocol 2024-11-05
+knowledge-engine mcp              # stdio; protocol 2026-07-28 (initialize clients back to 2024-11-05)
+knowledge-engine mcp --http       # streamable HTTP at http://127.0.0.1:9211/mcp
+knowledge-engine mcp --selftest   # build the server, list its tools, exit 0
 ```
 
 The base tools are `search`, `registry_list`, `registry_toggle`, and

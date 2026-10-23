@@ -9,8 +9,11 @@ for the three most common MCP clients.
 
 ## What the MCP server is
 
-`knowledge-engine mcp` runs a JSON-RPC 2.0 server speaking MCP protocol
-`2024-11-05` over stdio. It exposes four tools:
+`knowledge-engine mcp` runs an MCP server, built on the official MCP Python
+SDK, speaking protocol `2026-07-28` over stdio; clients that still use the
+`initialize` handshake get their own revision, back to `2024-11-05`. Add
+`--http` to serve streamable HTTP at `http://127.0.0.1:9211/mcp` instead. It
+exposes four base tools:
 
 | Tool | What it does |
 | --- | --- |
@@ -25,15 +28,15 @@ stdout. You never start it yourself — the client manages its lifecycle.
 ## Before you start: confirm the server runs
 
 Make sure the engine is installed (see [QUICKSTART.md](QUICKSTART.md)) and
-indexed (`knowledge-engine reindex`). Then sanity-check the MCP server by
-piping a request into it:
+indexed (`knowledge-engine reindex`). Then sanity-check the MCP server:
 
 ```pwsh
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}' | knowledge-engine mcp
+knowledge-engine mcp --selftest
 ```
 
-You should get back a single JSON line with `"protocolVersion": "2024-11-05"`.
-If that works, the server is healthy and the only thing left is client config.
+It builds the server, lists its tools over an in-process session and prints a
+JSON summary with `"ok": true` (exit code 0). If that works, the server is
+healthy and the only thing left is client config.
 
 ## The two paths you need
 
@@ -48,7 +51,9 @@ Replace `ABSOLUTE_PATH` in every example with your repo root. Use the full path
 with no `~` and no environment variables — MCP clients do not expand them.
 
 `scripts/mcp-client-config.example.json` in this repo is a ready-to-edit
-starting point.
+starting point. It launches the server as `uvx knowledge-engine mcp` (or
+`knowledge-engine mcp` when the console script is on your `PATH`); the
+examples below use the virtualenv's Python so no extra tooling is needed.
 
 ---
 
@@ -69,7 +74,7 @@ If the file doesn't exist, create it. Add a `knowledge-engine` entry under
   "mcpServers": {
     "knowledge-engine": {
       "command": "ABSOLUTE_PATH\\engine\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "knowledge_engine.mcp_server"],
+      "args": ["-m", "knowledge_engine.mcp.server"],
       "env": {
         "KE_CORPUS_ROOT": "ABSOLUTE_PATH\\corpus",
         "KE_DATA_DIR": "ABSOLUTE_PATH\\engine\\data",
@@ -87,7 +92,7 @@ If the file doesn't exist, create it. Add a `knowledge-engine` entry under
   "mcpServers": {
     "knowledge-engine": {
       "command": "ABSOLUTE_PATH/engine/.venv/bin/python",
-      "args": ["-m", "knowledge_engine.mcp_server"],
+      "args": ["-m", "knowledge_engine.mcp.server"],
       "env": {
         "KE_CORPUS_ROOT": "ABSOLUTE_PATH/corpus",
         "KE_DATA_DIR": "ABSOLUTE_PATH/engine/data",
@@ -122,7 +127,7 @@ Cursor reads MCP servers from a `mcp.json` file.
   "mcpServers": {
     "knowledge-engine": {
       "command": "ABSOLUTE_PATH/engine/.venv/bin/python",
-      "args": ["-m", "knowledge_engine.mcp_server"],
+      "args": ["-m", "knowledge_engine.mcp.server"],
       "env": {
         "KE_CORPUS_ROOT": "ABSOLUTE_PATH/corpus",
         "KE_DATA_DIR": "ABSOLUTE_PATH/engine/data",
@@ -157,7 +162,7 @@ mcpServers:
     command: ABSOLUTE_PATH/engine/.venv/bin/python
     args:
       - "-m"
-      - "knowledge_engine.mcp_server"
+      - "knowledge_engine.mcp.server"
     env:
       KE_CORPUS_ROOT: ABSOLUTE_PATH/corpus
       KE_DATA_DIR: ABSOLUTE_PATH/engine/data
@@ -172,7 +177,7 @@ mcpServers:
     {
       "name": "knowledge-engine",
       "command": "ABSOLUTE_PATH/engine/.venv/bin/python",
-      "args": ["-m", "knowledge_engine.mcp_server"],
+      "args": ["-m", "knowledge_engine.mcp.server"],
       "env": {
         "KE_CORPUS_ROOT": "ABSOLUTE_PATH/corpus",
         "KE_DATA_DIR": "ABSOLUTE_PATH/engine/data",
@@ -193,8 +198,10 @@ the agent.
 The pattern is identical everywhere. The server is launched as:
 
 ```
-<venv-python>  -m  knowledge_engine.mcp_server
+<venv-python>  -m  knowledge_engine.mcp.server
 ```
+
+(or, equivalently, `knowledge-engine mcp` / `uvx knowledge-engine mcp`)
 
 with these environment variables set:
 
@@ -215,17 +222,15 @@ answer is only in your corpus, and watch it call `search`. With the shipped
 demo corpus, *"use the knowledge engine to find the demo applied example"*
 should return a hit from the demo library.
 
-You can also reproduce the full MCP handshake from a terminal:
+You can also exercise the server from a terminal without any client:
 
 ```pwsh
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}' | knowledge-engine mcp
-echo '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | knowledge-engine mcp
-echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search","arguments":{"query":"decision"}}}' | knowledge-engine mcp
+knowledge-engine mcp --selftest
 ```
 
-Each line should print a valid JSON-RPC response. If those work but the client
-doesn't, the problem is in the client config — almost always a wrong absolute
-path.
+It prints a JSON summary (`"ok": true`, the negotiated protocol version and
+the tool names) and exits 0. If that works but the client doesn't, the problem
+is in the client config — almost always a wrong absolute path.
 
 ## Troubleshooting
 
