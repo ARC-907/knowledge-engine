@@ -27,11 +27,14 @@ import logging
 import os
 import sqlite3
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ...core.paths import ensure_within
 from ...core.util.time import utc_now_iso
 from .. import ingest, pointers
+from ..models import DocRecord
 from ..schema import CATEGORY_DOCSTRING, POINTER_DOCSTRING
 from . import validators
 from .pointer_plan import BACKUP_SUFFIX, _parse_span, stub_for
@@ -223,6 +226,28 @@ def run(
     }
 
 
+@dataclass(frozen=True)
+class _ApplyContext:
+    """Everything one plan item needs besides the item itself."""
+
+    root: str
+    cfg: Any
+    project_conn: sqlite3.Connection
+    registry_conn: sqlite3.Connection
+    plan_id: str
+    project_fp: str
+    branch_fp: str
+
+
+class _ItemError(Exception):
+    """A plan item failed; ``reason`` is recorded in the ledger and the result."""
+
+    def __init__(self, reason: str, recorded_target: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.recorded_target = recorded_target
+
+
 def _apply_item(
     item: dict,
     root: str,
@@ -234,139 +259,177 @@ def _apply_item(
     project_fp: str,
     branch_fp: str,
 ) -> dict:
-    """Apply one plan item; return a result dict carrying a ``_bucket`` tag."""
+    """Apply one plan item; return a result dict carrying a ``_bucket`` tag.
+
+    Steps: resolve + contain the paths, read the source, ingest the
+    docstring and allocate its pointer, back up and rewrite the file, then
+    verify the pointer and record the outcome in the ledger.
+    """
     target_file = item.get("target_file")
     start, end = _parse_span(item.get("span"))
     if not target_file or start is None or end is None:
         return {"_bucket": "skipped", "target_file": target_file, "reason": "incomplete_item"}
 
-    def _error(reason: str, recorded_target: str) -> dict:
+    ctx = _ApplyContext(root, cfg, project_conn, registry_conn, plan_id, project_fp, branch_fp)
+    try:
+        path, backup_target = _contained_paths(ctx, str(target_file))
+        original_bytes, original = _read_source(ctx, path)
+        _check_span(path, original, start, end)
+    except _ItemError as exc:
         _record_event(
             project_conn,
             plan_id=plan_id,
             pointer_id=None,
             action="error",
             backup_path=None,
-            result=reason,
-            target_file=recorded_target,
+            result=exc.reason,
+            target_file=exc.recorded_target,
         )
-        return {"_bucket": "errors", "target_file": target_file, "reason": reason}
+        return {"_bucket": "errors", "target_file": target_file, "reason": exc.reason}
 
+    rec, pointer_id = _ingest_and_allocate(ctx, str(target_file), original, start, end)
+    backup_path = _rewrite_with_stub(
+        path, original, original_bytes, backup_target, start, end, pointer_id, rec.content_hash
+    )
+    return _verify_and_record(ctx, target_file, path, rec, pointer_id, backup_path)
+
+
+def _contained_paths(ctx: _ApplyContext, target_file: str) -> tuple[Path, Path | None]:
+    """Resolve the source file (and its backup) under the project root."""
     try:
-        path = _ensure_within(root, str(target_file))
+        path = _ensure_within(ctx.root, target_file)
     except ValueError as exc:
         logger.warning(
             "pointer_apply plan %s: refusing target %r outside root %s: %s",
-            plan_id,
+            ctx.plan_id,
             target_file,
-            root,
+            ctx.root,
             exc,
         )
-        return _error("path_outside_root", str(target_file))
+        raise _ItemError("path_outside_root", target_file) from exc
 
     if not path.is_file():
-        return _error("source_file_not_found", str(path))
+        raise _ItemError("source_file_not_found", str(path))
 
     backup_target: Path | None = None
-    if cfg.scanner.pointer_replacement.write_backups:
+    if ctx.cfg.scanner.pointer_replacement.write_backups:
         try:
-            backup_target = _ensure_within(root, str(path) + BACKUP_SUFFIX)
+            backup_target = _ensure_within(ctx.root, str(path) + BACKUP_SUFFIX)
         except ValueError as exc:
             logger.warning(
                 "pointer_apply plan %s: refusing backup for %r outside root %s: %s",
-                plan_id,
+                ctx.plan_id,
                 target_file,
-                root,
+                ctx.root,
                 exc,
             )
-            return _error("backup_path_outside_root", str(path))
+            raise _ItemError("backup_path_outside_root", str(path)) from exc
+    return path, backup_target
 
-    # Read raw bytes for a byte-exact backup, and a decoded copy for span work.
+
+def _read_source(ctx: _ApplyContext, path: Path) -> tuple[bytes, str]:
+    """Raw bytes (for a byte-exact backup) and the decoded text (for span work)."""
     try:
         original_bytes = path.read_bytes()
     except OSError as exc:
-        logger.warning("pointer_apply plan %s: cannot read %s: %s", plan_id, path, exc)
-        return _error("source_file_unreadable", str(path))
+        logger.warning("pointer_apply plan %s: cannot read %s: %s", ctx.plan_id, path, exc)
+        raise _ItemError("source_file_unreadable", str(path)) from exc
     try:
         original = original_bytes.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
-        logger.warning("pointer_apply plan %s: %s is not valid UTF-8: %s", plan_id, path, exc)
-        return _error("source_not_utf8", str(path))
+        logger.warning("pointer_apply plan %s: %s is not valid UTF-8: %s", ctx.plan_id, path, exc)
+        raise _ItemError("source_not_utf8", str(path)) from exc
+    return original_bytes, original
 
+
+def _check_span(path: Path, original: str, start: int, end: int) -> None:
     line_count = len(original.splitlines())
     if start < 1 or end > line_count or start > end:
-        return _error("span_out_of_range", str(path))
+        raise _ItemError("span_out_of_range", str(path))
 
-    # Ingest the docstring body as a first-class record (computes its own hash).
+
+def _ingest_and_allocate(
+    ctx: _ApplyContext, target_file: str, original: str, start: int, end: int
+) -> tuple[DocRecord, str]:
+    """Ingest the docstring as a record, allocate its pointer, mark it applied."""
     docstring_body = "\n".join(original.splitlines()[start - 1 : end])
     rec = ingest.ingest_record(
-        project_conn,
-        registry_conn,
-        project_fp=project_fp,
-        branch_fp=branch_fp,
+        ctx.project_conn,
+        ctx.registry_conn,
+        project_fp=ctx.project_fp,
+        branch_fp=ctx.branch_fp,
         source_path=target_file,
         category=CATEGORY_DOCSTRING,
         subtype="docstring",
         text=docstring_body,
-        cfg=cfg,
+        cfg=ctx.cfg,
     )
-
-    # Allocate the pointer and mark it applied.
     pointer_id = pointers.allocate(
-        project_conn,
+        ctx.project_conn,
         rec.record_id,
         POINTER_DOCSTRING,
-        project_fp,
-        branch_fp,
+        ctx.project_fp,
+        ctx.branch_fp,
         target_file,
         [start, end],
         rec.content_hash,
     )
-    project_conn.execute(
+    ctx.project_conn.execute(
         "UPDATE doc_pointers SET status = 'applied' WHERE pointer_id = ?",
         (pointer_id,),
     )
-    project_conn.commit()
+    ctx.project_conn.commit()
+    return rec, pointer_id
 
-    # Backup (byte-exact), then atomically replace the span with the stub.
+
+def _rewrite_with_stub(
+    path: Path,
+    original: str,
+    original_bytes: bytes,
+    backup_target: Path | None,
+    start: int,
+    end: int,
+    pointer_id: str,
+    content_hash: str,
+) -> str | None:
+    """Back up (byte-exact), then atomically replace the span with the stub."""
     backup_path: str | None = None
     if backup_target is not None:
         backup_path = str(backup_target)
         backup_target.write_bytes(original_bytes)
-
-    stub = stub_for(pointer_id, rec.content_hash)
+    stub = stub_for(pointer_id, content_hash)
     _atomic_write(path, _replace_span(original, start, end, stub))
+    return backup_path
 
-    # Verify the pointer resolves to the same content hash.
-    resolved = pointers.resolve(project_conn, pointer_id)
-    if resolved is None or resolved.get("content_hash") != rec.content_hash:
-        _record_event(
-            project_conn,
-            plan_id=plan_id,
-            pointer_id=pointer_id,
-            action="error",
-            backup_path=backup_path,
-            result="pointer_did_not_resolve",
-            target_file=str(path),
-            root=str(Path(root).resolve()),
-        )
+
+def _verify_and_record(
+    ctx: _ApplyContext,
+    target_file: object,
+    path: Path,
+    rec: DocRecord,
+    pointer_id: str,
+    backup_path: str | None,
+) -> dict:
+    """Check the pointer resolves to the same content hash; ledger the outcome."""
+    resolved = pointers.resolve(ctx.project_conn, pointer_id)
+    ok = resolved is not None and resolved.get("content_hash") == rec.content_hash
+    _record_event(
+        ctx.project_conn,
+        plan_id=ctx.plan_id,
+        pointer_id=pointer_id,
+        action="apply" if ok else "error",
+        backup_path=backup_path,
+        result="ok" if ok else "pointer_did_not_resolve",
+        target_file=str(path),
+        root=str(Path(ctx.root).resolve()),
+    )
+    if not ok:
         return {
             "_bucket": "errors",
             "target_file": target_file,
             "reason": "pointer_did_not_resolve",
             "pointer_id": pointer_id,
         }
-
-    _record_event(
-        project_conn,
-        plan_id=plan_id,
-        pointer_id=pointer_id,
-        action="apply",
-        backup_path=backup_path,
-        result="ok",
-        target_file=str(path),
-        root=str(Path(root).resolve()),
-    )
     return {
         "_bucket": "applied",
         "target_file": target_file,
