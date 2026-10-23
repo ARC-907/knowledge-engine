@@ -11,7 +11,7 @@ configuration from a ``Settings`` instance instead of ``os.environ``.
 A few substrate modules still read their own variables directly, deep inside
 code that predates this layer (``runtime.foundation.config``/``db``,
 ``runtime.pipeline.task_classifier``, ``project_context.config``,
-``retrieval.embeddings.build``, ``agent_board.scopes`` and ``mcp.http``;
+``agent_board.scopes`` and ``mcp.http``;
 flags and lists among them use the shared parsers in ``core.util.env``).
 Those variables are declared here too, so
 ``knowledge-engine config show`` and ``01-user-docs/CONFIGURATION.md`` list
@@ -61,12 +61,16 @@ _logger = logging.getLogger(__name__)
 ENV_PREFIX = "KE_"
 MASK = "********"
 
+#: Values accepted by ``KE_EMBED_PROVIDER`` (and ``--provider`` of the embeddings CLI).
+EMBED_PROVIDERS = ("ollama", "remote", "fake")
+
 # Section keys, in the order the generated reference lists them.
 SECTIONS: dict[str, str] = {
     "paths": "Paths",
     "server": "HTTP server",
     "board": "Agent board",
     "generation": "Generation providers",
+    "embeddings": "Embeddings (semantic and hybrid search)",
     "substrate": "Pipeline and substrates",
 }
 
@@ -397,6 +401,65 @@ class Settings(BaseSettings):
         secret=True,
     )
 
+    # ── Embeddings (corpus embedding index, hybrid search) ───────
+    embed_provider: str = _env(
+        "KE_EMBED_PROVIDER",
+        "ollama",
+        "Embedding provider of the corpus embedding index: `ollama` (local Ollama at "
+        "KE_OLLAMA_URL), `remote` (KE_EMBED_REMOTE_URL; needs KE_EMBED_ALLOW_REMOTE=1) or "
+        "`fake` (offline, deterministic; tests and dry runs).",
+        section="embeddings",
+        read_by="retrieval.embeddings.factory",
+    )
+    embed_model: str = _env(
+        "KE_EMBED_MODEL",
+        "bge-m3:latest",
+        "Embedding model (bge-m3 by default). The index records it and refuses vectors "
+        "of another model; rebuild with `knowledge-engine embeddings build --rebuild` "
+        "after changing it.",
+        section="embeddings",
+        read_by="retrieval.embeddings.factory",
+    )
+    embed_batch: int = _env(
+        "KE_EMBED_BATCH",
+        32,
+        "Texts sent per embedding request while building the index.",
+        section="embeddings",
+        read_by="retrieval.embeddings.factory",
+        ge=1,
+        le=1024,
+    )
+    ollama_url: str = _env(
+        "KE_OLLAMA_URL",
+        "http://127.0.0.1:11434",
+        "Ollama server of the `ollama` embedding provider.",
+        section="embeddings",
+        read_by="retrieval.embeddings.factory",
+    )
+    embed_remote_url: str = _env(
+        "KE_EMBED_REMOTE_URL",
+        "",
+        "Endpoint of the `remote` embedding provider (POST {model, input} per text; "
+        "answers {embedding} or {embeddings}).",
+        section="embeddings",
+        read_by="retrieval.embeddings.factory",
+    )
+    embed_allow_remote: EnvBool = _env(
+        "KE_EMBED_ALLOW_REMOTE",
+        False,
+        "Opt-in gate of the `remote` embedding provider: corpus text is sent off-machine "
+        "only when this is on.",
+        section="embeddings",
+        read_by="retrieval.embeddings.factory",
+    )
+    embeddings_db: str | None = _env(
+        "KE_EMBEDDINGS_DB",
+        None,
+        "Corpus embedding index (SQLite). Unset: <data_dir>/embeddings.db.",
+        section="embeddings",
+        read_by="retrieval.embeddings.factory",
+    )
+
     # ── Pipeline and substrates (read directly by those modules) ──
     pipeline_db: str | None = _env(
         "KE_PIPELINE_DB",
@@ -441,28 +504,6 @@ class Settings(BaseSettings):
         section="substrate",
         read_by="runtime.pipeline.task_classifier",
     )
-    ollama_url: str = _env(
-        "KE_OLLAMA_URL",
-        "http://127.0.0.1:11434",
-        "Ollama server used to build embeddings.",
-        section="substrate",
-        read_by="retrieval.embeddings.build",
-    )
-    embed_model: str = _env(
-        "KE_EMBED_MODEL",
-        "bge-m3:latest",
-        "Embedding model.",
-        section="substrate",
-        read_by="retrieval.embeddings.build",
-    )
-    embeddings_db: str | None = _env(
-        "KE_EMBEDDINGS_DB",
-        None,
-        "Embeddings SQLite database. Unset: <data_dir>/embeddings.db.",
-        section="substrate",
-        read_by="retrieval.embeddings.build",
-    )
-
     # ── Validation ───────────────────────────────────────────────
 
     @field_validator("bind_host", mode="before")
@@ -470,6 +511,25 @@ class Settings(BaseSettings):
     def _blank_bind_host(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip() or "127.0.0.1"
+        return value
+
+    @field_validator("embed_provider", mode="before")
+    @classmethod
+    def _normalise_embed_provider(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        text = value.strip().lower()
+        if not text:
+            return "ollama"
+        if text not in EMBED_PROVIDERS:
+            raise ValueError(f"unknown embedding provider {value!r}")
+        return text
+
+    @field_validator("embed_model", mode="before")
+    @classmethod
+    def _blank_embed_model(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip() or "bge-m3:latest"
         return value
 
     @field_validator("board_max_scopes", mode="after")
@@ -701,6 +761,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = [
+    "EMBED_PROVIDERS",
     "ENV_PREFIX",
     "FALSE_VALUES",
     "MASK",

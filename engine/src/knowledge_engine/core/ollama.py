@@ -6,8 +6,9 @@
 validation and one error type, :class:`OllamaError`. It is used by:
 
 * ``generation.ollama_provider`` (the ``ollama`` text-generation provider),
-* ``retrieval.embeddings.build`` / ``.search`` (the corpus embedding index),
-* ``project_context.embeddings.local`` (project-context embeddings),
+* ``project_context.embeddings.local`` (``LocalOllamaProvider``: the corpus
+  embedding index and project-context embeddings),
+* ``retrieval.embeddings.build`` (the historical ``get_embedding`` helpers),
 * ``runtime.pipeline.task_classifier`` (``KE_CLASSIFIER_ENDPOINT``, a full
   ``.../api/generate`` URL, and ``KE_CLASSIFIER_MODEL``).
 
@@ -19,7 +20,7 @@ Consumer                        Base URL (first set wins)                  Model
 ==============================  =========================================  =====================
 generation provider ``ollama``  constructor arg → ``OLLAMA_BASE_URL``      ``OLLAMA_MODEL``,
                                 → ``http://127.0.0.1:11434``               ``OLLAMA_TIMEOUT`` (30 s)
-corpus embeddings               ``KE_OLLAMA_URL`` → ``http://127.0.0.1:11434``  ``KE_EMBED_MODEL`` (60 s)
+corpus embeddings               ``KE_OLLAMA_URL`` → ``http://127.0.0.1:11434``  ``KE_EMBED_MODEL``, ``KE_EMBED_BATCH`` (60 s)
 project-context embeddings      ``[project_context.embeddings] url``       ``model`` (30 s)
                                 → ``http://127.0.0.1:11434``
 ==============================  =========================================  =====================

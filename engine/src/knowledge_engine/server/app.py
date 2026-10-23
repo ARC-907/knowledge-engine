@@ -26,6 +26,7 @@ from ..core.http import install_cors, parse_cors_origins
 from ..core.logsafe import log_safe
 from ..core.settings import Settings
 from ..generation import ProviderError
+from ..retrieval.embeddings.errors import EmbeddingError
 from .api import generate_routes, health_routes, registry_routes, search_routes
 from .lifespan import lifespan
 
@@ -76,6 +77,18 @@ async def _provider_error(request: Request, exc: Exception) -> JSONResponse:
     return error_response(502, str(exc), "provider_error")
 
 
+async def _embedding_error(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, EmbeddingError)  # noqa: S101 - registered for this type only
+    _logger.warning(
+        "%d %s %s: %s",
+        exc.status_code,
+        log_safe(request.method),
+        log_safe(request.url.path),
+        log_safe(exc),
+    )
+    return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
+
+
 def _mount_board(app: FastAPI) -> None:
     try:
         # Optional subsystem: a broken board must never block the core app.
@@ -114,6 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     install_exception_handlers(app)
     app.add_exception_handler(ProviderError, _provider_error)
+    app.add_exception_handler(EmbeddingError, _embedding_error)
 
     app.include_router(health_routes.router)
     app.include_router(registry_routes.router, prefix="/registry", tags=["registry"])

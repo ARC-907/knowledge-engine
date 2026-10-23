@@ -2,26 +2,63 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Query
 
-from ..deps import IndexerDep
-from ..schemas import ReindexResponse, SearchHit, SearchResponse
+from ...retrieval.hybrid import DEFAULT_MODE, SearchMode
+from ..deps import IndexerDep, SearcherDep
+from ..schemas import EmbeddingErrorResponse, ReindexResponse, SearchHit, SearchResponse
 
 router = APIRouter()
 
 #: Upper bound of ``limit`` on ``GET /search``.
 MAX_SEARCH_LIMIT = 100
 
+_EMBEDDING_ERRORS: dict[int | str, dict[str, object]] = {
+    409: {
+        "model": EmbeddingErrorResponse,
+        "description": "`vector`/`hybrid`: the query model differs from the index's model.",
+    },
+    502: {
+        "model": EmbeddingErrorResponse,
+        "description": "`vector`/`hybrid`: the embedding provider failed.",
+    },
+    503: {
+        "model": EmbeddingErrorResponse,
+        "description": (
+            "`vector`/`hybrid`: no embedding index, or vector search not configured "
+            "(also answered while the engine is not started)."
+        ),
+    },
+}
 
-@router.get("", response_model=SearchResponse, response_model_exclude_none=True)
+
+@router.get(
+    "",
+    response_model=SearchResponse,
+    response_model_exclude_none=True,
+    responses=_EMBEDDING_ERRORS,
+)
 def search(
-    indexer: IndexerDep,
+    searcher: SearcherDep,
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=MAX_SEARCH_LIMIT),
+    mode: Annotated[
+        SearchMode,
+        Query(
+            description=(
+                "`fts` (default): FTS5 keyword search. `vector`: the corpus embedding index "
+                "(`knowledge-engine embeddings build`). `hybrid`: both, merged by reciprocal "
+                "rank fusion (k=60)."
+            ),
+        ),
+    ] = DEFAULT_MODE,
 ) -> SearchResponse:
-    results = indexer.search(q, limit=limit)
+    results = searcher.search(q, mode=mode, limit=limit)
     return SearchResponse(
         query=q,
+        mode=mode,
         count=len(results),
         results=[SearchHit.model_validate(hit) for hit in results],
         syntax_fallback=True if getattr(results, "syntax_fallback", False) else None,

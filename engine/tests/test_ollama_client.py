@@ -256,13 +256,16 @@ def test_corpus_embeddings_use_ke_ollama_url(monkeypatch: pytest.MonkeyPatch) ->
         return httpx.Response(200, json={"embeddings": [[1.0, 0.0] for _ in json["input"]]})
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    monkeypatch.setattr(build, "OLLAMA_URL", "http://embed-host:1234")
+    # Read from the settings at call time (no import-time globals any more).
+    monkeypatch.setenv("KE_OLLAMA_URL", "http://embed-host:1234")
+    assert build.OLLAMA_URL == "http://embed-host:1234"
     assert build.get_embedding("hello") == [1.0, 0.0]
     assert seen == ["http://embed-host:1234/api/embed"]
 
 
-def test_corpus_embed_chunks_falls_back_per_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
-    from knowledge_engine.retrieval.embeddings import build
+def test_corpus_index_falls_back_per_chunk(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    from knowledge_engine.project_context.embeddings.local import LocalOllamaProvider
+    from knowledge_engine.retrieval.embeddings.index import CorpusEmbeddingIndex
 
     def fake_post(url: str, *, json: Any, timeout: float) -> httpx.Response:
         texts = json["input"]
@@ -271,8 +274,8 @@ def test_corpus_embed_chunks_falls_back_per_chunk(monkeypatch: pytest.MonkeyPatc
         return httpx.Response(200, json={"embeddings": [[1.0]]})
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    out = build._embed_chunks("f.md", [{"text": "good"}, {"text": "bad"}])
-    assert out == [[1.0], None]
+    index = CorpusEmbeddingIndex(tmp_path / "e.db", LocalOllamaProvider(model="m"))
+    assert index._embed_texts(["good", "bad"]) == [[1.0], None]
 
 
 def test_corpus_embed_chunks_count_malformed_url_as_errors(monkeypatch: pytest.MonkeyPatch) -> None:

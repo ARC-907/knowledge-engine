@@ -433,6 +433,16 @@
           "query": {
             "description": "FTS5 query string",
             "type": "string"
+          },
+          "mode": {
+            "default": "fts",
+            "description": "Search mode: fts (keyword, default), vector (semantic; needs the embedding index) or hybrid (both, fused by reciprocal rank)",
+            "enum": [
+              "fts",
+              "vector",
+              "hybrid"
+            ],
+            "type": "string"
           }
         },
         "required": [

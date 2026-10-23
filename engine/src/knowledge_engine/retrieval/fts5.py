@@ -29,20 +29,35 @@ class IndexedDoc:
 
 
 class SearchResults(list[dict[str, Any]]):
-    """The hits of one :meth:`Indexer.search` call (a plain ``list`` of dicts).
+    """The hits of one search (a plain ``list`` of dicts).
 
     ``syntax_fallback`` is true when the query was not valid FTS5 syntax and
-    was retried as one quoted phrase; :attr:`meta` carries it for responses.
+    was retried as one quoted phrase. ``mode`` is the search mode that
+    produced the hits (``fts``, or ``vector``/``hybrid`` from
+    :mod:`knowledge_engine.retrieval.hybrid`). :attr:`meta` carries both for
+    responses.
     """
 
-    def __init__(self, hits: Iterable[dict[str, Any]] = (), *, syntax_fallback: bool = False):
+    def __init__(
+        self,
+        hits: Iterable[dict[str, Any]] = (),
+        *,
+        syntax_fallback: bool = False,
+        mode: str = "fts",
+    ):
         super().__init__(hits)
         self.syntax_fallback = syntax_fallback
+        self.mode = mode
 
     @property
     def meta(self) -> dict[str, Any]:
-        """Result metadata (empty unless something noteworthy happened)."""
-        return {"syntax_fallback": True} if self.syntax_fallback else {}
+        """Result metadata (empty for a plain ``fts`` search with nothing noteworthy)."""
+        meta: dict[str, Any] = {}
+        if self.mode != "fts":
+            meta["mode"] = self.mode
+        if self.syntax_fallback:
+            meta["syntax_fallback"] = True
+        return meta
 
 
 _FTS5_QUERY_ERROR_MARKERS = (

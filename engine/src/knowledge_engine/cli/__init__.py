@@ -7,6 +7,7 @@ a sibling module that is imported only when that subcommand runs:
 * :mod:`.corpus`          -- ``info``, ``bootstrap``, ``capabilities``, ``reindex``,
   ``watch``, ``search``, ``config show``
 * :mod:`.registry`        -- ``registry validate``
+* :mod:`.embeddings`      -- ``embeddings build``, ``embeddings search``, ``embeddings status``
 * :mod:`.serve`           -- ``serve``, ``board-serve``
 * :mod:`.mcp`             -- ``mcp``
 * :mod:`.board`           -- ``board ...`` (the agent-board client)
@@ -38,6 +39,31 @@ PROG = "knowledge-engine"
 LONG_RUNNING = frozenset({"serve", "board-serve", "mcp", "watch"})
 
 Handler = Callable[[argparse.Namespace, argparse.ArgumentParser], int]
+
+#: ``search --mode`` values (``knowledge_engine.retrieval.hybrid.SEARCH_MODES``).
+SEARCH_MODES = ("fts", "vector", "hybrid")
+#: ``embeddings --provider`` values (``knowledge_engine.core.settings.EMBED_PROVIDERS``).
+EMBED_PROVIDERS = ("fake", "ollama", "remote")
+
+
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid integer: {text!r}") from None
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer: {text!r}")
+    return value
+
+
+def _non_negative_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid integer: {text!r}") from None
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must not be negative: {text!r}")
+    return value
 
 
 class CommandError(Exception):
@@ -131,7 +157,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("search", help="Search the index")
     sp.add_argument("query")
     sp.add_argument("--limit", type=int, default=10)
+    sp.add_argument(
+        "--mode",
+        choices=SEARCH_MODES,
+        default="fts",
+        help="fts: keyword index (default); vector: embedding index; hybrid: both, "
+        "fused by reciprocal rank",
+    )
     _route(sp, "corpus", "cmd_search")
+
+    _add_embeddings_parser(sub)
 
     sp = sub.add_parser("serve", help="Run the FastAPI server (uvicorn)")
     sp.add_argument("--host", default="127.0.0.1")
@@ -160,6 +195,78 @@ def build_parser() -> argparse.ArgumentParser:
     abs_serve.add_argument("--port", type=int, default=None, help="default: $BOARD_PORT or 11437")
     _route(abs_serve, "serve", "cmd_board_serve")
     return parser
+
+
+def _embedding_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--provider",
+        choices=EMBED_PROVIDERS,
+        default=None,
+        help="embedding provider (default: $KE_EMBED_PROVIDER or ollama; fake: offline dry run)",
+    )
+    parser.add_argument(
+        "--model", default=None, help="embedding model (default: $KE_EMBED_MODEL or bge-m3)"
+    )
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="index database (default: $KE_EMBEDDINGS_DB or <data_dir>/embeddings.db)",
+    )
+
+
+def _add_embeddings_parser(sub: Any) -> None:
+    emb = sub.add_parser(
+        "embeddings",
+        help="Corpus embedding index for vector / hybrid search (build, search, status)",
+    )
+    emb_sub = emb.add_subparsers(dest="embeddings_cmd", required=True)
+
+    build = emb_sub.add_parser("build", help="Embed the corpus into the embedding index")
+    mode = build.add_mutually_exclusive_group()
+    mode.add_argument("--incremental", action="store_true", help="only embed new or changed files")
+    mode.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="drop the index first (required to switch to another model)",
+    )
+    _embedding_options(build)
+    build.add_argument(
+        "--batch",
+        type=_positive_int,
+        default=None,
+        help="chunks per embedding request (default: $KE_EMBED_BATCH or 32)",
+    )
+    build.add_argument(
+        "--chunk-size", type=_positive_int, default=None, help="characters per chunk (1500)"
+    )
+    build.add_argument(
+        "--chunk-overlap",
+        type=_non_negative_int,
+        default=None,
+        help="characters of overlap between chunks (200)",
+    )
+    build.add_argument(
+        "--max-chars",
+        type=_positive_int,
+        default=None,
+        help="characters of each chunk sent to the model (2000)",
+    )
+    _route(build, "embeddings", "cmd_embeddings_build")
+
+    search = emb_sub.add_parser("search", help="Vector search over the embedding index")
+    search.add_argument("query")
+    search.add_argument("--top", type=_positive_int, default=10, help="hits to return (10)")
+    search.add_argument(
+        "--library", default=None, help="restrict to one top-level corpus subdirectory"
+    )
+    _embedding_options(search)
+    _route(search, "embeddings", "cmd_embeddings_search")
+
+    status = emb_sub.add_parser(
+        "status", help="Report what the embedding index holds and which model built it"
+    )
+    _embedding_options(status)
+    _route(status, "embeddings", "cmd_embeddings_status")
 
 
 def _load_handler(module: str, func: str) -> Handler:
@@ -203,7 +310,15 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["LONG_RUNNING", "PROG", "CommandError", "build_parser", "main"]
+__all__ = [
+    "EMBED_PROVIDERS",
+    "LONG_RUNNING",
+    "PROG",
+    "SEARCH_MODES",
+    "CommandError",
+    "build_parser",
+    "main",
+]
 
 
 if __name__ == "__main__":  # pragma: no cover

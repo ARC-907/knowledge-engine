@@ -1,9 +1,9 @@
 ### knowledge-engine --help
 usage: knowledge-engine [-h] [-v | -q]
-                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,serve,project-context,board,board-serve} ...
+                        {info,bootstrap,capabilities,reindex,watch,config,mcp,search,embeddings,serve,project-context,board,board-serve} ...
 
 positional arguments:
-  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,serve,project-context,board,board-serve}
+  {info,bootstrap,capabilities,reindex,watch,config,mcp,search,embeddings,serve,project-context,board,board-serve}
     info                Print configuration and counts
     bootstrap           Walk corpus/ and register every folder as an entry
     capabilities        Print runtime capability and retrieval-surface
@@ -15,6 +15,8 @@ positional arguments:
     mcp                 Run the MCP server for AI clients (stdio, or
                         streamable HTTP with --http)
     search              Search the index
+    embeddings          Corpus embedding index for vector / hybrid search
+                        (build, search, status)
     serve               Run the FastAPI server (uvicorn)
     project-context     Project-specific documentation subsystem
     board               Agent Board (post/read/search/ack/sweep/keys)
@@ -100,14 +102,91 @@ options:
   --host HOST  Bind address for --http (default 127.0.0.1).
   --port PORT  Port for --http (default 9211).
 ### knowledge-engine search --help
-usage: knowledge-engine search [-h] [--limit LIMIT] query
+usage: knowledge-engine search [-h] [--limit LIMIT]
+                               [--mode {fts,vector,hybrid}]
+                               query
 
 positional arguments:
   query
 
 options:
-  -h, --help     show this help message and exit
+  -h, --help            show this help message and exit
   --limit LIMIT
+  --mode {fts,vector,hybrid}
+                        fts: keyword index (default); vector: embedding index;
+                        hybrid: both, fused by reciprocal rank
+### knowledge-engine embeddings --help
+usage: knowledge-engine embeddings [-h] {build,search,status} ...
+
+positional arguments:
+  {build,search,status}
+    build               Embed the corpus into the embedding index
+    search              Vector search over the embedding index
+    status              Report what the embedding index holds and which model
+                        built it
+
+options:
+  -h, --help            show this help message and exit
+### knowledge-engine embeddings build --help
+usage: knowledge-engine embeddings build [-h] [--incremental | --rebuild]
+                                         [--provider {fake,ollama,remote}]
+                                         [--model MODEL] [--db DB]
+                                         [--batch BATCH]
+                                         [--chunk-size CHUNK_SIZE]
+                                         [--chunk-overlap CHUNK_OVERLAP]
+                                         [--max-chars MAX_CHARS]
+
+options:
+  -h, --help            show this help message and exit
+  --incremental         only embed new or changed files
+  --rebuild             drop the index first (required to switch to another
+                        model)
+  --provider {fake,ollama,remote}
+                        embedding provider (default: $KE_EMBED_PROVIDER or
+                        ollama; fake: offline dry run)
+  --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
+  --db DB               index database (default: $KE_EMBEDDINGS_DB or
+                        <data_dir>/embeddings.db)
+  --batch BATCH         chunks per embedding request (default: $KE_EMBED_BATCH
+                        or 32)
+  --chunk-size CHUNK_SIZE
+                        characters per chunk (1500)
+  --chunk-overlap CHUNK_OVERLAP
+                        characters of overlap between chunks (200)
+  --max-chars MAX_CHARS
+                        characters of each chunk sent to the model (2000)
+### knowledge-engine embeddings search --help
+usage: knowledge-engine embeddings search [-h] [--top TOP] [--library LIBRARY]
+                                          [--provider {fake,ollama,remote}]
+                                          [--model MODEL] [--db DB]
+                                          query
+
+positional arguments:
+  query
+
+options:
+  -h, --help            show this help message and exit
+  --top TOP             hits to return (10)
+  --library LIBRARY     restrict to one top-level corpus subdirectory
+  --provider {fake,ollama,remote}
+                        embedding provider (default: $KE_EMBED_PROVIDER or
+                        ollama; fake: offline dry run)
+  --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
+  --db DB               index database (default: $KE_EMBEDDINGS_DB or
+                        <data_dir>/embeddings.db)
+### knowledge-engine embeddings status --help
+usage: knowledge-engine embeddings status [-h]
+                                          [--provider {fake,ollama,remote}]
+                                          [--model MODEL] [--db DB]
+
+options:
+  -h, --help            show this help message and exit
+  --provider {fake,ollama,remote}
+                        embedding provider (default: $KE_EMBED_PROVIDER or
+                        ollama; fake: offline dry run)
+  --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
+  --db DB               index database (default: $KE_EMBEDDINGS_DB or
+                        <data_dir>/embeddings.db)
 ### knowledge-engine serve --help
 usage: knowledge-engine serve [-h] [--host HOST] [--port PORT]
 

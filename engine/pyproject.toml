@@ -149,7 +149,6 @@ ignore = [
 ]
 "src/knowledge_engine/cli/*.py" = ["T20", "PLC0415"]
 "src/knowledge_engine/**/cli.py" = ["T20", "PLC0415"]
-"src/knowledge_engine/retrieval/embeddings/*.py" = ["T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["knowledge_engine"]
@@ -180,7 +179,6 @@ module = [
     "knowledge_engine.agent_board.*",
     "knowledge_engine.runtime.*",
     "knowledge_engine.tool_host.*",
-    "knowledge_engine.retrieval.embeddings.*",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false

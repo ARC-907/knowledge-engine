@@ -1,5 +1,5 @@
 """Corpus and configuration subcommands: ``info``, ``bootstrap``, ``capabilities``,
-``reindex``, ``watch``, ``search`` and ``config show``.
+``reindex``, ``watch``, ``search`` (``--mode fts|vector|hybrid``) and ``config show``.
 
 Only the commands that need the registry construct a :class:`Config` and a
 :class:`Registry`; ``config show`` touches neither.
@@ -230,10 +230,25 @@ def cmd_reindex(_args: argparse.Namespace, _parser: argparse.ArgumentParser) -> 
 def cmd_search(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
     from ..retrieval.fts5 import Indexer
 
+    mode = getattr(args, "mode", "fts") or "fts"
     config, registry = open_registry()
     indexer = Indexer(config, registry)
     try:
-        results = indexer.search(args.query, limit=args.limit)
+        if mode == "fts":
+            results = indexer.search(args.query, limit=args.limit)
+        else:
+            from ..retrieval.embeddings.errors import EmbeddingError
+            from ..retrieval.embeddings.index import CorpusEmbeddingIndex
+            from ..retrieval.hybrid import HybridSearcher
+
+            try:
+                embeddings = CorpusEmbeddingIndex.from_settings()
+                searcher = HybridSearcher(indexer, registry, embeddings)
+                results = searcher.search(args.query, mode=mode, limit=args.limit)
+            except EmbeddingError as exc:
+                _logger.error("%s search failed: %s (%s)", mode, exc, exc.hint)
+                _print_json({"error": exc.to_dict()}, indent=2)
+                return 1
     finally:
         indexer.close()
     if getattr(results, "syntax_fallback", False):
