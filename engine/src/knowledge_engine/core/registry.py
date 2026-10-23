@@ -6,8 +6,9 @@ import contextlib
 import json
 import logging
 import os
+import secrets
 import sqlite3
-import tempfile
+import stat
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -20,6 +21,9 @@ RegistryKind = EntryKind
 REGISTRY_KINDS: tuple[str, ...] = get_args(EntryKind)
 
 _logger = logging.getLogger(__name__)
+
+#: Random temp-file names collide only in theory; give up after this many tries.
+_REPLACEMENT_ATTEMPTS = 100
 
 _KIND_TO_BUCKET = {
     "library": "libraries",
@@ -53,7 +57,9 @@ class Registry:
     the in-memory document, the JSON write and the SQLite mirror, so a single
     instance can be shared by FastAPI's worker threadpool. The JSON file is
     replaced atomically (temp file + ``os.replace``), so a crash mid-write
-    never leaves a truncated registry behind. :meth:`close` releases the
+    never leaves a truncated registry behind; the replacement keeps the
+    file's permission bits (a new file gets the umask default, like a plain
+    ``open()`` would). :meth:`close` releases the
     SQLite connection; any later use raises ``sqlite3.ProgrammingError``.
     """
 
@@ -129,14 +135,23 @@ class Registry:
         self._write_json(default)
 
     def _write_json(self, data: dict[str, Any]) -> None:
-        """Write ``data`` to the registry file atomically (temp file + replace)."""
+        """Write ``data`` to the registry file atomically (temp file + replace).
+
+        The temp file is created with ``0o666`` masked by the process umask
+        (what ``open()`` gives a new file), then chmod'ed to the existing
+        file's permission bits when there is one, so an operator-edited or
+        bind-mounted ``registry.json`` keeps its mode across persists instead
+        of inheriting the private ``0600`` a ``mkstemp`` temp file would have.
+        """
         text = json.dumps(data, indent=2)
-        directory = self.registry_path.parent
-        fd, tmp_name = tempfile.mkstemp(
-            prefix=f".{self.registry_path.name}.", suffix=".tmp", dir=directory
-        )
-        tmp = Path(tmp_name)
         try:
+            mode: int | None = stat.S_IMODE(self.registry_path.stat().st_mode)
+        except FileNotFoundError:
+            mode = None
+        fd, tmp = self._open_replacement()
+        try:
+            if mode is not None:
+                tmp.chmod(mode)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 handle.write(text)
             tmp.replace(self.registry_path)
@@ -144,6 +159,24 @@ class Registry:
             with contextlib.suppress(OSError):
                 tmp.unlink()
             raise
+
+    def _open_replacement(self) -> tuple[int, Path]:
+        """Create a fresh ``.<name>.<random>.tmp`` next to the registry file.
+
+        Like ``tempfile.mkstemp`` (``O_CREAT | O_EXCL`` on a random name) but
+        with the umask-honouring ``0o666`` mode instead of its fixed ``0600``.
+        """
+        directory = self.registry_path.parent
+        for _attempt in range(_REPLACEMENT_ATTEMPTS):
+            tmp = directory / f".{self.registry_path.name}.{secrets.token_hex(8)}.tmp"
+            try:
+                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            except FileExistsError:
+                continue
+            return fd, tmp
+        raise FileExistsError(
+            f"could not create a temp file for {self.registry_path} in {directory}"
+        )
 
     def _persist(self) -> None:
         with self._lock:

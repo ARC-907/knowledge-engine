@@ -35,6 +35,12 @@ ADMIN
     by the real socket peer (`X-Forwarded-For` is refused outright), and
     only while no enabled master key exists — afterwards 409.
 
+On routes that take a body the WRITE / ADMIN gate runs as a FastAPI
+dependency (:func:`write_gate`, :func:`admin_gate`), which FastAPI resolves
+*before* it parses and validates the body. An untrusted or unauthenticated
+peer therefore always gets its 403/401 and never reaches the body models or
+their validation messages.
+
 Peer-trust gate:
     Loopback (127.0.0.1, ::1) and the Tailscale CGNAT range (100.64.0.0/10)
     are trusted peers by default. Extend / restrict the set with
@@ -59,7 +65,7 @@ import logging
 from collections.abc import Sequence
 from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema, model_validator
 
 from ..core import http as core_http
@@ -346,6 +352,25 @@ def _require_key(req: Request, resource_id: str = "*", permission: str = "write"
         _require_admin(req)
     else:
         _require_write(req, resource_id=resource_id)
+
+
+def write_gate(req: Request) -> None:
+    """:func:`_require_write` as a route dependency: runs before the body is parsed."""
+    _require_write(req)
+
+
+def admin_gate(req: Request) -> str:
+    """:func:`_require_admin` as a route dependency: runs before the body is parsed.
+
+    Resolves to the authenticated key id, for routes that log it.
+    """
+    return _require_admin(req)
+
+
+#: Dependency lists for body-taking routes; the gate decides before FastAPI
+#: reads the body, so untrusted peers never see a validation error.
+WRITE_GATE = [Depends(write_gate)]
+ADMIN_GATE = [Depends(admin_gate)]
 
 
 def trust_policy(settings: Settings | None = None) -> dict[str, Any]:
@@ -684,13 +709,11 @@ def get_message(req: Request, message_id: str, scope: str | None = Query(None)) 
     return msg
 
 
-@router.post("/messages", status_code=201)
+@router.post("/messages", status_code=201, dependencies=WRITE_GATE)
 def post_message(
-    req: Request,
     body: MessageIn,
     scope: str | None = Query(None),
 ) -> dict[str, Any]:
-    _require_write(req)
     payload = body.payload()
     # Accept scope from the body OR the query string — body wins if both
     # are present. A dev shouldn't have to remember which one the route wants.
@@ -704,14 +727,12 @@ def post_message(
     return msg
 
 
-@router.post("/messages/{message_id}/ack", status_code=200)
+@router.post("/messages/{message_id}/ack", status_code=200, dependencies=WRITE_GATE)
 def ack_message(
-    req: Request,
     message_id: str,
     body: AckIn,
     scope: str | None = Query(None),
 ) -> dict[str, Any]:
-    _require_write(req)
     payload = body.payload()
     scope = _pop_scope(payload) or scope
     acker = str(payload.get("from") or payload.get("acker") or "").strip()
@@ -837,9 +858,8 @@ def list_keys(req: Request) -> list[dict[str, Any]]:
     return keys.list_keys(include_master=False)
 
 
-@router.post("/keys", status_code=201)
-def create_key(req: Request, body: KeyCreateIn) -> dict[str, Any]:
-    _require_admin(req)
+@router.post("/keys", status_code=201, dependencies=ADMIN_GATE)
+def create_key(body: KeyCreateIn) -> dict[str, Any]:
     payload = body.payload()
     name = str(payload.get("display_name") or "").strip()
     if not name:
@@ -906,13 +926,11 @@ def delete_key(req: Request, key_id: str) -> dict[str, Any]:
     return {"deleted": True, "key_id": key_id}
 
 
-@router.post("/keys/{key_id}/permissions", status_code=201)
+@router.post("/keys/{key_id}/permissions", status_code=201, dependencies=ADMIN_GATE)
 def grant_permission(
-    req: Request,
     key_id: str,
     body: PermissionGrantIn,
 ) -> dict[str, Any]:
-    _require_admin(req)
     payload = body.payload()
     try:
         return keys.grant_permission(
@@ -950,9 +968,8 @@ def list_providers(req: Request) -> dict[str, Any]:
     }
 
 
-@router.post("/providers", status_code=201)
-def register_provider(req: Request, body: ProviderBindingIn) -> dict[str, Any]:
-    _require_admin(req)
+@router.post("/providers", status_code=201, dependencies=ADMIN_GATE)
+def register_provider(body: ProviderBindingIn) -> dict[str, Any]:
     payload = body.payload()
     provider = str(payload.get("provider") or "").strip()
     if not provider:
@@ -1008,9 +1025,9 @@ def get_config(req: Request, scope: str | None = Query(None)) -> dict[str, Any]:
 def patch_config(
     req: Request,
     body: ConfigPatchIn,
+    key_id: Annotated[str, Depends(admin_gate)],
     scope: str | None = Query(None),
 ) -> dict[str, Any]:
-    key_id = _require_admin(req)
     patch = body.payload()
     scope = _pop_scope(patch) or scope
     try:
@@ -1085,18 +1102,22 @@ def mount_board(app: FastAPI, *, prefix: str = "/board") -> None:
 
 
 __all__ = [
+    "ADMIN_GATE",
     "CONFIG_FIELDS",
     "MAX_REQUEST_BODY_BYTES",
     "TRUSTED_CIDRS_ENV",
+    "WRITE_GATE",
     "AckIn",
     "ConfigPatchIn",
     "KeyCreateIn",
     "MessageIn",
     "PermissionGrantIn",
     "ProviderBindingIn",
+    "admin_gate",
     "board_settings",
     "log_trust_policy",
     "mount_board",
     "router",
     "trust_policy",
+    "write_gate",
 ]
