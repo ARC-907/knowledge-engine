@@ -804,15 +804,13 @@ def test_cli_serve_exports_the_bind_host(ke_env: Path, monkeypatch: pytest.Monke
         sys, "argv", ["knowledge-engine", "serve", "--host", ALL_INTERFACES, "--port", "1"]
     )
     assert cli.main() == 0
-    assert calls == [
-        {
-            "app": "knowledge_engine.app:create_app",
-            "bind_host_env": ALL_INTERFACES,
-            "host": ALL_INTERFACES,
-            "port": 1,
-            "factory": True,
-        }
-    ]
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["app"] == "knowledge_engine.app:create_app"
+    assert call["bind_host_env"] == ALL_INTERFACES
+    assert (call["host"], call["port"], call["factory"]) == (ALL_INTERFACES, 1, True)
+    # `serve` also wires logging and proxy handling (see core.http / core.logging_config).
+    assert "log_config" in call and "proxy_headers" in call
 
 
 @pytest.mark.parametrize("flags", [["--host", "0.0.0.0"], ["--port", "9300"]])  # noqa: S104

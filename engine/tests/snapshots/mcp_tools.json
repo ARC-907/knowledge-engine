@@ -1,75 +1,42 @@
 {
   "agent_board": [
     {
-      "description": "Post a schema-validated message to the agent board. Channels: ops, research, project, worktree, branch, library, planning, execution, testing, chatter (extend via /board/config).",
+      "description": "Post a schema-validated message to the agent board. Channels: ops, research, project, worktree, branch, library, planning, execution, testing, chatter (extend via /board/config). Accepts an optional board_key (validated only when require_key_for_post is on).",
       "inputSchema": {
+        "type": "object",
         "properties": {
-          "body": {
-            "description": "Free-text body (markdown ok).",
-            "type": "string"
-          },
           "channel": {
-            "default": "ops",
+            "type": "string",
             "description": "Channel slug \u2014 see board_channels for valid values.",
-            "type": "string"
-          },
-          "correlation_id": {
-            "description": "Thread/correlation id.",
-            "type": "string"
+            "default": "ops"
           },
           "message_type": {
-            "description": "Canonical message type (e.g. claim, status_update, blocker).",
-            "type": "string"
-          },
-          "model_id": {
-            "type": "string"
-          },
-          "product_id": {
-            "type": "string"
-          },
-          "reply_to": {
-            "description": "message_id this is a reply to.",
-            "type": "string"
-          },
-          "requires_ack": {
-            "default": false,
-            "type": "boolean"
-          },
-          "scope": {
-            "description": "Optional isolation key (project / branch / agent / loop). Routes the post to that scope's own database; omit for the shared board.",
-            "type": "string"
+            "type": "string",
+            "description": "Canonical message type (e.g. claim, status_update, blocker)."
           },
           "sender_node_id": {
-            "description": "Identity of the sender (branch name, worktree slug, agent id).",
-            "type": "string"
-          },
-          "sender_role": {
-            "type": "string"
+            "type": "string",
+            "description": "Identity of the sender (branch name, worktree slug, agent id)."
           },
           "subject": {
-            "description": "Short subject line (optional).",
-            "type": "string"
+            "type": "string",
+            "description": "Short subject line (optional)."
           },
-          "target_node_id": {
-            "type": "string"
+          "body": {
+            "type": "string",
+            "description": "Free-text body (markdown ok)."
           },
-          "target_role": {
+          "sender_role": {
             "type": "string"
           },
           "task_id": {
             "type": "string"
           },
-          "thread_id": {
-            "description": "Persistent thread id.",
+          "product_id": {
             "type": "string"
           },
-          "ttl_hours": {
-            "default": 168,
-            "minimum": 0,
-            "type": "integer"
-          },
           "visibility_scope": {
-            "default": "all",
+            "type": "string",
             "enum": [
               "all",
               "task",
@@ -77,116 +44,172 @@
               "role",
               "node"
             ],
+            "default": "all"
+          },
+          "target_node_id": {
             "type": "string"
+          },
+          "target_role": {
+            "type": "string"
+          },
+          "requires_ack": {
+            "type": "boolean",
+            "default": false
+          },
+          "reply_to": {
+            "type": "string",
+            "description": "message_id this is a reply to."
+          },
+          "correlation_id": {
+            "type": "string",
+            "description": "Thread/correlation id."
+          },
+          "thread_id": {
+            "type": "string",
+            "description": "Persistent thread id."
+          },
+          "ttl_hours": {
+            "type": "integer",
+            "default": 168,
+            "minimum": 0
+          },
+          "model_id": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional isolation key (project / branch / agent / loop). Routes the post to that scope's own database; omit for the shared board. Must match ^[a-z0-9][a-z0-9_-]{0,63}$."
+          },
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
           }
         },
         "required": [
           "message_type",
           "sender_node_id",
           "body"
-        ],
-        "type": "object"
+        ]
       },
       "name": "board_post"
     },
     {
-      "description": "Shorthand for posting a task claim (message_type='claim').",
+      "description": "Shorthand for posting a task claim (message_type='claim'). Accepts an optional board_key (validated only when require_key_for_post is on).",
       "inputSchema": {
+        "type": "object",
         "properties": {
-          "channel": {
-            "default": "ops",
+          "sender_node_id": {
             "type": "string"
           },
-          "sender_node_id": {
+          "task_id": {
             "type": "string"
           },
           "sender_role": {
             "type": "string"
           },
-          "task_id": {
-            "type": "string"
+          "channel": {
+            "type": "string",
+            "default": "ops"
+          },
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
           }
         },
         "required": [
           "sender_node_id",
           "task_id"
-        ],
-        "type": "object"
+        ]
       },
       "name": "board_claim"
     },
     {
-      "description": "Shorthand for releasing a claim (message_type='release').",
+      "description": "Shorthand for releasing a claim (message_type='release'). Accepts an optional board_key (validated only when require_key_for_post is on).",
       "inputSchema": {
+        "type": "object",
         "properties": {
-          "channel": {
-            "default": "ops",
+          "sender_node_id": {
+            "type": "string"
+          },
+          "task_id": {
             "type": "string"
           },
           "reason": {
             "type": "string"
           },
-          "sender_node_id": {
-            "type": "string"
+          "channel": {
+            "type": "string",
+            "default": "ops"
           },
-          "task_id": {
-            "type": "string"
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
           }
         },
         "required": [
           "sender_node_id",
           "task_id"
-        ],
-        "type": "object"
+        ]
       },
       "name": "board_release"
     },
     {
-      "description": "Shorthand for a blocker (requires_ack=true). The sweeper will emit reminders if unacked past the stale threshold.",
+      "description": "Shorthand for a blocker (requires_ack=true). The sweeper will emit reminders if unacked past the stale threshold. Accepts an optional board_key (validated only when require_key_for_post is on).",
       "inputSchema": {
+        "type": "object",
         "properties": {
-          "channel": {
-            "default": "ops",
+          "sender_node_id": {
+            "type": "string"
+          },
+          "task_id": {
             "type": "string"
           },
           "description": {
             "type": "string"
           },
-          "sender_node_id": {
-            "type": "string"
+          "channel": {
+            "type": "string",
+            "default": "ops"
           },
           "subject": {
             "type": "string"
           },
-          "task_id": {
-            "type": "string"
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
           }
         },
         "required": [
           "sender_node_id",
           "description"
-        ],
-        "type": "object"
+        ]
       },
       "name": "board_blocker"
     },
     {
-      "description": "Acknowledge a message by id. Appends caller to ack_by list.",
+      "description": "Acknowledge a message by id. Appends caller to ack_by list. Accepts an optional board_key (validated only when require_key_for_post is on).",
       "inputSchema": {
+        "type": "object",
         "properties": {
-          "acker": {
-            "description": "Caller identity (e.g. node id).",
-            "type": "string"
-          },
           "message_id": {
             "type": "string"
+          },
+          "acker": {
+            "type": "string",
+            "description": "Caller identity (e.g. node id)."
+          },
+          "scope": {
+            "type": "string"
+          },
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
           }
         },
         "required": [
           "message_id",
           "acker"
-        ],
-        "type": "object"
+        ]
       },
       "name": "board_ack"
     },
