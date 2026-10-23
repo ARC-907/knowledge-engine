@@ -45,6 +45,11 @@ PROBE_TIMEOUT = 2.0
 #: Texts sent per ``/api/embed`` request.
 DEFAULT_EMBED_BATCH = 32
 
+#: Everything ``httpx`` raises for a request that never got a usable answer.
+#: ``httpx.InvalidURL`` (a malformed base URL such as ``http://host:notaport``)
+#: is deliberately not an ``HTTPError`` subclass, so it is listed explicitly.
+_REQUEST_ERRORS: tuple[type[BaseException], ...] = (httpx.HTTPError, httpx.InvalidURL, OSError)
+
 
 class OllamaError(RuntimeError):
     """An Ollama request failed (network, timeout, HTTP status or malformed body).
@@ -141,7 +146,9 @@ class OllamaClient:
             response = self._send("POST", path, json=dict(payload))
         except httpx.TimeoutException as exc:
             raise OllamaError(f"timed out after {self.timeout:g}s", timed_out=True) from exc
-        except (httpx.HTTPError, OSError) as exc:
+        except httpx.InvalidURL as exc:
+            raise OllamaError(f"invalid base URL {self.base_url!r}: {exc}") from exc
+        except _REQUEST_ERRORS as exc:
             raise OllamaError(f"request failed: {type(exc).__name__}") from exc
         if response.status_code >= 400:
             _logger.warning("ollama: HTTP %d from %s%s", response.status_code, self.base_url, path)
@@ -162,7 +169,7 @@ class OllamaClient:
         """``True`` when ``GET /api/tags`` answers 200 within the probe timeout. Never raises."""
         try:
             response = self._send("GET", "/api/tags", timeout=self.probe_timeout)
-        except (httpx.HTTPError, OSError) as exc:
+        except _REQUEST_ERRORS as exc:
             _logger.debug("ollama at %s unavailable: %s", self.base_url, type(exc).__name__)
             return False
         return response.status_code == 200

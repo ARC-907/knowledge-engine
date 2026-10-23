@@ -173,7 +173,7 @@ class Registry:
         try:
             if mode is not None:
                 tmp.chmod(mode)
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(text)
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -186,14 +186,18 @@ class Registry:
     def _open_replacement(self) -> tuple[int, Path]:
         """Create a fresh ``.<name>.<random>.tmp`` next to the registry file.
 
-        Like ``tempfile.mkstemp`` (``O_CREAT | O_EXCL`` on a random name) but
-        with the umask-honouring ``0o666`` mode instead of its fixed ``0600``.
+        Like ``tempfile.mkstemp`` (``O_CREAT | O_EXCL | O_BINARY`` on a random
+        name) but with the umask-honouring ``0o666`` mode instead of its fixed
+        ``0600``. ``O_BINARY`` (Windows only) keeps the C runtime from
+        translating newlines a second time underneath the text wrapper, so
+        ``registry.json`` is written with ``\n`` line endings on every platform.
         """
         directory = self.registry_path.parent
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
         for _attempt in range(_REPLACEMENT_ATTEMPTS):
             tmp = directory / f".{self.registry_path.name}.{secrets.token_hex(8)}.tmp"
             try:
-                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+                fd = os.open(tmp, flags, 0o666)
             except FileExistsError:
                 continue
             return fd, tmp

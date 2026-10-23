@@ -84,6 +84,21 @@ def test_available_false_on_error_status_and_transport_failure() -> None:
     assert _client(refuse)[0].available() is False
 
 
+def test_malformed_base_url_is_an_ollama_error_not_invalid_url() -> None:
+    # No transport: the real ``httpx`` module functions reject the URL before any
+    # socket is opened, so this stays offline. ``httpx.InvalidURL`` is not an
+    # ``HTTPError``; it must still honour ``available()``'s never-raises contract.
+    client = OllamaClient("http://127.0.0.1:notaport", 1.0)
+    assert client.available() is False
+    with pytest.raises(
+        OllamaError, match=r"invalid base URL 'http://127\.0\.0\.1:notaport'"
+    ) as exc:
+        client.generate("m", "p")
+    assert isinstance(exc.value.__cause__, httpx.InvalidURL)
+    with pytest.raises(OllamaError, match="invalid base URL"):
+        client.embed(["a"], "m")
+
+
 # ── generate ─────────────────────────────────────────────────────────
 
 
@@ -258,6 +273,13 @@ def test_corpus_embed_chunks_falls_back_per_chunk(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(httpx, "post", fake_post)
     out = build._embed_chunks("f.md", [{"text": "good"}, {"text": "bad"}])
     assert out == [[1.0], None]
+
+
+def test_corpus_embed_chunks_count_malformed_url_as_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    from knowledge_engine.retrieval.embeddings import build
+
+    monkeypatch.setattr(build, "OLLAMA_URL", "http://127.0.0.1:notaport")
+    assert build._embed_chunks("f.md", [{"text": "hello", "heading": ""}]) == [None]
 
 
 def test_task_classifier_uses_ollama_client(monkeypatch: pytest.MonkeyPatch) -> None:
