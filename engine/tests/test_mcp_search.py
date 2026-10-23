@@ -1,8 +1,10 @@
-"""MCP `search` tool: the `kind` filter applies before `limit`."""
+"""MCP `search` tool: the `kind` filter applies before `limit`, bad input is rejected."""
 
 from __future__ import annotations
 
+import io
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -81,3 +83,71 @@ def test_no_kind_and_unknown_kind(server: Any) -> None:
 def test_indexer_search_kind_keyword(server: Any) -> None:
     hits = server.indexer.search("fox", limit=1, kind="skill")
     assert [h["entry_kind"] for h in hits] == ["skill"]
+
+
+def _call(srv: Any, **arguments: Any) -> dict[str, Any]:
+    resp = srv.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {"name": "search", "arguments": arguments},
+        }
+    )
+    assert resp is not None
+    return resp
+
+
+@pytest.mark.parametrize("kind", [["library"], {"k": "library"}, 3])
+def test_non_string_kind_is_an_invalid_params_error(server: Any, kind: Any) -> None:
+    resp = _call(server, query="fox", kind=kind)
+    assert resp["id"] == 7
+    assert resp["error"]["code"] == -32602
+    assert "kind" in resp["error"]["message"]
+
+
+def test_non_string_query_is_an_invalid_params_error(server: Any) -> None:
+    resp = _call(server, query=["fox"])
+    assert resp["error"]["code"] == -32602
+    assert "query" in resp["error"]["message"]
+
+
+def test_server_survives_a_bad_kind_then_answers_the_next_call(server: Any) -> None:
+    _call(server, query="fox", kind=["library"])
+    assert len(_search(server, query="fox", kind="library")) == 5
+
+
+def test_indexer_rejects_non_string_kind_at_the_sqlite_layer(server: Any) -> None:
+    # Documents why the server must validate first: the indexer binds `kind`
+    # straight into SQL and sqlite3 refuses non-scalar parameters.
+    with pytest.raises(sqlite3.ProgrammingError):
+        server.indexer.search("fox", kind=["library"])  # type: ignore[arg-type]
+
+
+def test_main_turns_unexpected_exceptions_into_internal_errors(
+    server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from knowledge_engine.mcp import server as mcp_server
+
+    monkeypatch.setattr(mcp_server, "Server", lambda: server)
+
+    def boom(_msg: dict[str, Any]) -> dict[str, Any] | None:
+        raise sqlite3.ProgrammingError("Error binding parameter 2")
+
+    monkeypatch.setattr(server, "handle", boom)
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {}}) + "\n"
+            "not json\n" + json.dumps({"jsonrpc": "2.0", "id": 2, "method": "ping"}) + "\n"
+        ),
+    )
+    out = io.StringIO()
+    monkeypatch.setattr("sys.stdout", out)
+
+    assert mcp_server.main() == 0
+
+    responses = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert [r["id"] for r in responses] == [1, 2]
+    assert all(r["error"]["code"] == -32603 for r in responses)
+    assert all(r["error"]["message"] == "internal error" for r in responses)
