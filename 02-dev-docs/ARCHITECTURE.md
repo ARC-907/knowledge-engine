@@ -57,7 +57,7 @@ adapters.
 ```
 corpus/                         the knowledge content (data layer)
   registry.json                 source-of-truth list of libraries/skills/kits/tools
-  registry.schema.json          JSON Schema the registry is validated against
+  registry.schema.json          JSON Schema the registry is validated against (copy of core/registry.schema.json)
   samples/                       demo-library + demo-skill (enabled by default; used by first-run + tests)
   <your content>                 drop your own libraries/skills/kits/tools here and register them
 

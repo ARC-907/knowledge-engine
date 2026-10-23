@@ -505,6 +505,22 @@ def test_selftest_exits_zero(ke_env: Path, capsys: pytest.CaptureFixture[str]) -
     assert report["tool_count"] == len(report["tools"]) > 4
 
 
+def test_invalid_registry_fails_the_start_cleanly(
+    ke_env: Path, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+) -> None:
+    from knowledge_engine.mcp.server import main
+
+    (ke_env / "corpus" / "registry.json").write_text(
+        json.dumps({"version": 1, "libraries": "not-a-list"}), encoding="utf-8"
+    )
+    with caplog.at_level(logging.ERROR):
+        assert main(["--selftest"]) == 1
+    assert capsys.readouterr().out == ""  # stdout is the stdio transport
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("/libraries" in m for m in messages)
+    assert any("MCP server not started" in m for m in messages)
+
+
 def test_cli_mcp_subcommand_accepts_transport_flags(
     ke_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

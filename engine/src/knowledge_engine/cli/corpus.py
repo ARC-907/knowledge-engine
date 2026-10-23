@@ -41,14 +41,27 @@ def open_registry() -> tuple[Config, Registry]:
     """Resolve the configuration and load the registry for a corpus command.
 
     Creates the data directory first: every corpus command either writes the
-    FTS index or is followed by one that does.
+    FTS index or is followed by one that does. An invalid ``registry.json``
+    becomes a :class:`~knowledge_engine.cli.CommandError` listing every schema
+    error, so the command exits 1 with a readable report instead of a traceback.
     """
     from ..core.config import Config
-    from ..core.registry import Registry
+    from ..core.registry import Registry, RegistryValidationError
+    from . import CommandError
 
     config = Config.from_env()
     config.ensure_dirs()
-    return config, Registry(config.registry_path)
+    try:
+        registry = Registry(config.registry_path)
+    except RegistryValidationError as exc:
+        # The registry module logs a one-line ERROR summary; the full report
+        # (one line per JSON pointer) is the command's output.
+        _logger.debug("registry %s failed validation", config.registry_path, exc_info=True)
+        raise CommandError(
+            f"{exc.render()}\n"
+            "Fix the registry (check it with `knowledge-engine registry validate`) and retry."
+        ) from exc
+    return config, registry
 
 
 def _print_json(payload: Any, **kwargs: Any) -> None:

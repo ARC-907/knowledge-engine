@@ -1,111 +1,190 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://knowledge-engine.local/registry.schema.json",
-  "title": "Knowledge-Engine Corpus Registry",
-  "description": "Source of truth for libraries, skills, and tools enabled in this corpus. Mirrored to engine/data/registry.db (SQLite) for FTS joins.",
+  "$id": "https://raw.githubusercontent.com/ARC-907/knowledge-engine/main/corpus/registry.schema.json",
+  "title": "Knowledge-Engine corpus registry",
+  "description": "corpus/registry.json: the source of truth for the libraries, skills, kits and tools of a corpus, plus its lifecycle flags. The engine validates the file against this schema whenever it loads or writes it. The authoritative copy ships inside the package (knowledge_engine/core/registry.schema.json); corpus/registry.schema.json is an identical copy kept next to the corpus.",
   "type": "object",
-  "required": [
-    "version",
-    "corpus_root",
-    "libraries",
-    "skills",
-    "tools",
-    "lifecycle"
-  ],
+  "additionalProperties": false,
   "properties": {
-    "version": { "type": "integer", "const": 1 },
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema, for editor completion and validation. Ignored by the engine."
+    },
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Registry format version. Always 1; a registry without it is read as version 1."
+    },
     "corpus_root": {
       "type": "string",
-      "description": "Path (relative to repo root) of the corpus directory. Default 'corpus/'."
+      "description": "Informational: the corpus directory this registry describes (e.g. 'corpus/'). The engine resolves the corpus root from KE_CORPUS_ROOT / KE_HOME, not from this field."
+    },
+    "last_updated": {
+      "type": "number",
+      "description": "Unix time of the last change, written by the engine on every update."
     },
     "libraries": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name", "path", "enabled"],
-        "properties": {
-          "name": { "type": "string" },
-          "path": {
-            "type": "string",
-            "description": "Path relative to corpus_root."
-          },
-          "enabled": { "type": "boolean" },
-          "indexed_at": { "type": ["string", "null"], "format": "date-time" },
-          "size_bytes": { "type": "integer", "minimum": 0 },
-          "doc_count": { "type": "integer", "minimum": 0 },
-          "status": {
-            "type": "string",
-            "enum": ["ready", "indexing", "error", "pending"]
-          },
-          "framework": {
-            "type": ["string", "null"],
-            "description": "Three-lens declared in library README."
-          },
-          "description": { "type": ["string", "null"] }
-        }
-      }
+      "description": "Entries of kind 'library' (registered from corpus/libraries/).",
+      "items": { "$ref": "#/$defs/libraryEntry" }
     },
     "skills": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name", "path", "enabled"],
-        "properties": {
-          "name": { "type": "string" },
-          "path": {
-            "type": "string",
-            "description": "Path relative to corpus_root."
-          },
-          "description": { "type": ["string", "null"] },
-          "source_library": {
-            "type": ["string", "null"],
-            "description": "If skill came from a library, name of that library."
-          },
-          "enabled": { "type": "boolean" },
-          "indexed_at": { "type": ["string", "null"], "format": "date-time" },
-          "external_deps": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Free-text list of external dependencies (e.g. 'ba_* MCP', 'Tavily API key')."
-          }
-        }
-      }
+      "description": "Entries of kind 'skill' (registered from corpus/skills/).",
+      "items": { "$ref": "#/$defs/skillEntry" }
+    },
+    "kits": {
+      "type": "array",
+      "description": "Entries of kind 'kit' (registered from corpus/kits/).",
+      "items": { "$ref": "#/$defs/kitEntry" }
     },
     "tools": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name", "kind", "enabled"],
-        "properties": {
-          "name": { "type": "string" },
-          "description": { "type": ["string", "null"] },
-          "kind": { "type": "string", "enum": ["mcp", "cli", "service"] },
-          "deps": {
-            "type": "array",
-            "items": { "type": "string" }
-          },
-          "enabled": { "type": "boolean" },
-          "endpoint": {
-            "type": ["string", "null"],
-            "description": "URI / command / module path used to invoke."
-          }
+      "description": "Entries of kind 'tool' (registered from corpus/capabilities/).",
+      "items": { "$ref": "#/$defs/toolEntry" }
+    },
+    "lifecycle": { "$ref": "#/$defs/lifecycle" }
+  },
+  "$defs": {
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "entry": {
+      "title": "Registry entry",
+      "description": "Fields shared by every entry (the engine's RegistryEntry). Entries may carry additional, fork-specific fields; the engine stores and serves them unchanged.",
+      "type": "object",
+      "required": ["id", "name", "path"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique id across all buckets, e.g. 'library-demo'. Auto-registered entries use '<kind>-<slugified folder name>'."
+        },
+        "kind": {
+          "type": "string",
+          "description": "The entry kind. Optional: the bucket an entry is listed in decides its kind."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name."
+        },
+        "path": {
+          "type": "string",
+          "description": "Folder (or single file) holding the entry's content, relative to the corpus root."
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Disabled entries are not indexed. Missing means enabled."
+        },
+        "auto_registered": {
+          "type": "boolean",
+          "default": false,
+          "description": "True when bootstrap or the watcher created the entry."
+        },
+        "description": {
+          "$ref": "#/$defs/nullableString",
+          "description": "Free-text description."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Free-form labels."
+        },
+        "created": {
+          "type": "number",
+          "description": "Unix time the entry was first written by the engine."
+        },
+        "last_updated": {
+          "type": "number",
+          "description": "Unix time the entry was last written by the engine."
+        },
+        "indexed_at": {
+          "$ref": "#/$defs/nullableString",
+          "format": "date-time",
+          "description": "Informational: when the entry was last indexed."
+        }
+      }
+    },
+    "libraryEntry": {
+      "title": "Library entry",
+      "$ref": "#/$defs/entry",
+      "properties": {
+        "kind": { "const": "library" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "doc_count": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "string",
+          "enum": ["ready", "indexing", "error", "pending"]
+        },
+        "framework": {
+          "$ref": "#/$defs/nullableString",
+          "description": "Three-lens framework declared in the library README."
+        }
+      }
+    },
+    "skillEntry": {
+      "title": "Skill entry",
+      "$ref": "#/$defs/entry",
+      "properties": {
+        "kind": { "const": "skill" },
+        "source_library": {
+          "$ref": "#/$defs/nullableString",
+          "description": "If the skill came from a library, the name of that library."
+        },
+        "external_deps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Free-text list of external dependencies (e.g. 'Tavily API key')."
+        }
+      }
+    },
+    "kitEntry": {
+      "title": "Kit entry",
+      "$ref": "#/$defs/entry",
+      "properties": {
+        "kind": { "const": "kit" }
+      }
+    },
+    "toolEntry": {
+      "title": "Tool entry",
+      "$ref": "#/$defs/entry",
+      "properties": {
+        "kind": {
+          "enum": ["tool", "mcp", "cli", "service"],
+          "description": "'tool' (what the engine writes). 'mcp', 'cli' and 'service' are accepted for registries written against the earlier schema, where this field described the tool's transport; the engine reports every entry in this bucket as kind 'tool'."
+        },
+        "deps": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "endpoint": {
+          "$ref": "#/$defs/nullableString",
+          "description": "URI, command or module path used to invoke the tool."
         }
       }
     },
     "lifecycle": {
+      "title": "Lifecycle flags",
+      "description": "Corpus lifecycle flags (GET/PATCH /registry/lifecycle/state). Additional flags are stored and served unchanged.",
       "type": "object",
-      "required": [
-        "watch_enabled",
-        "auto_register_new_folders",
-        "on_toggle_reindex"
-      ],
       "properties": {
-        "watch_enabled": { "type": "boolean" },
+        "watch_enabled": {
+          "type": "boolean",
+          "description": "Watch the corpus for new folders."
+        },
+        "auto_register": {
+          "type": "boolean",
+          "description": "Register new corpus folders automatically (the flag the HTTP API writes)."
+        },
+        "auto_register_new_folders": {
+          "type": "boolean",
+          "description": "Earlier spelling of auto_register."
+        },
         "schedule": {
-          "type": ["string", "null"],
+          "$ref": "#/$defs/nullableString",
           "description": "Cron-like or interval string ('15m', '1h', '24h'); null = no schedule."
         },
-        "auto_register_new_folders": { "type": "boolean" },
         "on_toggle_reindex": {
           "type": "string",
           "enum": ["immediate", "next-cycle", "manual"]

@@ -45,6 +45,9 @@ jobs:
       - name: mypy
         run: uv run mypy
         working-directory: engine
+      - name: registry.json matches the schema
+        run: uv run knowledge-engine registry validate ../corpus/registry.json
+        working-directory: engine
 
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python-version }})

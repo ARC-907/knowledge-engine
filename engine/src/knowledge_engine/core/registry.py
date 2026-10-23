@@ -5,6 +5,13 @@ plus the corpus lifecycle flags. It is held in memory, mutated under a lock
 and written back atomically after every change. Earlier releases also mirrored
 it into ``<data_dir>/registry.db``; nothing ever read that mirror, so it is no
 longer written (an existing file is left untouched and can be deleted).
+
+The document is validated against the JSON Schema shipped with the package
+(``knowledge_engine/core/registry.schema.json``, Draft 2020-12; the repo keeps
+an identical copy at ``corpus/registry.schema.json``) every time it is loaded
+and before every write. An invalid document raises
+:class:`RegistryValidationError`, which lists every problem with its JSON
+pointer; nothing is written and the in-memory state is left as it was.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ from __future__ import annotations
 import builtins
 import contextlib
 import copy
+import functools
 import json
 import logging
 import os
@@ -20,10 +28,14 @@ import sqlite3
 import stat
 import threading
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass, field
+from importlib import resources
 from pathlib import Path
-from typing import Any, Literal, TextIO, TypeVar, get_args
+from typing import TYPE_CHECKING, Any, Literal, TextIO, TypeVar, get_args
+
+if TYPE_CHECKING:
+    from jsonschema.protocols import Validator
 
 EntryKind = Literal["library", "skill", "kit", "tool"]
 #: Public name for the entry-kind vocabulary (HTTP query/body validation uses it).
@@ -34,6 +46,9 @@ _logger = logging.getLogger(__name__)
 
 #: Random temp-file names collide only in theory; give up after this many tries.
 _REPLACEMENT_ATTEMPTS = 100
+
+#: File name of the registry JSON Schema, shipped in this package.
+SCHEMA_FILENAME = "registry.schema.json"
 
 #: Entry kind → its bucket (top-level list) in ``registry.json``.
 KIND_TO_BUCKET: dict[EntryKind, str] = {
@@ -63,6 +78,151 @@ class RegistryClosedError(sqlite3.ProgrammingError):
     Subclasses :class:`sqlite3.ProgrammingError` (what a closed registry
     raised while it still held a SQLite mirror) so existing handlers keep working.
     """
+
+
+# ---------- Schema validation ----------
+
+
+@dataclass(frozen=True)
+class RegistryValidationIssue:
+    """One problem found in a registry document.
+
+    ``pointer`` is the RFC 6901 JSON pointer of the offending value (``""``
+    for the document itself), ``message`` the validator's explanation and
+    ``keyword`` the schema keyword that failed (``"json"`` for a parse error).
+    """
+
+    pointer: str
+    message: str
+    keyword: str = ""
+
+    def __str__(self) -> str:
+        return f"{self.pointer or '/'}: {self.message}"
+
+    def to_dict(self) -> dict[str, str]:
+        return {"pointer": self.pointer, "message": self.message, "keyword": self.keyword}
+
+
+class RegistryValidationError(ValueError):
+    """``registry.json`` (or a document about to be written to it) is invalid.
+
+    ``path`` is the registry file, ``message`` a one-line summary and
+    ``errors`` every :class:`RegistryValidationIssue` found, ordered by JSON
+    pointer. ``str()`` renders the summary followed by one line per issue.
+    Subclasses :class:`ValueError`, which an unreadable registry raised before.
+    """
+
+    def __init__(
+        self,
+        path: str | os.PathLike[str],
+        message: str,
+        errors: Sequence[RegistryValidationIssue] = (),
+    ) -> None:
+        self.path = Path(path)
+        self.message = message
+        self.errors: tuple[RegistryValidationIssue, ...] = tuple(errors)
+        super().__init__(self.render())
+
+    def render(self) -> str:
+        lines = [f"{self.path}: {self.message}"]
+        lines.extend(f"  {issue}" for issue in self.errors)
+        return "\n".join(lines)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": str(self.path),
+            "message": self.message,
+            "errors": [issue.to_dict() for issue in self.errors],
+        }
+
+
+def _json_pointer(parts: Iterable[str | int]) -> str:
+    return "".join("/" + str(p).replace("~", "~0").replace("/", "~1") for p in parts)
+
+
+def registry_schema() -> dict[str, Any]:
+    """The registry JSON Schema (a fresh copy of the package's ``registry.schema.json``)."""
+    return copy.deepcopy(_schema())
+
+
+@functools.cache
+def _schema() -> dict[str, Any]:
+    package = __name__.rpartition(".")[0]
+    text = resources.files(package).joinpath(SCHEMA_FILENAME).read_text(encoding="utf-8")
+    schema: dict[str, Any] = json.loads(text)
+    return schema
+
+
+@functools.cache
+def _validator() -> Validator:
+    # jsonschema is imported on first use so importing the registry stays cheap.
+    from jsonschema import Draft202012Validator  # noqa: PLC0415
+
+    schema = _schema()
+    Draft202012Validator.check_schema(schema)
+    validator: Validator = Draft202012Validator(schema)
+    return validator
+
+
+def validation_issues(document: Any) -> list[RegistryValidationIssue]:
+    """Every schema violation in ``document``, ordered by JSON pointer (empty if valid)."""
+    issues = [
+        RegistryValidationIssue(
+            pointer=_json_pointer(error.absolute_path),
+            message=error.message,
+            keyword=str(error.validator),
+        )
+        for error in _validator().iter_errors(document)
+    ]
+    issues.sort(key=lambda issue: (issue.pointer, issue.keyword, issue.message))
+    return issues
+
+
+def validate_registry_document(
+    document: Any, path: str | os.PathLike[str] = "registry.json"
+) -> None:
+    """Raise :class:`RegistryValidationError` unless ``document`` matches the schema."""
+    issues = validation_issues(document)
+    if issues:
+        noun = "error" if len(issues) == 1 else "errors"
+        raise RegistryValidationError(
+            path, f"does not match the registry schema ({len(issues)} {noun})", issues
+        )
+
+
+def load_registry_document(path: str | os.PathLike[str]) -> dict[str, Any]:
+    """Read and validate a registry file without creating or modifying anything.
+
+    Raises :class:`FileNotFoundError` (or another :class:`OSError`) when the file
+    cannot be read and :class:`RegistryValidationError` when it is not valid
+    JSON or does not match the schema.
+    """
+    path = Path(path)
+    try:
+        # utf-8-sig accepts (and strips) the BOM some Windows editors write.
+        text = path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError as exc:
+        issue = RegistryValidationIssue(
+            pointer="",
+            message=f"not valid UTF-8 at byte {exc.start}: {exc.reason}",
+            keyword="encoding",
+        )
+        raise RegistryValidationError(path, "is not UTF-8 encoded text", [issue]) from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        issue = RegistryValidationIssue(
+            pointer="", message=f"{exc.msg} (line {exc.lineno}, column {exc.colno})", keyword="json"
+        )
+        raise RegistryValidationError(path, "is not valid JSON", [issue]) from exc
+    if not isinstance(data, dict):
+        raise RegistryValidationError(
+            path,
+            f"expected a JSON object at the top level, got {type(data).__name__}",
+            [RegistryValidationIssue("", f"{type(data).__name__} is not an object", "type")],
+        )
+    validate_registry_document(data, path)
+    return data
 
 
 @dataclass
@@ -100,6 +260,11 @@ class Registry:
     ``os.replace``, keeping the file's permission bits) and only then swapped in, so a failed write leaves both
     the file and the in-memory state unchanged and a crash mid-write never
     truncates ``registry.json``.
+
+    The document is validated against the registry schema on every load
+    (construction and :meth:`reload`) and before every write; an invalid one
+    raises :class:`RegistryValidationError` (logged at ERROR) and changes
+    nothing.
 
     :meth:`close` marks the registry closed; later mutations raise
     :class:`RegistryClosedError`.
@@ -139,18 +304,28 @@ class Registry:
             if not self.registry_path.exists():
                 self.registry_path.parent.mkdir(parents=True, exist_ok=True)
                 self._write_json(_default_document())
-            with self.registry_path.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, dict):
-                raise ValueError(
-                    f"{self.registry_path}: expected a JSON object at the top level, "
-                    f"got {type(data).__name__}"
-                )
+            try:
+                data = load_registry_document(self.registry_path)
+            except RegistryValidationError as exc:
+                _log_invalid(exc)
+                raise
             self._data = data
 
     def reload(self) -> None:
-        """Re-read ``registry.json`` from disk (after an out-of-band edit)."""
+        """Re-read ``registry.json`` from disk (after an out-of-band edit).
+
+        If the file is now invalid, :class:`RegistryValidationError` is raised
+        and the previously loaded document stays in effect.
+        """
         self._load()
+
+    def _validate(self, data: dict[str, Any]) -> None:
+        """Refuse to write a document that the next load would reject."""
+        try:
+            validate_registry_document(data, self.registry_path)
+        except RegistryValidationError as exc:
+            _log_invalid(exc)
+            raise
 
     def _write_json(self, data: dict[str, Any]) -> None:
         """Write ``data`` to the registry file atomically (temp file, fsync, replace).
@@ -207,13 +382,15 @@ class Registry:
         """Apply ``change`` to a copy of the document, persist it, then swap it in.
 
         ``change`` returns the call's result; it may raise to abort without
-        writing. The caller holds no lock; this method takes it.
+        writing, and so does a draft that fails schema validation. The caller
+        holds no lock; this method takes it.
         """
         with self._lock:
             self._check_open()
             draft = copy.deepcopy(self._data)
             result = change(draft)
             draft["last_updated"] = time.time()
+            self._validate(draft)
             self._write_json(draft)
             self._data = draft
             return result
@@ -313,14 +490,30 @@ class Registry:
         return self._mutate(change)
 
 
+def _log_invalid(exc: RegistryValidationError) -> None:
+    _logger.error(
+        "registry %s %s: %s",
+        exc.path,
+        exc.message,
+        "; ".join(str(issue) for issue in exc.errors),
+    )
+
+
 __all__ = [
     "BUCKET_TO_KIND",
     "CORPUS_FOLDER_TO_KIND",
     "KIND_TO_BUCKET",
     "REGISTRY_KINDS",
+    "SCHEMA_FILENAME",
     "EntryKind",
     "Registry",
     "RegistryClosedError",
     "RegistryEntry",
     "RegistryKind",
+    "RegistryValidationError",
+    "RegistryValidationIssue",
+    "load_registry_document",
+    "registry_schema",
+    "validate_registry_document",
+    "validation_issues",
 ]

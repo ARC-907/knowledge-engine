@@ -30,7 +30,7 @@ from pydantic import BeforeValidator, Field
 
 from .. import __version__
 from ..core.config import Config
-from ..core.registry import EntryKind, Registry
+from ..core.registry import EntryKind, Registry, RegistryValidationError
 from ..retrieval.fts5 import Indexer
 from .http import transport_security
 from .options import add_arguments, resolve_http_options
@@ -270,7 +270,17 @@ def run(args: argparse.Namespace) -> int:
     # The Indexer opens its SQLite file eagerly; a fresh KE_DATA_DIR must exist
     # first (Config.from_env() itself never touches the filesystem).
     config.ensure_dirs()
-    registry = Registry(config.registry_path)
+    try:
+        registry = Registry(config.registry_path)
+    except RegistryValidationError as exc:
+        # The registry already logged every schema error; stdout stays clean
+        # (it is the stdio transport) and the client sees a failed start.
+        logger.error(
+            "MCP server not started: %s %s (check it with `knowledge-engine registry validate`)",
+            exc.path,
+            exc.message,
+        )
+        return 1
     indexer = Indexer(config, registry)
     server = build_server(config, registry, indexer)
 
