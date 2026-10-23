@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import os
 import re
 import shlex
 import subprocess
@@ -349,7 +350,7 @@ def invoke_script(
         return {"ok": False, "error": "No command configured for this tool"}
 
     try:
-        argv = shlex.split(command, posix=True)
+        argv = _split_command(command)
     except ValueError as exc:
         return {"ok": False, "error": f"Unparseable command string: {exc}"}
     if not argv:
@@ -416,6 +417,23 @@ def invoke_script(
     except Exception as e:
         logger.warning("tool %s: %s %s failed: %s", tool_id, first_word, script_label, e)
         return {"ok": False, "error": str(e)}
+
+
+def _split_command(command: str) -> list[str]:
+    """Split a tool's command string into argv without a shell.
+
+    POSIX quoting rules apply everywhere. On Windows the backslash is the
+    path separator rather than an escape character, so escaping is disabled
+    there and ``python C:\\tools\\job.py`` survives intact; quotes still
+    group arguments on both platforms.
+    """
+    if os.name != "nt":
+        return shlex.split(command, posix=True)
+    lexer = shlex.shlex(command, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    lexer.escape = ""
+    return list(lexer)
 
 
 def _check_script_argv(

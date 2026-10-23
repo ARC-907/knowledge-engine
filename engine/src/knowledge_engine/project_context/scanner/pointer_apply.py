@@ -93,6 +93,10 @@ def _ensure_within(root: str | Path, path: str | Path) -> Path:
     TODO: move to ``knowledge_engine.core.paths.ensure_within`` once that shared
     helper exists, and import it from there.
     """
+    if "\x00" in str(path):
+        # Windows' realpath swallows the embedded-null ValueError and returns
+        # the path unchanged, so check explicitly on every platform.
+        raise ValueError(f"cannot resolve {str(path)!r}: embedded null byte")
     try:
         root_resolved = Path(root).resolve()
         resolved = (root_resolved / path).resolve()

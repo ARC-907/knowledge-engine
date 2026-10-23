@@ -526,3 +526,16 @@ def test_legacy_table_is_migrated_and_old_rows_use_defaults(tmp_path: Path, monk
     assert host.proxy_to_service(tool, method="POST", body=b"{}")["ok"] is True
     assert host.proxy_to_service(tool, method="PUT")["status"] == 405
     assert len(sent) == 2
+
+
+def test_split_command_keeps_backslashes_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(host.os, "name", "nt")
+    argv = host._split_command("python C:\\tools\\job.py 'two words' plain")
+    assert argv == ["python", "C:\\tools\\job.py", "two words", "plain"]
+
+
+def test_split_command_posix_escapes() -> None:
+    monkeypatch_name = host.os.name
+    if monkeypatch_name == "nt":  # pragma: no cover - exercised on POSIX runners
+        pytest.skip("POSIX escaping is not used on Windows")
+    assert host._split_command("python a\\ b.py 'c d'") == ["python", "a b.py", "c d"]
