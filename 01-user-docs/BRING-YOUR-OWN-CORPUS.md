@@ -113,7 +113,8 @@ doesn't exist.
 `registry.json` decides what is indexed and what the dashboard and MCP server
 expose. Key facts:
 
-- It's validated against `corpus/registry.schema.json`.
+- It's validated against the registry JSON Schema
+  (`corpus/registry.schema.json`) every time the engine loads or writes it.
 - Each entry has an `enabled` flag — disabled entries are not indexed.
 - The dashboard's toggle switches, and the MCP `registry_toggle` tool, flip
   that flag.
@@ -122,6 +123,26 @@ expose. Key facts:
 
 You can edit `registry.json` by hand — it's plain JSON. Just keep it valid
 against the schema.
+
+### Validate your registry
+
+After a hand edit, check the file before starting the engine:
+
+```bash
+knowledge-engine registry validate                      # the configured KE_REGISTRY_PATH
+knowledge-engine registry validate path/to/registry.json
+knowledge-engine registry validate --json               # machine-readable report
+```
+
+It exits `0` when the file is valid and `1` otherwise, printing one line per
+problem with its JSON pointer (for example
+`/libraries/0/tags: 'a,b' is not of type 'array'`). Unknown top-level keys are
+rejected; entries need `id`, `name` and `path`, and may carry extra fields of
+your own. `serve`, `mcp`, `bootstrap`, `reindex` and the other corpus commands
+refuse to start on an invalid registry and report the same errors. The schema
+ships inside the package; `corpus/registry.schema.json` is an identical copy,
+and adding `"$schema": "https://raw.githubusercontent.com/ARC-907/knowledge-engine/main/corpus/registry.schema.json"`
+to your `registry.json` gives editors completion and inline errors.
 
 ## Auto-registering new folders
 
