@@ -20,7 +20,7 @@ and work down; each guide is self-contained.
 - **Corpus** — your markdown, in `corpus/`. This is data; you own it.
 - **Engine** — the Python package in `engine/`. Indexes the corpus, serves an
   API, runs an MCP server. MIT-licensed; fork it freely.
-- **Dashboard** — `ui/index.html`. A thin client over the engine's HTTP API.
+- **Dashboard** — `engine/src/knowledge_engine/server/static/index.html`. A thin client over the engine's HTTP API.
 
 You bring the corpus. The engine makes it searchable — in a browser, from the
 CLI, and from any MCP-capable AI assistant.

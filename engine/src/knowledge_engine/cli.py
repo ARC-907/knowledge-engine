@@ -213,6 +213,9 @@ def main() -> int:
         return board_serve(host=args.host, port=args.port)
 
     config = Config.from_env()
+    # Every command below opens the registry mirror (and most write an index),
+    # so the data dir must exist before the first SQLite connection.
+    config.ensure_dirs()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")
 
     if args.cmd == "info":

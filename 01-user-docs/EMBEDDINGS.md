@@ -89,15 +89,15 @@ All embedding settings come from environment variables with sensible defaults:
 | --- | --- | --- |
 | `KE_OLLAMA_URL` | `http://127.0.0.1:11434` | Where Ollama is listening |
 | `KE_EMBED_MODEL` | `bge-m3:latest` | The embedding model to use |
-| `KE_CORPUS_ROOT` | `./corpus` | Which corpus to embed |
+| `KE_CORPUS_ROOT` | `${KE_HOME}/corpus` | Which corpus to embed |
 | `KE_EMBEDDINGS_DB` | `$KE_DATA_DIR/embeddings.db` | Where the embedding index is stored |
 
 Set them before running `build` or `search`. They are read at process start.
 
 ## How it relates to the rest of the engine
 
-- The **FTS5 index** (`engine/data/index.db`) and the **embedding index**
-  (`engine/data/embeddings.db`) are separate databases. Building one never
+- The **FTS5 index** (`$KE_DATA_DIR/index.db`) and the **embedding index**
+  (`$KE_DATA_DIR/embeddings.db`) are separate databases. Building one never
   touches the other.
 - The dashboard and the MCP `search` tool currently use **FTS5**. Embeddings in
   v1.0 are a CLI / library capability — `knowledge_engine.embeddings.search` is

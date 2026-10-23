@@ -24,13 +24,20 @@ def env_truthy(name: str, default: bool) -> bool:
     return raw.strip().lower() not in ("0", "false", "no", "off", "")
 
 
-def _board_sweeper_should_run() -> bool:
+def _board_sweeper_should_run(board_sweeper: ModuleType) -> bool:
     """Read the runtime decision for starting the sweeper at app boot.
 
     `KE_BOARD_SWEEPER` env var, when set, overrides the persisted
     `board_config.sweeper_enabled` flag — useful for ops who want to
-    skip the sweeper in a specific deployment without touching the DB.
+    skip the sweeper in a specific deployment without touching the DB
+    (and the test suite, which turns it off by default). Unset, the
+    persisted flag decides; it defaults to on.
     """
+    override: bool | None = board_sweeper.env_override()
+    if override is not None:
+        if not override:
+            _logger.info("board sweeper disabled by %s", board_sweeper.SWEEPER_ENV)
+        return override
     try:
         # Optional subsystem, imported lazily so a broken board never blocks boot.
         from ..agent_board import store as board_store  # noqa: PLC0415
@@ -38,9 +45,6 @@ def _board_sweeper_should_run() -> bool:
         cfg = board_store.load_config()
     except Exception:
         cfg = {"sweeper_enabled": True}
-    sweeper_env = os.environ.get("KE_BOARD_SWEEPER")
-    if sweeper_env is not None:
-        return sweeper_env.strip().lower() not in ("0", "false", "no", "off", "")
     return bool(cfg.get("sweeper_enabled", True))
 
 
@@ -60,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             from ..agent_board import sweeper as _sweeper  # noqa: PLC0415
 
             board_sweeper = _sweeper
-            if _board_sweeper_should_run():
+            if _board_sweeper_should_run(_sweeper):
                 _sweeper.start()
         except Exception:
             _logger.exception("board sweeper failed to start; continuing")

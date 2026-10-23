@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import atexit
+import contextlib
 import logging
+from importlib import resources
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -21,9 +24,43 @@ from .lifespan import env_truthy, lifespan
 
 _logger = logging.getLogger(__name__)
 
+# Dashboard assets ship inside the package (``knowledge_engine/server/static``)
+# so they are present in wheels and editable installs alike.
+DASHBOARD_PACKAGE = "knowledge_engine.server"
+DASHBOARD_DIRNAME = "static"
+
+
+def dashboard_dir() -> Path | None:
+    """Locate the packaged dashboard directory, or None when it is missing.
+
+    Regular installs expose package data as real files. For non-filesystem
+    installs (e.g. zip imports) the directory is extracted once with
+    ``importlib.resources.as_file`` and cleaned up at interpreter exit.
+    """
+    resource = resources.files(DASHBOARD_PACKAGE).joinpath(DASHBOARD_DIRNAME)
+    if not resource.is_dir():
+        _logger.warning("dashboard assets not found at %s; /ui will not be served", resource)
+        return None
+    if isinstance(resource, Path):
+        return resource
+    stack = contextlib.ExitStack()
+    extracted = stack.enter_context(resources.as_file(resource))
+    atexit.register(stack.close)
+    return extracted
+
+
+def _mount_dashboard(app: FastAPI) -> None:
+    ui_dir = dashboard_dir()
+    if ui_dir is None:
+        return
+    app.mount("/ui", StaticFiles(directory=ui_dir, html=True), name="ui")
+    _logger.info("dashboard mounted at /ui from %s", ui_dir)
+
 
 def create_app() -> FastAPI:
     config = Config.from_env()
+    # The registry mirror and FTS index below open SQLite files in data_dir.
+    config.ensure_dirs()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")
     indexer = Indexer(config, registry)
     providers = ProviderRegistry()
@@ -72,8 +109,6 @@ def create_app() -> FastAPI:
             _logger.exception("agent board failed to mount; continuing without it")
 
     # Static dashboard (served at /ui)
-    ui_dir = Path(__file__).resolve().parents[2].parent / "ui"
-    if ui_dir.exists():
-        app.mount("/ui", StaticFiles(directory=str(ui_dir), html=True), name="ui")
+    _mount_dashboard(app)
 
     return app

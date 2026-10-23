@@ -10,6 +10,7 @@ Run via: `knowledge-engine mcp` or `python -m knowledge_engine.mcp.server`.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -37,6 +38,8 @@ except ImportError:
     collect_board_tools = None
     BoardContextCls = None
 
+
+_logger = logging.getLogger(__name__)
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "knowledge-engine", "version": __version__}
@@ -98,6 +101,7 @@ TOOLS = [
 class Server:
     def __init__(self) -> None:
         self.config = Config.from_env()
+        self.config.ensure_dirs()
         self.registry = Registry(self.config.registry_path, self.config.data_dir / "registry.db")
         self.indexer = Indexer(self.config, self.registry)
         # ── Project-docs subsystem (optional, off unless configured) ──
@@ -126,9 +130,18 @@ class Server:
 
     def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if name == "search":
-            results = self.indexer.search(args["query"], limit=int(args.get("limit", 10)))
-            if args.get("kind"):
-                results = [r for r in results if r.get("entry_kind") == args["kind"]]
+            query = args["query"]
+            if not isinstance(query, str):
+                raise ValueError("query must be a string")
+            # Validate before the value reaches SQLite: a non-string bind
+            # parameter raises sqlite3.ProgrammingError, which `handle` does
+            # not translate into a JSON-RPC error.
+            kind = args.get("kind") or None
+            if kind is not None and not isinstance(kind, str):
+                raise ValueError("kind must be a string")
+            # The kind filter runs inside the query (before LIMIT) so a filtered
+            # search still returns up to `limit` hits of that kind.
+            results = self.indexer.search(query, limit=int(args.get("limit", 10)), kind=kind)
             return {"content": [{"type": "text", "text": json.dumps(results, indent=2)}]}
         if name == "registry_list":
             entries = self.registry.list(
@@ -205,7 +218,16 @@ def main() -> int:
             msg = json.loads(line)
         except json.JSONDecodeError:
             continue
-        response = server.handle(msg)
+        try:
+            response = server.handle(msg)
+        except Exception:
+            # One malformed request must not take the whole stdio server down.
+            _logger.exception("unhandled error while handling %r", msg.get("method"))
+            response = {
+                "jsonrpc": "2.0",
+                "id": msg.get("id"),
+                "error": {"code": -32603, "message": "internal error"},
+            }
         if response is not None:
             sys.stdout.write(json.dumps(response) + "\n")
             sys.stdout.flush()

@@ -256,7 +256,7 @@ knowledge-engine board keys bootstrap-master
 ```
 
 The raw master key is written to `<KE_DATA_DIR>/board-master-key.txt`
-(default `engine/data/`, `chmod 600` on POSIX). Copy it, then delete the
+(default `<KE_HOME>/.knowledge-engine/data/`, `chmod 600` on POSIX). Copy it, then delete the
 file. The board refuses to disable or delete the last enabled master so a
 routine GUI action can't lock you out (409 with a recovery hint).
 

@@ -57,7 +57,7 @@ add your own under `corpus/` and register them (see
 
 ## Dashboard
 
-- `ui/index.html` — single-file Alpine.js + Tailwind dashboard auto-mounted at `/ui/` (Search / Registry / Board / Config tabs)
+- `engine/src/knowledge_engine/server/static/index.html` — single-file Alpine.js + Tailwind dashboard auto-mounted at `/ui/` (Search / Registry / Board / Config tabs)
 
 ## Scripts (`scripts/`)
 

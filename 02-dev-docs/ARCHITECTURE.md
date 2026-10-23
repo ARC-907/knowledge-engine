@@ -12,7 +12,7 @@ independently of the others.
 | --- | --- | --- |
 | **Corpus** | `corpus/` | Yes — swap wholesale. Markdown content + the `registry.json` that lists it. |
 | **Engine** | `engine/` | Open source (MIT). Fork it if you need to. Python package with its own `pyproject.toml`. |
-| **Dashboard** | `ui/index.html` | Trivial fork. One Alpine.js + Tailwind HTML file, no build step. |
+| **Dashboard** | `engine/src/knowledge_engine/server/static/index.html` | Trivial fork. One Alpine.js + Tailwind HTML file, no build step. |
 
 The corpus is data. The engine is code. The dashboard is a thin client over
 the engine's HTTP API. You can replace any one without touching the others.
@@ -21,7 +21,7 @@ the engine's HTTP API. You can replace any one without touching the others.
 
 The engine **never hardcodes** library names, skill names, paths, or counts.
 Every piece of discovery goes through the registry. `corpus/registry.json`
-(mirrored into a queryable SQLite cache at `engine/data/registry.db`) is the
+(mirrored into a queryable SQLite cache at `<KE_DATA_DIR>/registry.db`) is the
 single source of truth for what is enabled and indexed.
 
 This is what makes the engine corpus-agnostic: drop in any markdown corpus,
@@ -66,8 +66,9 @@ engine/                          the engine (code layer)
   src/knowledge_engine/
     cli.py                       `knowledge-engine` CLI entrypoint (bootstrap/capabilities/reindex/search/...)
     app.py  mcp_server.py        compat shims re-exporting server.app / mcp.server
-    core/                        config.py (env paths), registry.py (source of truth), watcher.py (auto-register)
+    core/                        paths.py (KE_HOME/KE_* path resolver), config.py (env config), registry.py (source of truth), watcher.py (auto-register)
     server/                      app.py (FastAPI factory) + api/ routes (health, registry, search, generate, board)
+      static/                    index.html — single-file Alpine.js + Tailwind dashboard (Search / Registry / Board / Config tabs), served at /ui/
     mcp/                         server.py — JSON-RPC 2.0 MCP stdio server
     generation/                  provider abstraction: echo, cloud HTTP (cloud_http.py), Ollama
     retrieval/                   fts5.py (FTS5 index, bm25 + snippets) + embeddings/ (opt-in bge-m3 cosine search)
@@ -82,8 +83,6 @@ engine/                          the engine (code layer)
 scripts/
   agent-board/                  optional standalone Agent Board service (watchdog + launchers)
 
-ui/
-  index.html                    single-file Alpine.js + Tailwind dashboard (Search / Registry / Board / Config tabs)
 ```
 
 ## HTTP API surface

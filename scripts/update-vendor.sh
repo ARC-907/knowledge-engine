@@ -11,7 +11,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-vendor_root="$repo_root/ui/vendor"
+vendor_root="$repo_root/engine/src/knowledge_engine/server/static/vendor"
 
 # Pinned versions + expected SHA384 (base64) of upstream bundle.
 # Format per row: name|version|url|relative_out_path|sha384_base64

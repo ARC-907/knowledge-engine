@@ -1,10 +1,17 @@
-"""Configuration loaded from environment. No hardcoded paths."""
+"""Configuration loaded from environment. No hardcoded paths.
+
+Path defaults come from :mod:`knowledge_engine.core.paths` (``KE_HOME``,
+``KE_CORPUS_ROOT``, ``KE_REGISTRY_PATH``, ``KE_DATA_DIR``). Loading a config
+never touches the filesystem; entry points that write state call
+:meth:`Config.ensure_dirs` first.
+"""
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
+
+from . import paths
 
 
 @dataclass(frozen=True)
@@ -15,12 +22,14 @@ class Config:
 
     @classmethod
     def from_env(cls) -> Config:
-        # corpus_root defaults to ../corpus relative to engine/
-        engine_dir = Path(__file__).resolve().parents[2]
-        corpus_root = Path(os.environ.get("KE_CORPUS_ROOT", engine_dir.parent / "corpus")).resolve()
-        data_dir = Path(os.environ.get("KE_DATA_DIR", engine_dir / "data")).resolve()
-        registry_path = Path(
-            os.environ.get("KE_REGISTRY_PATH", corpus_root / "registry.json")
-        ).resolve()
-        data_dir.mkdir(parents=True, exist_ok=True)
-        return cls(corpus_root=corpus_root, data_dir=data_dir, registry_path=registry_path)
+        """Resolve the configuration from ``KE_*`` env vars. Side-effect free."""
+        resolved = paths.resolve()
+        return cls(
+            corpus_root=resolved.corpus_root,
+            data_dir=resolved.data_dir,
+            registry_path=resolved.registry_path,
+        )
+
+    def ensure_dirs(self) -> None:
+        """Create the runtime data directory. Idempotent."""
+        paths.ensure_data_dir(self.data_dir)

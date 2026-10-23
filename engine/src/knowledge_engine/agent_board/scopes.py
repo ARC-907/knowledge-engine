@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ..core.config import Config
+from ..core import paths
 
 # Scope keys are operator/agent-supplied, so they're slugified before they
 # ever touch the filesystem. Only a conservative charset survives; anything
@@ -58,8 +58,12 @@ def slugify_scope(scope: str) -> str:
 
 
 def scopes_root() -> Path:
-    """Directory that holds per-scope DB files (created on demand)."""
-    return Config.from_env().data_dir / SCOPES_DIRNAME
+    """Directory that holds per-scope DB files (created on demand).
+
+    Lives under the engine data dir resolved by ``core.paths`` — the same
+    directory that holds the default ``pipeline.db``.
+    """
+    return paths.resolve_data_dir() / SCOPES_DIRNAME
 
 
 def scope_db_path(scope: str) -> str:

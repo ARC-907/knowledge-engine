@@ -93,15 +93,27 @@ class Indexer:
             self._conn.commit()
             return counts
 
-    def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+    def search(self, query: str, limit: int = 20, kind: str | None = None) -> list[dict[str, Any]]:
+        """Rank matches for ``query`` by BM25.
+
+        ``kind`` (``library`` / ``skill`` / ``kit`` / ``tool``) is applied in
+        SQL *before* ``LIMIT``, so a filtered search still returns up to
+        ``limit`` hits of that kind.
+        """
+        sql = (
+            "SELECT entry_id, entry_kind, relpath, snippet(docs, 3, '<mark>', '</mark>', '...', 12), bm25(docs) "
+            "FROM docs WHERE docs MATCH ?"
+        )
+        params: list[Any] = [query]
+        if kind:
+            sql += " AND entry_kind = ?"
+            params.append(kind)
+        sql += " ORDER BY bm25(docs) LIMIT ?"
+        params.append(limit)
         with self._lock:
             cur = self._conn.cursor()
             try:
-                cur.execute(
-                    "SELECT entry_id, entry_kind, relpath, snippet(docs, 3, '<mark>', '</mark>', '...', 12), bm25(docs) "
-                    "FROM docs WHERE docs MATCH ? ORDER BY bm25(docs) LIMIT ?",
-                    (query, limit),
-                )
+                cur.execute(sql, params)
             except sqlite3.OperationalError:
                 return []
             rows = cur.fetchall()

@@ -31,7 +31,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from ..core.config import Config
+from ..core import paths
 from ..runtime.foundation import db
 
 _logger = logging.getLogger(__name__)
@@ -369,8 +369,7 @@ def ensure_master_key() -> dict[str, Any] | None:
 
         # Best-effort file write — never raise from bootstrap.
         try:
-            cfg = Config.from_env()
-            key_file = cfg.data_dir / "board-master-key.txt"
+            key_file = paths.ensure_data_dir() / "board-master-key.txt"
             key_file.write_text(
                 "Knowledge-Engine Agent Board — Master Key\n"
                 f"Created: {key_data['created_at']}\n"

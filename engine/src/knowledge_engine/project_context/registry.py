@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from types import ModuleType
 
 from . import fingerprints
 from .paths import canonical_root
@@ -137,12 +136,8 @@ def _detect_branch(root: str, cfg) -> tuple[str, bool]:
     except ImportError:
         return default_branch, False
 
-    # The package attribute may be stubbed to None to simulate an absent module.
-    git_mod: ModuleType | None = git_context
-    if git_mod is None:
-        return default_branch, False
-
-    collect = getattr(git_mod, "collect", None)
+    # getattr also covers a package attribute stubbed to None (an absent module).
+    collect = getattr(git_context, "collect", None)
     if collect is None:
         return default_branch, False
 
