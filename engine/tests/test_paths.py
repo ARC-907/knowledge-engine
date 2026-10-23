@@ -222,15 +222,21 @@ def test_create_app_creates_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert (data / "registry.db").is_file()
 
 
-def test_mcp_server_creates_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from knowledge_engine.mcp.server import Server
+def test_mcp_server_creates_data_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from knowledge_engine.mcp.server import main
 
     data = tmp_path / "new" / "data"
     monkeypatch.setenv("KE_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("KE_DATA_DIR", str(data))
+    # The project-context tool group resolves its root from the CWD.
+    monkeypatch.chdir(tmp_path)
 
-    Server()
+    # `--selftest` runs the same startup as the stdio and HTTP transports.
+    assert main(["--selftest"]) == 0
 
+    assert json.loads(capsys.readouterr().out)["ok"] is True
     assert (data / "registry.db").is_file()
 
 

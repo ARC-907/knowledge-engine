@@ -1,0 +1,1340 @@
+{
+  "agent_board": [
+    {
+      "description": "Post a schema-validated message to the agent board. Channels: ops, research, project, worktree, branch, library, planning, execution, testing, chatter (extend via /board/config). Accepts an optional board_key (validated only when require_key_for_post is on).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "description": "Channel slug \u2014 see board_channels for valid values.",
+            "default": "ops"
+          },
+          "message_type": {
+            "type": "string",
+            "description": "Canonical message type (e.g. claim, status_update, blocker)."
+          },
+          "sender_node_id": {
+            "type": "string",
+            "description": "Identity of the sender (branch name, worktree slug, agent id)."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Short subject line (optional)."
+          },
+          "body": {
+            "type": "string",
+            "description": "Free-text body (markdown ok)."
+          },
+          "sender_role": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "product_id": {
+            "type": "string"
+          },
+          "visibility_scope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "task",
+              "product",
+              "role",
+              "node"
+            ],
+            "default": "all"
+          },
+          "target_node_id": {
+            "type": "string"
+          },
+          "target_role": {
+            "type": "string"
+          },
+          "requires_ack": {
+            "type": "boolean",
+            "default": false
+          },
+          "reply_to": {
+            "type": "string",
+            "description": "message_id this is a reply to."
+          },
+          "correlation_id": {
+            "type": "string",
+            "description": "Thread/correlation id."
+          },
+          "thread_id": {
+            "type": "string",
+            "description": "Persistent thread id."
+          },
+          "ttl_hours": {
+            "type": "integer",
+            "default": 168,
+            "minimum": 0
+          },
+          "model_id": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional isolation key (project / branch / agent / loop). Routes the post to that scope's own database; omit for the shared board. Must match ^[a-z0-9][a-z0-9_-]{0,63}$."
+          },
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
+          }
+        },
+        "required": [
+          "message_type",
+          "sender_node_id",
+          "body"
+        ]
+      },
+      "name": "board_post"
+    },
+    {
+      "description": "Shorthand for posting a task claim (message_type='claim'). Accepts an optional board_key (validated only when require_key_for_post is on).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sender_node_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "sender_role": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "default": "ops"
+          },
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
+          }
+        },
+        "required": [
+          "sender_node_id",
+          "task_id"
+        ]
+      },
+      "name": "board_claim"
+    },
+    {
+      "description": "Shorthand for releasing a claim (message_type='release'). Accepts an optional board_key (validated only when require_key_for_post is on).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sender_node_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "default": "ops"
+          },
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
+          }
+        },
+        "required": [
+          "sender_node_id",
+          "task_id"
+        ]
+      },
+      "name": "board_release"
+    },
+    {
+      "description": "Shorthand for a blocker (requires_ack=true). The sweeper will emit reminders if unacked past the stale threshold. Accepts an optional board_key (validated only when require_key_for_post is on).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sender_node_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "default": "ops"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
+          }
+        },
+        "required": [
+          "sender_node_id",
+          "description"
+        ]
+      },
+      "name": "board_blocker"
+    },
+    {
+      "description": "Acknowledge a message by id. Appends caller to ack_by list. Accepts an optional board_key (validated only when require_key_for_post is on).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          },
+          "acker": {
+            "type": "string",
+            "description": "Caller identity (e.g. node id)."
+          },
+          "scope": {
+            "type": "string"
+          },
+          "board_key": {
+            "type": "string",
+            "description": "Optional X-Board-Key token. Only checked when the board's require_key_for_post flag is on; the MCP server runs locally and counts as a loopback peer, so it is never required. If supplied it must be a valid key with board:write."
+          }
+        },
+        "required": [
+          "message_id",
+          "acker"
+        ]
+      },
+      "name": "board_ack"
+    },
+    {
+      "description": "Poll messages from the board with optional filters. Default limit is 20 \u2014 set higher only when you need it. Pair with board_digest for catch-up summaries on busy channels.",
+      "inputSchema": {
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "message_type": {
+            "type": "string"
+          },
+          "product_id": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "Optional isolation key (project / branch / agent / loop). Routes to that scope's own database; omit for the shared board.",
+            "type": "string"
+          },
+          "sender_node_id": {
+            "type": "string"
+          },
+          "since": {
+            "description": "ISO timestamp; only messages newer than this are returned.",
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "board_read"
+    },
+    {
+      "description": "Messages relevant to the calling agent \u2014 uses visibility-scope rules (same task, same product, addressed to role/node, or global). Use this when waking up to a new branch or worktree.",
+      "inputSchema": {
+        "properties": {
+          "current_task_ids": {
+            "description": "Tasks the caller is currently working on.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "node_id": {
+            "description": "Caller's identity.",
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "Optional isolation key (project / branch / agent / loop). Routes to that scope's own database; omit for the shared board.",
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id"
+        ],
+        "type": "object"
+      },
+      "name": "board_relevant"
+    },
+    {
+      "description": "Fetch all messages in a thread, oldest-first.",
+      "inputSchema": {
+        "properties": {
+          "correlation_id": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "scope": {
+            "description": "Optional isolation key (project / branch / agent / loop). Routes to that scope's own database; omit for the shared board.",
+            "type": "string"
+          },
+          "thread_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "board_thread"
+    },
+    {
+      "description": "Context-compressed summary of recent activity on a channel (or all channels). Returns counts by type, top senders, open blockers, and busy threads \u2014 no full bodies. Use this for catch-up reads to avoid flooding your context window.",
+      "inputSchema": {
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "max_messages": {
+            "default": 200,
+            "description": "Cap on messages scanned for the summary.",
+            "maximum": 2000,
+            "minimum": 10,
+            "type": "integer"
+          },
+          "scope": {
+            "description": "Optional isolation key (project / branch / agent / loop). Routes to that scope's own database; omit for the shared board.",
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "board_digest"
+    },
+    {
+      "description": "Service health, channel stats, last-sweep timestamp.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "board_status"
+    },
+    {
+      "description": "List configured channels + their canonical defaults.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "board_channels"
+    },
+    {
+      "description": "List canonical message types + visibility scopes.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "board_message_types"
+    },
+    {
+      "description": "List the per-scope databases (project / branch / agent / loop) that currently exist, with their sizes.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "board_scopes"
+    },
+    {
+      "description": "Full-text search over message subject + body with bm25 ranking and snippet highlighting. Falls back to LIKE scan if FTS5 is unavailable in the SQLite build.",
+      "inputSchema": {
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 25,
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "FTS5 query expression.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Optional isolation key (project / branch / agent / loop). Searches that scope's own database; omit for the shared board.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "board_search"
+    },
+    {
+      "description": "Run one sweeper pass immediately \u2014 TTL prune, stale-blocker reminders, per-channel digests. Returns the resulting counts. Useful for tests and on-demand maintenance.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "board_sweep_now"
+    }
+  ],
+  "base": [
+    {
+      "description": "Full-text search across enabled libraries, skills, kits, and tools in the corpus.",
+      "inputSchema": {
+        "properties": {
+          "kind": {
+            "description": "Optional kind filter",
+            "enum": [
+              "library",
+              "skill",
+              "kit",
+              "tool"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "type": "integer"
+          },
+          "query": {
+            "description": "FTS5 query string",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "search"
+    },
+    {
+      "description": "List entries in the registry.",
+      "inputSchema": {
+        "properties": {
+          "enabled_only": {
+            "default": false,
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "library",
+              "skill",
+              "kit",
+              "tool"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "registry_list"
+    },
+    {
+      "description": "Enable or disable a registry entry by id.",
+      "inputSchema": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "entry_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "name": "registry_toggle"
+    },
+    {
+      "description": "Fetch a single registry entry by id.",
+      "inputSchema": {
+        "properties": {
+          "entry_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id"
+        ],
+        "type": "object"
+      },
+      "name": "registry_get"
+    }
+  ],
+  "project_context": [
+    {
+      "description": "Report which project-context capabilities are enabled (scanner, pointers, git, embeddings, mutation, raw logs).",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.capabilities"
+    },
+    {
+      "description": "Return the effective project-context configuration (safe, non-secret fields only).",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.config_status"
+    },
+    {
+      "description": "Check that the fingerprint registry and project DBs are reachable and report basic counts.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.healthcheck"
+    },
+    {
+      "description": "List all project-context MCP tools grouped by capability, with each group's enablement state.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.explain_available_tools"
+    },
+    {
+      "description": "Report the embedding subsystem posture: whether it is enabled, the configured provider/model, whether semantic search is permitted, and how many vectors are indexed. Always safe to call.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "description": "Project fingerprint (defaults to the active project).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.embedding_status"
+    },
+    {
+      "description": "Generate and store embeddings for project documents. Returns the number embedded. Returns status 'disabled' when embeddings are off.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "description": "Project fingerprint (defaults to the active project).",
+            "type": "string"
+          },
+          "record_ids": {
+            "description": "Specific record_ids to embed (default: all).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.generate_embeddings"
+    },
+    {
+      "description": "Re-generate embeddings for documents (optionally a subset by record_id), overwriting existing vectors. Returns the number refreshed. Returns status 'disabled' when embeddings are off.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "description": "Project fingerprint (defaults to the active project).",
+            "type": "string"
+          },
+          "record_ids": {
+            "description": "Specific record_ids to refresh (default: all).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.refresh_embeddings"
+    },
+    {
+      "description": "Search project documents by semantic similarity to a query. Requires embeddings enabled and the allow_embedding_search permission; otherwise returns a structured status.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "description": "Maximum number of results (default 10).",
+            "type": "integer"
+          },
+          "project_fp": {
+            "description": "Project fingerprint (defaults to the active project).",
+            "type": "string"
+          },
+          "query": {
+            "description": "Natural-language query to match against documents.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.semantic_search"
+    },
+    {
+      "description": "Find documents most similar to a given document by embedding cosine similarity. Requires embeddings enabled and the allow_embedding_search permission.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "description": "Maximum number of neighbours (default 10).",
+            "type": "integer"
+          },
+          "project_fp": {
+            "description": "Project fingerprint (defaults to the active project).",
+            "type": "string"
+          },
+          "record_id": {
+            "description": "The record_id to find neighbours for.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_id"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.similar_records"
+    },
+    {
+      "description": "Group embedded documents into clusters by similarity. Returns cluster membership. Returns status 'disabled' when embeddings are off.",
+      "inputSchema": {
+        "properties": {
+          "k": {
+            "description": "Maximum number of clusters (default 5).",
+            "type": "integer"
+          },
+          "project_fp": {
+            "description": "Project fingerprint (defaults to the active project).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.cluster_records"
+    },
+    {
+      "description": "Report the current git context for the project root (branch, commit, dirty state, sanitized remote hash). Returns status 'disabled' when git is off.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.git_context"
+    },
+    {
+      "description": "List project-context records ingested at a specific git commit, newest first.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "type": "string"
+          },
+          "commit": {
+            "description": "Full or short commit hash.",
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "type": "integer"
+          },
+          "project_fp": {
+            "type": "string"
+          },
+          "query": {
+            "description": "Optional FTS query to narrow.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "commit"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.search_by_commit"
+    },
+    {
+      "description": "Describe the lineage of the current branch relative to a base ref (merge-base, ahead/behind counts).",
+      "inputSchema": {
+        "properties": {
+          "base": {
+            "default": "main",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.get_branch_lineage"
+    },
+    {
+      "description": "Summarize a single commit: subject, files changed, and insertion/deletion counts (numstat).",
+      "inputSchema": {
+        "properties": {
+          "commit": {
+            "default": "HEAD",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.get_change_context"
+    },
+    {
+      "description": "List recent commits that touched a given file path (hash + subject), most recent first.",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "default": 10,
+            "type": "integer"
+          },
+          "path": {
+            "description": "Repo-relative file path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.explain_file_history"
+    },
+    {
+      "description": "Summarize the diff between two refs (files changed, insertions, deletions). Requires git diff summaries to be enabled; otherwise returns status 'disabled'.",
+      "inputSchema": {
+        "properties": {
+          "from_ref": {
+            "type": "string"
+          },
+          "to_ref": {
+            "default": "HEAD",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_ref"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.search_by_diff"
+    },
+    {
+      "description": "Search sanitized test-run logs by full-text query.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "description": "Optional branch fingerprint filter.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Maximum rows to return (default 10).",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Result detail level; defaults to 'summary'.",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "type": "string"
+          },
+          "project_fp": {
+            "description": "Project fingerprint; defaults to the active project.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Full-text query string.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.search_test_logs"
+    },
+    {
+      "description": "Search sanitized build logs by full-text query.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "description": "Optional branch fingerprint filter.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Maximum rows to return (default 10).",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Result detail level; defaults to 'summary'.",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "type": "string"
+          },
+          "project_fp": {
+            "description": "Project fingerprint; defaults to the active project.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Full-text query string.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.search_build_logs"
+    },
+    {
+      "description": "Search sanitized runtime logs (disabled unless scanner.discovery.include_runtime_logs is enabled).",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "description": "Optional branch fingerprint filter.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Maximum rows to return (default 10).",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Result detail level; defaults to 'summary'.",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "type": "string"
+          },
+          "project_fp": {
+            "description": "Project fingerprint; defaults to the active project.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Full-text query string.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.search_runtime_logs"
+    },
+    {
+      "description": "Return recent test runs, newest first.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "description": "Optional branch fingerprint filter.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Maximum test runs to return (default 10).",
+            "type": "integer"
+          },
+          "project_fp": {
+            "description": "Project fingerprint; defaults to the active project.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.get_test_history"
+    },
+    {
+      "description": "Return the failure summary/context for a test run.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "description": "Optional branch fingerprint filter.",
+            "type": "string"
+          },
+          "project_fp": {
+            "description": "Project fingerprint; defaults to the active project.",
+            "type": "string"
+          },
+          "test_run_id": {
+            "description": "Test run id to inspect (required).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_run_id"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.get_failure_context"
+    },
+    {
+      "description": "Return the most recent test-run summary.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "description": "Optional branch fingerprint filter.",
+            "type": "string"
+          },
+          "project_fp": {
+            "description": "Project fingerprint; defaults to the active project.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.get_latest_test_summary"
+    },
+    {
+      "description": "Resolve a ke-doc:// (or KE-DOCSTRING://) pointer URI to a compact record envelope. Full content is gated by mcp.allow_full_content; defaults to summary mode.",
+      "inputSchema": {
+        "properties": {
+          "mode": {
+            "description": "Result mode; 'full' requires the allow_full_content gate.",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "type": "string"
+          },
+          "project_fp": {
+            "description": "Project fingerprint selecting the DB (defaults to the current root's project).",
+            "type": "string"
+          },
+          "uri": {
+            "description": "The pointer URI to resolve.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.resolve_pointer"
+    },
+    {
+      "description": "List allocated pointers, optionally filtered to a single record_id.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "description": "Project fingerprint selecting the DB.",
+            "type": "string"
+          },
+          "record_id": {
+            "description": "Restrict the listing to this record's pointers.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.list_pointers"
+    },
+    {
+      "description": "Validate a pointer URI's grammar and existence; returns {valid, exists, content_hash_match}.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "description": "Project fingerprint selecting the DB.",
+            "type": "string"
+          },
+          "uri": {
+            "description": "The pointer URI to validate.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.validate_pointer"
+    },
+    {
+      "description": "Return recorded back-references (source locations that cite a pointer) for a pointer id.",
+      "inputSchema": {
+        "properties": {
+          "pointer_id": {
+            "description": "The pointer URI whose back-references to fetch.",
+            "type": "string"
+          },
+          "project_fp": {
+            "description": "Project fingerprint selecting the DB.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pointer_id"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.pointer_backrefs"
+    },
+    {
+      "description": "Full-text search the project documentation store; returns ranked summaries (compact, no bodies).",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "git_commit": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "project_fp": {
+            "type": "string"
+          },
+          "query": {
+            "description": "FTS5 MATCH expression.",
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.search"
+    },
+    {
+      "description": "Fetch a single documentation record by id (summary + metadata only).",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_id"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.get_record"
+    },
+    {
+      "description": "Return the stored summary for a record without its body.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_id"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.get_summary"
+    },
+    {
+      "description": "Return a record including its full body. Gated: requires mcp.allow_full_content, else returns not_permitted.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_id"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.get_full_content"
+    },
+    {
+      "description": "List records for an exact source path (newest first).",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "project_fp": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_path"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.search_by_path"
+    },
+    {
+      "description": "List records for a single document category (newest first).",
+      "inputSchema": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "project_fp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "category"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.search_by_type"
+    },
+    {
+      "description": "List records for a single branch fingerprint (newest first).",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "project_fp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "branch_fp"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.search_by_branch"
+    },
+    {
+      "description": "List the most recently created records (newest first).",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "project_fp": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.search_recent"
+    },
+    {
+      "description": "List every project registered in the fingerprint registry (fingerprint, name, root path, created time).",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.list_projects"
+    },
+    {
+      "description": "Register (or idempotently look up) the project at the current root in the registry. Records identity only; writes no user content.",
+      "inputSchema": {
+        "properties": {
+          "fingerprint": {
+            "description": "Optional manual fingerprint override.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Optional human-facing project name (defaults to the root directory name).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.register_project"
+    },
+    {
+      "description": "Validate that a project fingerprint exists and report its name and branch count.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "description": "The project fingerprint to validate.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_fp"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.validate_project"
+    },
+    {
+      "description": "List the branches registered for a project fingerprint.",
+      "inputSchema": {
+        "properties": {
+          "project_fp": {
+            "description": "The project fingerprint whose branches to list.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_fp"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.list_branches"
+    },
+    {
+      "description": "Derive (without registering) the deterministic project and branch fingerprints for the current root and an optional branch name.",
+      "inputSchema": {
+        "properties": {
+          "branch": {
+            "description": "Optional branch name to derive a branch fingerprint for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "project_context.resolve_fingerprint"
+    },
+    {
+      "description": "Resolve and register the current project + branch context for the active root (project_fp, branch, branch_fp, git availability).",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.current_context"
+    },
+    {
+      "description": "Report-only scan of the project root: candidate counts by category, estimated bytes, sanitization-risk flags, git availability, and recommended next actions. Writes nothing.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.scanner_report"
+    },
+    {
+      "description": "Ingest discovered candidates into the project DB. Requires scanner.enabled; returns not_permitted when the gate is off.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "type": "string"
+          },
+          "project_fp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_fp",
+          "branch_fp"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.scanner_ingest"
+    },
+    {
+      "description": "Report the scanner's current gate states (enabled, mode, pointer-replacement, source-mutation) and git availability.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.scanner_status"
+    },
+    {
+      "description": "Pre-flight validation: report which scanner modes are currently permitted for this installation. Writes nothing.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "project_context.scanner_validate"
+    },
+    {
+      "description": "Build a reversible docstring->pointer rewrite plan. Requires scanner.pointer_replacement.enabled; never mutates source.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "type": "string"
+          },
+          "project_fp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_fp",
+          "branch_fp"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.scanner_plan_pointers"
+    },
+    {
+      "description": "Execute a rewrite plan, replacing docstrings with pointer stubs. Requires pointer-replacement + source-mutation gates AND mcp.allow_mutating_tools; returns not_permitted otherwise.",
+      "inputSchema": {
+        "properties": {
+          "branch_fp": {
+            "type": "string"
+          },
+          "confirm": {
+            "default": false,
+            "type": "boolean"
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "project_fp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id",
+          "project_fp",
+          "branch_fp",
+          "confirm"
+        ],
+        "type": "object"
+      },
+      "name": "project_context.scanner_apply_pointers"
+    }
+  ]
+}

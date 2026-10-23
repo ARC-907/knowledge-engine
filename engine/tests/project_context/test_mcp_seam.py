@@ -54,18 +54,25 @@ def test_healthcheck_never_raises(tmp_path: Path) -> None:
 
 
 def test_server_merges_without_breaking_base(tmp_path: Path, monkeypatch) -> None:
-    # Point the base engine at temp dirs so Server() constructs cleanly.
+    # Point the base engine at temp dirs so the MCP server builds cleanly.
     monkeypatch.setenv("KE_CORPUS_ROOT", str(tmp_path / "corpus"))
     monkeypatch.setenv("KE_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("KE_REGISTRY_PATH", str(tmp_path / "corpus" / "registry.json"))
     monkeypatch.delenv("KE_CONFIG_PATH", raising=False)
     (tmp_path / "corpus").mkdir(parents=True, exist_ok=True)
 
-    from knowledge_engine.mcp_server import Server
+    import anyio
 
-    server = Server()
-    resp = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
-    names = {t["name"] for t in resp["result"]["tools"]}
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry
+    from knowledge_engine.mcp.server import build_server
+    from knowledge_engine.retrieval.fts5 import Indexer
+
+    config = Config.from_env()
+    config.ensure_dirs()  # Config.from_env() never touches the filesystem.
+    registry = Registry(config.registry_path, config.data_dir / "registry.db")
+    server = build_server(config, registry, Indexer(config, registry))
+    names = {t.name for t in anyio.run(server.list_tools)}
     # base tools preserved
     assert {"search", "registry_list", "registry_toggle", "registry_get"} <= names
     # project-context capability tools merged in

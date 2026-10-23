@@ -130,9 +130,11 @@ inventory in [`AGENT-BOARD.md`](AGENT-BOARD.md).
 
 ## MCP discovery surface
 
-`engine/src/knowledge_engine/mcp_server.py` is a JSON-RPC 2.0 server speaking
-MCP protocol `2024-11-05` over stdio. It exposes the base search and registry
-tools to AI assistants (Claude Desktop, Cursor, Continue, any MCP client):
+`engine/src/knowledge_engine/mcp/server.py` is built on the official MCP Python
+SDK and speaks protocol `2026-07-28` (clients using the `initialize` handshake
+get their own revision, back to `2024-11-05`) over stdio or streamable HTTP. It
+exposes the base search and registry tools to AI assistants (Claude Desktop,
+Cursor, Continue, any MCP client):
 
 - `search(query, limit=10, kind=None)` — full-text search across enabled
   libraries / skills / tools. Pass `kind` to scope to one entry type.

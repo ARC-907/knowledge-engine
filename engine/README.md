@@ -9,7 +9,7 @@ subtree is self-contained and can be lifted into its own repo without changes.
   - `cli.py` — `knowledge-engine` CLI entrypoint; `app.py` / `mcp_server.py` — compat shims
   - `core/` — env config + path resolver (`KE_HOME`, `KE_CORPUS_ROOT`, `KE_DATA_DIR`), corpus registry (source of truth + SQLite mirror), watchdog auto-register
   - `server/` — FastAPI app factory + HTTP route modules (`api/`) + packaged dashboard (`static/`, served at `/ui/`)
-  - `mcp/` — JSON-RPC 2.0 MCP stdio server
+  - `mcp/` — MCP server on the official MCP Python SDK (stdio + streamable HTTP)
   - `generation/` — provider abstraction (echo / cloud HTTP / Ollama)
   - `retrieval/` — FTS5 indexer (`fts5.py`) + optional bge-m3 embeddings
   - `project_context/` — project/lane memory: scanner, pointers, git/log context, embeddings, MCP tools
