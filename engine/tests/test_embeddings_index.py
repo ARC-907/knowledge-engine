@@ -27,6 +27,7 @@ from knowledge_engine.core.util.vectors import (
 from knowledge_engine.project_context.embeddings.providers import (
     EmbeddingProvider,
     FakeProvider,
+    StubProvider,
 )
 from knowledge_engine.retrieval.embeddings import errors, index as index_mod
 from knowledge_engine.retrieval.embeddings.index import (
@@ -273,6 +274,25 @@ def test_build_refuses_vectors_of_another_dimension(tmp_path: Path, corpus: Path
     _write(corpus / "libraries" / "zoo" / "new.md", OWL + " new")
     with pytest.raises(errors.EmbeddingModelMismatchError, match="16-dimensional"):
         _index(tmp_path, corpus, CountingProvider("m1", dim=8)).build(incremental=True)
+
+
+def test_mismatch_hint_names_the_provider_only_when_it_differs(
+    tmp_path: Path, corpus: Path
+) -> None:
+    db = tmp_path / "embeddings.db"
+    CorpusEmbeddingIndex(db, FakeProvider(dim=8), corpus_root=corpus).build()
+    with pytest.raises(errors.EmbeddingModelMismatchError) as same_provider:
+        CorpusEmbeddingIndex(db, FakeProvider(dim=16), corpus_root=corpus).search("x")
+    assert "KE_EMBED_PROVIDER" not in same_provider.value.hint
+    assert "KE_EMBED_MODEL=fake-hash-8" in same_provider.value.hint
+    with pytest.raises(errors.EmbeddingModelMismatchError) as other_provider:
+        CorpusEmbeddingIndex(db, StubProvider(dim=8), corpus_root=corpus).search("x")
+    assert "KE_EMBED_PROVIDER=fake KE_EMBED_MODEL=fake-hash-8" in other_provider.value.hint
+    assert other_provider.value.details["index_provider"] == "fake"
+    public = other_provider.value.to_dict(public=True)
+    assert "db_path" not in public["embedding"]
+    assert str(db) not in public["detail"]
+    assert other_provider.value.to_dict()["embedding"]["db_path"] == str(db)
 
 
 def test_query_with_another_model_is_refused(tmp_path: Path, corpus: Path) -> None:

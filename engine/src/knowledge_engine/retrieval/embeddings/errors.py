@@ -16,6 +16,9 @@ from typing import Any
 REBUILD_COMMAND = "knowledge-engine embeddings build --rebuild"
 BUILD_COMMAND = "knowledge-engine embeddings build"
 
+#: ``details`` keys that name local filesystem paths; left out of HTTP bodies.
+PRIVATE_DETAILS = frozenset({"db_path"})
+
 
 class EmbeddingError(RuntimeError):
     """Base class: vector search or index maintenance cannot proceed."""
@@ -31,13 +34,26 @@ class EmbeddingError(RuntimeError):
         self.hint = hint
         self.details: dict[str, Any] = dict(details or {})
 
-    def to_dict(self) -> dict[str, Any]:
-        """``{"type", "detail", "hint", "embedding"}`` (JSON-safe)."""
+    def to_dict(self, *, public: bool = False) -> dict[str, Any]:
+        """``{"type", "detail", "hint", "embedding"}`` (JSON-safe).
+
+        ``public=True`` is the view an HTTP client gets: the message names the
+        index without its absolute path and :data:`PRIVATE_DETAILS` are left
+        out of ``embedding``. The CLI and the MCP server (local operators)
+        keep the full view.
+        """
+        details = self.details
+        message = self.message
+        if public:
+            details = {k: v for k, v in details.items() if k not in PRIVATE_DETAILS}
+            db_path = self.details.get("db_path")
+            if isinstance(db_path, str) and db_path:
+                message = message.replace(f"at {db_path} ", "").replace(f"{db_path} ", "the index ")
         return {
             "type": self.code,
-            "detail": self.message,
+            "detail": message,
             "hint": self.hint,
-            "embedding": self.details,
+            "embedding": details,
         }
 
 
@@ -80,6 +96,7 @@ class EmbeddingUnavailableError(EmbeddingError):
 
 __all__ = [
     "BUILD_COMMAND",
+    "PRIVATE_DETAILS",
     "REBUILD_COMMAND",
     "EmbeddingError",
     "EmbeddingIndexMissingError",

@@ -1,9 +1,9 @@
 ### knowledge-engine --help
 usage: knowledge-engine [-h] [-v | -q]
-                        {info,bootstrap,capabilities,reindex,watch,config,mcp,search,embeddings,serve,project-context,board,board-serve} ...
+                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,serve,project-context,board,board-serve} ...
 
 positional arguments:
-  {info,bootstrap,capabilities,reindex,watch,config,mcp,search,embeddings,serve,project-context,board,board-serve}
+  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,serve,project-context,board,board-serve}
     info                Print configuration and counts
     bootstrap           Walk corpus/ and register every folder as an entry
     capabilities        Print runtime capability and retrieval-surface

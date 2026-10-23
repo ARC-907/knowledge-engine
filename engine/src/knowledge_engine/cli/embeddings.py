@@ -3,7 +3,8 @@
 Each command prints JSON on stdout. A failure the index reports -- no index
 yet, a model mismatch, an unreachable provider -- prints the structured error
 (``{"error": {"type", "detail", "hint", "embedding"}}``), is logged at ERROR
-on stderr, and exits with status 1.
+on stderr, and exits with status 1. An invalid option combination is a
+``value_error``; a database that cannot be opened or written is an ``io_error``.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sqlite3
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -67,6 +69,12 @@ def _run(args: argparse.Namespace, action: str) -> int:
     except ValueError as exc:
         _logger.error("embeddings %s failed: %s", action, exc)
         _print_json({"error": {"type": "value_error", "detail": str(exc)}})
+        return 1
+    except (OSError, sqlite3.Error) as exc:
+        # The index database could not be opened, read or written (permissions,
+        # a directory where the file should be, a corrupt file, a full disk).
+        _logger.error("embeddings %s failed: %s", action, exc)
+        _print_json({"error": {"type": "io_error", "detail": str(exc)}})
         return 1
     return 0
 

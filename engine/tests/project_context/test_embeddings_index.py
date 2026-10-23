@@ -244,6 +244,30 @@ def test_stored_vectors_use_the_versioned_format(
     assert len(results) == 2
 
 
+def test_search_skips_stored_vectors_of_another_dimension(
+    project_conn: sqlite3.Connection,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A row of the same provider/model but another size is skipped, not compared."""
+    for i in range(3):
+        _insert_doc(project_conn, f"r{i}", f"body {i}")
+    index.generate(project_conn, providers.StubProvider(dim=8))
+    # Simulate a stale row: same provider/model key, vector of another dimension.
+    project_conn.execute(
+        "UPDATE doc_embeddings SET vector = ?, dim = 16 WHERE record_id = 'r2'",
+        (providers.pack_vector([0.5] * 16),),
+    )
+    project_conn.commit()
+    hits = index.semantic_search(project_conn, providers.StubProvider(dim=8), "body 0", limit=5)
+    assert [h["record_id"] for h in hits] and "r2" not in {h["record_id"] for h in hits}
+    assert "semantic_search skipped 1 stored vector" in caplog.text
+    caplog.clear()
+    neighbours = index.similar_records(project_conn, providers.StubProvider(dim=8), "r0", limit=5)
+    assert {n["record_id"] for n in neighbours} == {"r1"}
+    assert "similar_records skipped 1 stored vector" in caplog.text
+    assert index.similar_records(project_conn, providers.StubProvider(dim=8), "r2") == []
+
+
 def test_cluster_records_with_mixed_dimensions_does_not_crash(
     project_conn: sqlite3.Connection,
     caplog: pytest.LogCaptureFixture,

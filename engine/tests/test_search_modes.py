@@ -7,6 +7,8 @@ Offline: the embedding index is built with ``KE_EMBED_PROVIDER=fake``
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -208,6 +210,11 @@ def test_http_vector_errors_are_structured(
         assert "--rebuild" in body["hint"]
         assert body["embedding"]["index_model"] == "fake-hash-64"
         assert body["embedding"]["model"] == "bge-m3:latest"
+        # The index was built by another provider: the hint says how to switch back.
+        assert "KE_EMBED_PROVIDER=fake KE_EMBED_MODEL=fake-hash-64" in body["hint"]
+        # HTTP clients do not learn where the index lives on disk.
+        assert "db_path" not in body["embedding"]
+        assert str(engine_env) not in r.text
         # fts keeps working.
         assert client.get("/search", params={"q": "fox"}).status_code == 200
 
@@ -364,9 +371,52 @@ def test_cli_embeddings_status_without_an_index(
     assert cli.main(["embeddings", "status"]) == 0
     assert json.loads(capsys.readouterr().out)["exists"] is False
     assert cli.main(["embeddings", "search", "fox"]) == 1
-    assert json.loads(capsys.readouterr().out)["error"]["type"] == "embedding_index_missing"
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["type"] == "embedding_index_missing"
+    assert error["embedding"]["db_path"]  # the CLI keeps the full, local view
     assert cli.main(["search", "fox", "--mode", "hybrid"]) == 1
     assert json.loads(capsys.readouterr().out)["error"]["type"] == "embedding_index_missing"
+
+
+def test_cli_embeddings_reports_an_unwritable_database(
+    engine_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A directory where the database file should be: SQLite cannot open it.
+    assert cli.main(["embeddings", "build", "--db", str(engine_env / "data")]) == 1
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["type"] == "io_error"
+    assert error["detail"]
+
+
+def test_package_import_does_not_load_the_legacy_build_module() -> None:
+    code = (
+        "import sys, knowledge_engine.retrieval.embeddings as e\n"
+        "assert 'knowledge_engine.retrieval.embeddings.build' not in sys.modules\n"
+        "assert callable(e.build_index) and callable(e.cosine_similarity)\n"
+        "assert 'build_index' in dir(e)\n"
+        "try:\n"
+        "    e.no_such_name\n"
+        "except AttributeError:\n"
+        "    pass\n"
+        "else:\n"
+        "    raise SystemExit('AttributeError expected')\n"
+    )
+    subprocess.run([sys.executable, "-W", "error", "-c", code], check=True)
+    # Running the legacy module as a script no longer warns that it was already imported.
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-W",
+            "error::RuntimeWarning",
+            "-m",
+            "knowledge_engine.retrieval.embeddings.build",
+            "--help",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
 
 
 def test_legacy_module_entry_points_delegate_to_the_cli(

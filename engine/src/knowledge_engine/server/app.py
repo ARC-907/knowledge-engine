@@ -86,7 +86,7 @@ async def _embedding_error(request: Request, exc: Exception) -> JSONResponse:
         log_safe(request.url.path),
         log_safe(exc),
     )
-    return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
+    return JSONResponse(status_code=exc.status_code, content=exc.to_dict(public=True))
 
 
 def _mount_board(app: FastAPI) -> None:

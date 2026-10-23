@@ -109,6 +109,15 @@ def test_every_command_is_routed() -> None:
         assert callable(cli._load_handler(module, func)), command
 
 
+def test_cli_choice_constants_match_their_sources() -> None:
+    """The CLI mirrors the search modes and provider names to stay lazy; keep them in sync."""
+    from knowledge_engine.core.settings import EMBED_PROVIDERS
+    from knowledge_engine.retrieval.hybrid import SEARCH_MODES
+
+    assert set(cli.SEARCH_MODES) == set(SEARCH_MODES)
+    assert set(cli.EMBED_PROVIDERS) == set(EMBED_PROVIDERS)
+
+
 def test_importing_the_cli_is_lazy() -> None:
     probe = (
         "import sys\n"

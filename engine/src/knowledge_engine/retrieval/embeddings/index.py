@@ -455,12 +455,15 @@ class CorpusEmbeddingIndex:
             if dim is None
             else f"model {offered_model!r} ({dim}-dimensional vectors)"
         )
+        restore = f"KE_EMBED_MODEL={info.model}"
+        if info.provider != self._provider.name:
+            restore = f"KE_EMBED_PROVIDER={info.provider} {restore}"
         return EmbeddingModelMismatchError(
             f"the embedding index at {self._db_path} was built with model {info.model!r} "
             f"({info.dim}-dimensional vectors) and cannot take vectors from {what}",
             hint=(
                 f"rebuild the index with `{REBUILD_COMMAND}` (uses KE_EMBED_MODEL / --model), "
-                f"or set KE_EMBED_MODEL={info.model} to use the existing index"
+                f"or set {restore} to use the existing index"
             ),
             details={
                 "db_path": str(self._db_path),

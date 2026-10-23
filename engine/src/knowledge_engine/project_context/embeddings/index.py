@@ -185,6 +185,31 @@ def _load_vectors(
     ]
 
 
+def _same_dimension(
+    pairs: list[tuple[str, list[float]]],
+    dim: int,
+    operation: str,
+) -> list[tuple[str, list[float]]]:
+    """``pairs`` whose vector has ``dim`` components; the others are skipped with a WARNING.
+
+    ``doc_embeddings`` keys rows by provider and model, but a model that changed
+    its output size (or a row written by an older release) leaves vectors that
+    cannot be compared with the query's. Comparing them would raise; skipping
+    them keeps the search answering and names what to refresh.
+    """
+    kept = [(rid, vector) for rid, vector in pairs if len(vector) == dim]
+    skipped = len(pairs) - len(kept)
+    if skipped:
+        _logger.warning(
+            "%s skipped %d stored vector(s) whose dimension differs from the query's (%d); "
+            "refresh the embeddings with one provider/model",
+            operation,
+            skipped,
+            dim,
+        )
+    return kept
+
+
 def _summaries_for(
     conn: sqlite3.Connection,
     record_ids: list[str],
@@ -219,7 +244,10 @@ def semantic_search(
         return []
 
     query_vec = provider.embed([query])[0]
-    scored = [(record_id, providers.cosine(query_vec, vector)) for record_id, vector in pairs]
+    scored = [
+        (record_id, providers.cosine(query_vec, vector))
+        for record_id, vector in _same_dimension(pairs, len(query_vec), "semantic_search")
+    ]
     scored.sort(key=lambda item: item[1], reverse=True)
     top = scored[: max(0, limit)]
 
@@ -252,7 +280,11 @@ def similar_records(
     if target is None:
         return []
 
-    scored = [(rid, providers.cosine(target, vector)) for rid, vector in pairs if rid != record_id]
+    scored = [
+        (rid, providers.cosine(target, vector))
+        for rid, vector in _same_dimension(pairs, len(target), "similar_records")
+        if rid != record_id
+    ]
     scored.sort(key=lambda item: item[1], reverse=True)
     top = scored[: max(0, limit)]
 

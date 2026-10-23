@@ -155,6 +155,6 @@ A file whose embedding failed is retried by the next `--incremental` run.
 | `embedding_model_mismatch` | The index was built with another model. Set `KE_EMBED_MODEL` back to it, or `knowledge-engine embeddings build --rebuild`. |
 | `embedding_provider_error` | Ollama isn't running, or isn't at `KE_OLLAMA_URL`. Start it; check the URL. |
 | "model not found" | Pull the model: `ollama pull bge-m3` (or whatever `KE_EMBED_MODEL` names). |
-| `embedding_unavailable` | The provider is misconfigured (unknown name, or `remote` without `KE_EMBED_ALLOW_REMOTE=1` / `KE_EMBED_REMOTE_URL`). |
+| `embedding_unavailable` | `remote` is selected without `KE_EMBED_ALLOW_REMOTE=1` or without `KE_EMBED_REMOTE_URL`. (An unknown `KE_EMBED_PROVIDER` name is not an error: it is logged as a WARNING and `ollama` is used.) |
 | Build is slow | Expected on the first full build. Use `--incremental` after; raise `KE_EMBED_BATCH` if your machine copes. |
 | Results feel off | Different embedding models suit different content. Try another model and `--rebuild`. |

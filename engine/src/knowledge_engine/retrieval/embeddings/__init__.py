@@ -13,14 +13,8 @@ Operate it with ``knowledge-engine embeddings build|search|status``; HTTP
 (``build_index``, ``get_embedding``, ``cosine_similarity``, ...) importable.
 """
 
-from .build import (
-    blob_to_embedding,
-    build_index,
-    cosine_similarity,
-    embedding_to_blob,
-    get_embedding,
-    show_stats,
-)
+from typing import Any
+
 from .errors import (
     EmbeddingError,
     EmbeddingIndexMissingError,
@@ -29,6 +23,33 @@ from .errors import (
     EmbeddingUnavailableError,
 )
 from .index import CorpusEmbeddingIndex, IndexInfo, VectorHit
+
+#: Historical functions re-exported from :mod:`.build` on first access, so that
+#: ``python -m knowledge_engine.retrieval.embeddings.build`` does not find the
+#: module already imported (which would raise a ``RuntimeWarning``).
+_BUILD_EXPORTS = frozenset(
+    {
+        "blob_to_embedding",
+        "build_index",
+        "cosine_similarity",
+        "embedding_to_blob",
+        "get_embedding",
+        "show_stats",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    if name in _BUILD_EXPORTS:
+        from . import build  # noqa: PLC0415 - deferred on purpose (see _BUILD_EXPORTS)
+
+        return getattr(build, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | _BUILD_EXPORTS)
+
 
 __all__ = [
     "CorpusEmbeddingIndex",
