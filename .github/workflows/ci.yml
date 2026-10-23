@@ -109,8 +109,14 @@ jobs:
         run: |
           set -euo pipefail
           wheel=$(ls dist/*.whl)
-          unzip -l "$wheel" | grep -q 'knowledge_engine/project_context/migrations/001_' \
+          unzip -l "$wheel" | grep -q 'knowledge_engine/project_context/migrations/registry/001_' \
+            || { echo "::error::wheel is missing project_context/migrations/registry/*.sql"; exit 1; }
+          unzip -l "$wheel" | grep -q 'knowledge_engine/project_context/migrations/002_' \
             || { echo "::error::wheel is missing project_context/migrations/*.sql"; exit 1; }
+          unzip -l "$wheel" | grep -q 'knowledge_engine/runtime/foundation/db/schema/001_' \
+            || { echo "::error::wheel is missing runtime/foundation/db/schema/*.sql"; exit 1; }
+          unzip -l "$wheel" | grep -q 'knowledge_engine/core/registry.schema.json' \
+            || { echo "::error::wheel is missing core/registry.schema.json"; exit 1; }
           unzip -l "$wheel" | grep -q 'knowledge_engine/py.typed' \
             || { echo "::error::wheel is missing py.typed"; exit 1; }
       - name: Install wheel into a clean environment and smoke-test

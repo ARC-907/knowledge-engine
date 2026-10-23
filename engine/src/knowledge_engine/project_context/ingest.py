@@ -165,6 +165,80 @@ def _insert_fts(
     )
 
 
+def _sanitized(text: str, cfg) -> tuple[str, str]:
+    """``(clean_text, sanitization_status)`` per ``ingestion.sanitize_before_write``."""
+    if cfg.ingestion.sanitize_before_write:
+        result = sanitize.sanitize(text, cfg)
+        return result.text, result.status
+    return text, schema.SANITIZED
+
+
+def _write_rejected(
+    project_conn: sqlite3.Connection,
+    *,
+    text: str,
+    sanitization_status: str,
+    fields: dict,
+) -> DocRecord:
+    """Rejected text: a metadata-only row, no body, no FTS entry."""
+    record = DocRecord(
+        record_id=uuid.uuid4().hex,
+        content_hash=hashing.content_hash(text),
+        sanitization_status=sanitization_status,
+        ingestion_status=schema.REJECTED,
+        **fields,
+    )
+    record.pointer_id = pointers.format_pointer(
+        _pointer_type(record.category), record.project_fp, record.branch_fp, record.record_id
+    )
+    _insert_doc(project_conn, record)
+    project_conn.commit()
+    return record
+
+
+def _write_ingested(
+    project_conn: sqlite3.Connection,
+    *,
+    text: str,
+    clean_text: str,
+    chash: str,
+    summary: str,
+    sanitization_status: str,
+    retain_raw: bool,
+    run_id: str | None,
+    fields: dict,
+) -> DocRecord:
+    """Write the doc row, body, provenance and FTS entry in one commit."""
+    record_id = uuid.uuid4().hex
+    record = DocRecord(
+        record_id=record_id,
+        pointer_id=pointers.format_pointer(
+            _pointer_type(fields["category"]), fields["project_fp"], fields["branch_fp"], record_id
+        ),
+        content_hash=chash,
+        sanitized_content_hash=chash,
+        raw_retained=1 if retain_raw else 0,
+        sanitization_status=sanitization_status,
+        ingestion_status=schema.INGESTED,
+        summary=summary,
+        **fields,
+    )
+    _insert_doc(project_conn, record)
+    project_conn.execute(
+        "INSERT INTO project_doc_bodies (record_id, searchable_body, raw_body) VALUES (?, ?, ?)",
+        (record_id, clean_text, text if retain_raw else None),
+    )
+    project_conn.execute(
+        "INSERT INTO project_doc_provenance "
+        "(record_id, ingestion_run_id, detector, source_path, source_span_json, notes) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (record_id, run_id, "direct", fields["source_path"], None, None),
+    )
+    _insert_fts(project_conn, record_id, clean_text, summary)
+    project_conn.commit()
+    return record
+
+
 def ingest_record(
     project_conn: sqlite3.Connection,
     registry_conn: sqlite3.Connection,
@@ -192,102 +266,51 @@ def ingest_record(
       record is returned with its ``ingestion_status`` set accordingly.
     * ``rejected`` — the sanitizer flagged the text (oversize/binary/unsafe); a
       metadata-only row is written with no body and no FTS entry.
+
+    Steps: validate context -> sanitize -> (rejected: metadata row) -> hash +
+    dedupe -> summarize -> write doc/body/provenance/FTS.
     """
     fingerprints.validate_context(registry_conn, project_fp, branch_fp)
 
-    git_commit = getattr(git, "commit_hash", None) if git is not None else None
-    git_branch = getattr(git, "branch", None) if git is not None else None
-
-    # --- sanitize ---------------------------------------------------------
-    if cfg.ingestion.sanitize_before_write:
-        result = sanitize.sanitize(text, cfg)
-        clean_text = result.text
-        sanitization_status = result.status
-    else:
-        clean_text = text
-        sanitization_status = schema.SANITIZED
-
+    clean_text, sanitization_status = _sanitized(text, cfg)
     now = utc_now_iso()
+    fields = {
+        "project_fp": project_fp,
+        "branch_fp": branch_fp,
+        "category": category,
+        "created_at": now,
+        "updated_at": now,
+        "subtype": subtype or "",
+        "source_path": source_path,
+        "source_uri": source_uri,
+        "source_modified_at": source_modified_at,
+        "git_commit": getattr(git, "commit_hash", None) if git is not None else None,
+        "git_branch": getattr(git, "branch", None) if git is not None else None,
+        "ingestion_run_id": run_id,
+    }
 
-    # --- rejected: metadata-only row, no body, no FTS ---------------------
     if sanitization_status in schema.REJECTED_STATES:
-        record = DocRecord(
-            record_id=uuid.uuid4().hex,
-            project_fp=project_fp,
-            branch_fp=branch_fp,
-            category=category,
-            content_hash=hashing.content_hash(text),
-            created_at=now,
-            updated_at=now,
-            subtype=subtype or "",
-            source_path=source_path,
-            source_uri=source_uri,
-            sanitization_status=sanitization_status,
-            ingestion_status=schema.REJECTED,
-            source_modified_at=source_modified_at,
-            git_commit=git_commit,
-            git_branch=git_branch,
-            ingestion_run_id=run_id,
+        return _write_rejected(
+            project_conn, text=text, sanitization_status=sanitization_status, fields=fields
         )
-        record.pointer_id = pointers.format_pointer(
-            _pointer_type(category), project_fp, branch_fp, record.record_id
-        )
-        _insert_doc(project_conn, record)
-        project_conn.commit()
-        return record
 
-    # --- content hash + dedupe -------------------------------------------
     chash = hashing.content_hash(clean_text)
     existing = _find_duplicate(project_conn, chash, source_path, branch_fp)
     if existing is not None:
         existing.ingestion_status = schema.SKIPPED_DEDUPE
         return existing
 
-    # --- summary ----------------------------------------------------------
-    if summarizer is not None:
-        summary = summarizer(clean_text)
-    else:
-        summary = clean_text[:_DEFAULT_SUMMARY_CHARS]
-
-    # --- write doc + body + provenance + FTS ------------------------------
-    record_id = uuid.uuid4().hex
-    pointer_id = pointers.format_pointer(_pointer_type(category), project_fp, branch_fp, record_id)
-    retain_raw = bool(cfg.ingestion.retain_raw_content)
-    record = DocRecord(
-        record_id=record_id,
-        pointer_id=pointer_id,
-        project_fp=project_fp,
-        branch_fp=branch_fp,
-        category=category,
-        content_hash=chash,
-        created_at=now,
-        updated_at=now,
-        subtype=subtype or "",
-        source_path=source_path,
-        source_uri=source_uri,
-        sanitized_content_hash=chash,
-        raw_retained=1 if retain_raw else 0,
-        sanitization_status=sanitization_status,
-        ingestion_status=schema.INGESTED,
-        source_modified_at=source_modified_at,
-        git_commit=git_commit,
-        git_branch=git_branch,
+    summary = (
+        summarizer(clean_text) if summarizer is not None else clean_text[:_DEFAULT_SUMMARY_CHARS]
+    )
+    return _write_ingested(
+        project_conn,
+        text=text,
+        clean_text=clean_text,
+        chash=chash,
         summary=summary,
-        ingestion_run_id=run_id,
+        sanitization_status=sanitization_status,
+        retain_raw=bool(cfg.ingestion.retain_raw_content),
+        run_id=run_id,
+        fields=fields,
     )
-    _insert_doc(project_conn, record)
-
-    raw_body = text if retain_raw else None
-    project_conn.execute(
-        "INSERT INTO project_doc_bodies (record_id, searchable_body, raw_body) VALUES (?, ?, ?)",
-        (record_id, clean_text, raw_body),
-    )
-    project_conn.execute(
-        "INSERT INTO project_doc_provenance "
-        "(record_id, ingestion_run_id, detector, source_path, source_span_json, notes) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (record_id, run_id, "direct", source_path, None, None),
-    )
-    _insert_fts(project_conn, record_id, clean_text, summary)
-    project_conn.commit()
-    return record

@@ -44,13 +44,13 @@ class ToolContext:
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 
     def registry_conn(self) -> sqlite3.Connection:
-        """Open (once) the shared fingerprint registry DB with migration 001."""
+        """Open (once) the shared fingerprint registry DB, migrated (``migrations/registry/``)."""
         with self._lock:
             if self._registry is None:
                 path = pdpaths.fingerprint_db_path(self.root, self.cfg)
                 conn = pddb.connect(path)
                 try:
-                    pddb.apply_migrations(conn, only_prefixes=("001_",))
+                    pddb.apply_registry_migrations(conn)
                 except BaseException:
                     conn.close()
                     raise
@@ -70,8 +70,25 @@ class ToolContext:
             return None
         return pdpaths.slugify(row["name"])
 
+    def root_project_fp(self) -> str | None:
+        """Fingerprint of the project registered for :attr:`root`, or ``None``.
+
+        Looked up by the canonical root path in the registry, so a manual
+        fingerprint override or a remote-identity salt is honoured. ``None``
+        means the root has not been registered yet.
+        """
+        row = (
+            self.registry_conn()
+            .execute(
+                "SELECT project_fp FROM projects WHERE root_path = ? ORDER BY created_at LIMIT 1",
+                (pdpaths.canonical_root(self.root),),
+            )
+            .fetchone()
+        )
+        return str(row["project_fp"]) if row is not None else None
+
     def project_conn(self, project_fp: str | None = None) -> sqlite3.Connection | None:
-        """Open (once) a project content DB with migrations 002-007 applied.
+        """Open (once) a project content DB, migrated (``migrations/*.sql``).
 
         Returns ``None`` if ``project_fp`` is given but unknown.
         """
@@ -83,10 +100,7 @@ class ToolContext:
                 path = pdpaths.project_db_path(self.root, self.cfg, slug)
                 conn = pddb.connect(path)
                 try:
-                    pddb.apply_migrations(
-                        conn,
-                        only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_"),
-                    )
+                    pddb.apply_project_migrations(conn)
                 except BaseException:
                     conn.close()
                     raise

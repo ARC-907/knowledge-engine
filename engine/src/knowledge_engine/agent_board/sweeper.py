@@ -322,68 +322,76 @@ def sweep_once(force: bool = False) -> dict[str, Any]:
     return default_sweeper().sweep_once(force=force)
 
 
+_COUNTERS = ("pruned_expired", "pruned_overflow", "reminders_emitted", "digests_emitted")
+
+
 def _sweep_all(store_mod: ModuleType, *, force: bool) -> dict[str, Any]:
+    """Lease, sweep the default DB, sweep every scope DB, aggregate."""
     cfg = store_mod.load_config()  # default DB config governs the lease TTL
     started_at = utc_now_iso()
-    holder = _holder_id()
-    have_lease = True
-    lease_ttl = max(30, int(cfg.get("sweep_interval_s") or 60) * 2)
+    if not force and not _acquire_lease(cfg):
+        return _skipped(started_at)
 
-    if not force:
-        try:
-            have_lease = db.acquire_sweeper_lease(holder, ttl_seconds=lease_ttl)
-        except Exception:
-            # If the lease layer itself errors, fall through and run —
-            # missing a sweep is worse than a possible double-pass.
-            _logger.exception("acquire_sweeper_lease failed; running anyway")
-            have_lease = True
-
-    if not have_lease:
-        return {
-            "started_at": started_at,
-            "finished_at": utc_now_iso(),
-            "skipped": True,
-            "reason": "another sweeper holds the lease",
-            "targets_swept": 0,
-            "pruned_expired": 0,
-            "pruned_overflow": 0,
-            "reminders_emitted": 0,
-            "digests_emitted": 0,
-            "error": None,
-        }
-
-    # Sweep the default board first, then every scope DB.
     targets: list[dict[str, Any]] = []
     default_result = _sweep_active_db(store_mod)
     default_result["target"] = "(default)"
     targets.append(default_result)
+    targets.extend(_sweep_scopes(store_mod))
+    return _aggregate(started_at, targets)
 
+
+def _acquire_lease(cfg: dict[str, Any]) -> bool:
+    """Claim (or renew) the process-wide sweeper lease; True if we hold it."""
+    lease_ttl = max(30, int(cfg.get("sweep_interval_s") or 60) * 2)
+    try:
+        return db.acquire_sweeper_lease(_holder_id(), ttl_seconds=lease_ttl)
+    except Exception:
+        # If the lease layer itself errors, fall through and run --
+        # missing a sweep is worse than a possible double-pass.
+        _logger.exception("acquire_sweeper_lease failed; running anyway")
+        return True
+
+
+def _skipped(started_at: str) -> dict[str, Any]:
+    return {
+        "started_at": started_at,
+        "finished_at": utc_now_iso(),
+        "skipped": True,
+        "reason": "another sweeper holds the lease",
+        "targets_swept": 0,
+        **dict.fromkeys(_COUNTERS, 0),
+        "error": None,
+    }
+
+
+def _sweep_scopes(store_mod: ModuleType) -> list[dict[str, Any]]:
+    """Sweep every scope DB, each under its own ``using_db`` context."""
     try:
         scope_entries = scopes.list_scopes()
     except Exception:
         _logger.exception("listing scopes failed; swept default only")
-        scope_entries = []
-
+        return []
+    results: list[dict[str, Any]] = []
     for entry in scope_entries:
         path = str(entry["db_path"])
         try:
             with db.using_db(path):
                 r = _sweep_active_db(store_mod)
             r["target"] = f"scope:{entry['scope']}"
-            targets.append(r)
+            results.append(r)
         except Exception:
             _logger.exception("sweep of scope %s failed; continuing", entry.get("scope"))
-            targets.append({"target": f"scope:{entry.get('scope')}", "error": "sweep failed"})
+            results.append({"target": f"scope:{entry.get('scope')}", "error": "sweep failed"})
+    return results
 
+
+def _aggregate(started_at: str, targets: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "started_at": started_at,
         "finished_at": utc_now_iso(),
         "skipped": False,
         "targets_swept": len(targets),
-        "pruned_expired": sum(int(t.get("pruned_expired", 0)) for t in targets),
-        "pruned_overflow": sum(int(t.get("pruned_overflow", 0)) for t in targets),
-        "reminders_emitted": sum(int(t.get("reminders_emitted", 0)) for t in targets),
-        "digests_emitted": sum(int(t.get("digests_emitted", 0)) for t in targets),
+        **{key: sum(int(t.get(key, 0)) for t in targets) for key in _COUNTERS},
         "error": next((t["error"] for t in targets if t.get("error")), None),
         "targets": targets,
     }

@@ -6,7 +6,7 @@ without external state), but they are also *recorded* in the shared registry DB
 which is the authoritative source for collision detection and manual override.
 
 This module operates exclusively on a **registry** connection (a DB to which
-``apply_migrations(conn, only_prefixes=("001_",))`` has been applied). Every
+``db.apply_registry_migrations(conn)`` has been applied). Every
 allocation, override, collision, and validation is written to the
 ``fingerprint_events`` audit table.
 """
@@ -97,42 +97,12 @@ def ensure_project(
     ``fingerprint_events``.
     """
     fp = override or project_fp(canonical_root, remote_identity)
-    now = utc_now_iso()
     remote_hash = sha256_hex(remote_identity) if remote_identity is not None else None
 
     row = conn.execute("SELECT root_path FROM projects WHERE project_fp = ?", (fp,)).fetchone()
-
     if row is None:
-        conn.execute(
-            "INSERT INTO projects "
-            "(project_fp, name, root_path, remote_identity_hash, created_at, updated_at, notes) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (fp, name, canonical_root, remote_hash, now, now, None),
-        )
-        conn.execute(
-            "INSERT INTO project_fingerprints "
-            "(project_fp, strategy, source_inputs_hash, manual_override, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (
-                fp,
-                "manual" if override else "derived",
-                sha256_hex(canonical_root),
-                1 if override else 0,
-                now,
-            ),
-        )
-        _log_event(
-            conn,
-            "project_allocated",
-            project_fp=fp,
-            detail=f"name={name}",
-            data={"root_path": canonical_root, "override": bool(override)},
-        )
-        conn.commit()
-        return fp
-
-    stored_root = row["root_path"]
-    if stored_root == canonical_root:
+        _allocate_project(conn, fp, canonical_root, name, remote_hash, override)
+    elif row["root_path"] == canonical_root:
         _log_event(
             conn,
             "project_validate",
@@ -140,28 +110,82 @@ def ensure_project(
             detail="idempotent",
             data={"root_path": canonical_root},
         )
-        conn.commit()
-        return fp
+    elif override:
+        _reassign_project(conn, fp, row["root_path"], canonical_root, name, remote_hash)
+    else:
+        _record_collision(conn, fp, row["root_path"], canonical_root)
+    conn.commit()
+    return fp
 
-    # Same derived fp, different recorded root -> collision.
-    if not override:
-        _log_event(
-            conn,
-            "project_collision",
-            project_fp=fp,
-            detail="root mismatch",
-            data={"stored_root": stored_root, "incoming_root": canonical_root},
-        )
-        conn.commit()
-        raise ContextError(
-            f"fingerprint {fp} already maps to a different project root "
-            f"({stored_root!r} != {canonical_root!r}); pass override to reassign"
-        )
 
+def _allocate_project(
+    conn: sqlite3.Connection,
+    fp: str,
+    canonical_root: str,
+    name: str,
+    remote_hash: str | None,
+    override: str | None,
+) -> None:
+    """Insert a new ``projects`` + ``project_fingerprints`` row (uncommitted)."""
+    now = utc_now_iso()
+    conn.execute(
+        "INSERT INTO projects "
+        "(project_fp, name, root_path, remote_identity_hash, created_at, updated_at, notes) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (fp, name, canonical_root, remote_hash, now, now, None),
+    )
+    conn.execute(
+        "INSERT INTO project_fingerprints "
+        "(project_fp, strategy, source_inputs_hash, manual_override, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (
+            fp,
+            "manual" if override else "derived",
+            sha256_hex(canonical_root),
+            1 if override else 0,
+            now,
+        ),
+    )
+    _log_event(
+        conn,
+        "project_allocated",
+        project_fp=fp,
+        detail=f"name={name}",
+        data={"root_path": canonical_root, "override": bool(override)},
+    )
+
+
+def _record_collision(
+    conn: sqlite3.Connection, fp: str, stored_root: str, canonical_root: str
+) -> None:
+    """Same derived fp, different recorded root, no override: audit and raise."""
+    _log_event(
+        conn,
+        "project_collision",
+        project_fp=fp,
+        detail="root mismatch",
+        data={"stored_root": stored_root, "incoming_root": canonical_root},
+    )
+    conn.commit()
+    raise ContextError(
+        f"fingerprint {fp} already maps to a different project root "
+        f"({stored_root!r} != {canonical_root!r}); pass override to reassign"
+    )
+
+
+def _reassign_project(
+    conn: sqlite3.Connection,
+    fp: str,
+    stored_root: str,
+    canonical_root: str,
+    name: str,
+    remote_hash: str | None,
+) -> None:
+    """Override a collision: move the fingerprint to the new root (uncommitted)."""
     conn.execute(
         "UPDATE projects SET root_path = ?, name = ?, remote_identity_hash = ?, updated_at = ? "
         "WHERE project_fp = ?",
-        (canonical_root, name, remote_hash, now, fp),
+        (canonical_root, name, remote_hash, utc_now_iso(), fp),
     )
     conn.execute("UPDATE project_fingerprints SET manual_override = 1 WHERE project_fp = ?", (fp,))
     _log_event(
@@ -171,8 +195,6 @@ def ensure_project(
         detail="root reassigned via override",
         data={"stored_root": stored_root, "incoming_root": canonical_root},
     )
-    conn.commit()
-    return fp
 
 
 def ensure_branch(

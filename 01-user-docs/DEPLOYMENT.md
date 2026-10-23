@@ -242,3 +242,10 @@ Knowledge-Engine is distributed as a repository. To take an update: pull the
 new version (or re-download), re-run the install script to pick up any new
 dependencies, and run `knowledge-engine reindex`. Your corpus and
 `registry.json` are yours and are not overwritten by an engine update.
+
+Existing pipeline and agent-board databases (`pipeline.db` and the per-scope
+board files under the data directory) are upgraded in place the first time the
+new version opens them: a `schema_version` table is added, any columns the
+older layout lacked are created, and the applied versions are logged at INFO
+(`adopted pre-versioned database ... at schema version N`). No manual step is
+needed; back up the data directory before upgrading if you want a way back.

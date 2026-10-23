@@ -18,16 +18,18 @@ older callers; each access resolves the current value.
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 from collections.abc import Mapping, MutableMapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
-try:
-    import yaml
+try:  # optional dependency; checked before use
+    yaml: ModuleType | None = importlib.import_module("yaml")
 except ImportError:  # pragma: no cover
-    yaml = None  # type: ignore[assignment]  # optional dependency; checked before use
+    yaml = None
 
 _logger = logging.getLogger(__name__)
 
@@ -109,7 +111,12 @@ def _load_yaml(filename: str) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
     with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{path}: expected a YAML mapping at the top level, got {type(data).__name__}"
+        )
+    return data
 
 
 def _write_yaml(filename: str, data: dict[str, Any]) -> Path:

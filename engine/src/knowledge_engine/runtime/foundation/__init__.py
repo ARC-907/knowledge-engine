@@ -1,8 +1,9 @@
 """Foundation layer for the opt-in pipeline subsystem.
 
 `foundation/config.py` is the YAML+env-var config loader.
-`foundation/db.py`     is the SQLite WAL backbone (thread-local connections,
-                       JSON auto-deserialization, schema migration).
+`foundation/db/`       is the SQLite WAL backbone (bounded per-thread connection
+                       cache, JSON auto-deserialization, numbered schema
+                       migrations in `db/schema/NNN_*.sql`).
 
 Config knobs:
   - `KE_PIPELINE_ROOT` env var sets the pipeline directory (default: `./pipeline`);

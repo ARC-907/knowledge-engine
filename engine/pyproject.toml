@@ -176,12 +176,22 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = [
     "knowledge_engine.project_context.*",
-    "knowledge_engine.agent_board.*",
-    "knowledge_engine.runtime.*",
     "knowledge_engine.tool_host.*",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_any_generics = false
+warn_return_any = false
+
+# The board and the runtime substrate: every function is annotated.
+[[tool.mypy.overrides]]
+module = [
+    "knowledge_engine.agent_board.*",
+    "knowledge_engine.runtime.*",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
 disallow_untyped_calls = false
 disallow_any_generics = false
 warn_return_any = false

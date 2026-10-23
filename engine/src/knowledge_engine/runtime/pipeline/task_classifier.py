@@ -125,8 +125,11 @@ VALID_DOMAINS = {"code", "research", "legal", "creative", "structured", "general
 VALID_COMPLEXITY = {"simple", "moderate", "complex"}
 
 
-def _validate_classification(result: dict[str, Any]) -> dict[str, Any]:
-    """Validate and normalize a classification result."""
+def _validate_classification(result: object) -> dict[str, Any]:
+    """Validate and normalize a classification result (non-objects -> default)."""
+    if not isinstance(result, dict):
+        _logger.debug("classifier returned a non-object JSON value; using the default class")
+        return _default_classification()
     domain = result.get("domain", "general")
     if domain not in VALID_DOMAINS:
         domain = "general"

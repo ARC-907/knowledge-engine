@@ -6,7 +6,8 @@ in the database. The `keb_` prefix namespaces these keys so they cannot
 be confused with keys minted by an unrelated system that happens to
 share the machine.
 
-Schema lives in `foundation/db.py` (`agent_api_keys`, `agent_key_permissions`).
+Schema lives in `foundation/db/schema/001_core_board.sql` (`agent_api_keys`,
+`agent_key_permissions`).
 
 Resource types are deliberately narrow:
 
@@ -28,6 +29,7 @@ import os
 import secrets
 import sqlite3
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -140,8 +142,18 @@ def create_key(
     }
 
 
+#: ``last_used_at`` is refreshed at most this often per key. Every
+#: authenticated request used to write (and commit) it, turning reads into
+#: writes that contend for SQLite's single write lock.
+LAST_USED_RESOLUTION_SECONDS = 60
+
+
 def verify_key(raw_key: str) -> dict[str, Any] | None:
-    """Return the key row if valid+enabled+unexpired, else None."""
+    """Return the key row if valid+enabled+unexpired, else None.
+
+    ``last_used_at`` is updated when it is unset or older than
+    :data:`LAST_USED_RESOLUTION_SECONDS`, not on every call.
+    """
     key_hash = _hash_key(raw_key)
     conn = db.get_connection()
     now = utc_now_iso()
@@ -156,11 +168,15 @@ def verify_key(raw_key: str) -> dict[str, Any] | None:
     if row is None:
         return None
 
-    conn.execute(
-        "UPDATE agent_api_keys SET last_used_at = ? WHERE key_id = ?",
-        (now, row["key_id"]),
-    )
-    conn.commit()
+    stale_before = utc_now_iso(-timedelta(seconds=LAST_USED_RESOLUTION_SECONDS))
+    last_used = row["last_used_at"]
+    if last_used is None or last_used < stale_before:
+        conn.execute(
+            """UPDATE agent_api_keys SET last_used_at = ?
+               WHERE key_id = ? AND (last_used_at IS NULL OR last_used_at < ?)""",
+            (now, row["key_id"], stale_before),
+        )
+        conn.commit()
 
     return db.dict_from_row(row)
 
@@ -525,6 +541,7 @@ def authorize_write(
 
 __all__ = [
     "KEY_PREFIX",
+    "LAST_USED_RESOLUTION_SECONDS",
     "MASTER_KEY_FILENAME",
     "VALID_PERMISSIONS",
     "VALID_RESOURCE_TYPES",

@@ -309,6 +309,11 @@ from the first byte on POSIX. Copy it, then delete the file. Every key
 create / revoke / toggle is logged at INFO (id and label only). The board refuses to disable or delete the last enabled master so a
 routine GUI action can't lock you out (409 with a recovery hint).
 
+A key's `last_used_at` (shown by `GET /board/keys`) is refreshed at most once
+per 60 seconds per key (`keys.LAST_USED_RESOLUTION_SECONDS`), so a busy key
+does not turn every authenticated request into a database write; the value is
+accurate to that resolution.
+
 ## Sweeper
 
 Every `sweep_interval_s` seconds (default 60), the sweeper:
@@ -389,13 +394,16 @@ engine/src/knowledge_engine/
     __init__.py        package marker
     schemas.py         channels + types + validators
     store.py           store facade (FTS5, digest, ack)
+    digest.py          context-compressed digest analytics (pure functions)
     keys.py            provider-key vault
     sweeper.py         background loop (Sweeper object, owned by the app lifespan)
-    http.py            FastAPI router mounted at /board, trust gate, request models
+    http/              FastAPI router mounted at /board (assembled in __init__.py):
+                       trust.py (trust + key gates), limits.py (body caps),
+                       bodies.py, messages.py (read/write routes), admin.py
     service.py         optional standalone FastAPI
     cli.py             knowledge-engine board ... subcommands
     mcp_tools/         15 MCP tools auto-discovered
-  server/api/board_routes.py  compatibility alias of agent_board/http.py
+  server/api/board_routes.py  compatibility alias of agent_board.http
 scripts/agent-board/
   board-watchdog.ps1   Windows watchdog
 engine/tests/
@@ -476,7 +484,14 @@ to enumerate them.
   is created by a post, an admin `PATCH /board/config?scope=`, or
   explicitly with `PUT /board/scopes/{name}` (admin). At most
   `KE_BOARD_MAX_SCOPES` (default 64) may exist; the next creation is a
-  `507` and a WARNING in the log.
+  `507` and a WARNING in the log. Counting and creating happen under one
+  lock, so concurrent first posts in one process cannot overshoot the cap
+  (separate processes sharing a data directory still can, by a little).
+- Scope databases whose file name is not a valid scope (pre-3.0 names such
+  as `v1.2.db`) are still listed and swept, but cannot be addressed; the
+  engine logs a WARNING per such file at startup with a suggested name.
+  Rename the file (with the engine stopped), e.g.
+  `<data_dir>/board-scopes/v1.2.db` → `v1-2.db`.
 - Prefer **logical** segregation (channels) for collaboration you want
   visible across the team, and **physical** scopes for hard isolation
   (separate tenants, sandboxed loops, throwaway experiment state).
