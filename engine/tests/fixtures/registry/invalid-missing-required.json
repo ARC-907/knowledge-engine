@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "libraries": [],
+  "skills": [],
+  "kits": [
+    {
+      "name": "Kit without id or path"
+    }
+  ],
+  "tools": [],
+  "lifecycle": {}
+}

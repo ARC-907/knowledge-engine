@@ -234,7 +234,16 @@ def test_concurrent_registry_toggles_from_eight_threads(engine_env: Path) -> Non
 
 
 def test_hand_edited_registry_rows_are_served_unchanged(engine_env: Path) -> None:
-    row = {"id": "lib-a", "name": "A", "path": "libraries/a", "custom": {"x": 1}, "tags": "a,b"}
+    # Fields the schema does not know (``custom``, ``lifecycle.note``) pass through
+    # unchanged; a known field with the wrong type is rejected at load (next test).
+    row = {
+        "id": "lib-a",
+        "name": "A",
+        "path": "libraries/a",
+        "custom": {"x": 1},
+        "tags": ["a", "b"],
+        "description": None,
+    }
     doc = {
         "version": 1,
         "libraries": [row],
@@ -254,6 +263,32 @@ def test_hand_edited_registry_rows_are_served_unchanged(engine_env: Path) -> Non
         assert info["providers"] == ["ollama", "echo"]
         removed = client.delete("/registry/lib-a").json()
         assert removed == {"removed": "lib-a"}
+
+
+def test_invalid_registry_fails_startup_with_every_error_logged(
+    engine_env: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from knowledge_engine.core.registry import RegistryValidationError
+
+    doc = {
+        "version": 1,
+        "libraries": [{"id": "lib-a", "name": "A", "path": "libraries/a", "tags": "a,b"}],
+        "unknown": True,
+    }
+    registry_path = engine_env / "corpus" / "registry.json"
+    registry_path.write_text(json.dumps(doc), encoding="utf-8")
+    before = registry_path.read_bytes()
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(RegistryValidationError) as excinfo,
+        TestClient(_app()),
+    ):
+        pass  # pragma: no cover - startup fails
+    assert [issue.pointer for issue in excinfo.value.errors] == ["", "/libraries/0/tags"]
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    assert "/libraries/0/tags" in logged
+    assert "'unknown' was unexpected" in logged
+    assert registry_path.read_bytes() == before
 
 
 # ── Exception handlers ───────────────────────────────────────────

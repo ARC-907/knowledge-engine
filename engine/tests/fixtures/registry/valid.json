@@ -1,0 +1,69 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ARC-907/knowledge-engine/main/corpus/registry.schema.json",
+  "version": 1,
+  "corpus_root": "corpus/",
+  "last_updated": 1760000000.5,
+  "libraries": [
+    {
+      "id": "library-notes",
+      "kind": "library",
+      "name": "Notes",
+      "path": "libraries/notes",
+      "enabled": true,
+      "auto_registered": false,
+      "description": "Team notes.",
+      "tags": ["notes"],
+      "created": 1760000000,
+      "last_updated": 1760000000.5,
+      "framework": null,
+      "status": "ready",
+      "doc_count": 3,
+      "custom_field": {"kept": true}
+    }
+  ],
+  "skills": [
+    {
+      "id": "skill-triage",
+      "name": "Triage",
+      "path": "skills/triage",
+      "description": null,
+      "source_library": "Notes",
+      "external_deps": ["Tavily API key"]
+    }
+  ],
+  "kits": [
+    {
+      "id": "kit-onboarding",
+      "kind": "kit",
+      "name": "Onboarding kit",
+      "path": "kits/onboarding",
+      "enabled": false,
+      "auto_registered": true,
+      "tags": []
+    }
+  ],
+  "tools": [
+    {
+      "id": "tool-grep",
+      "kind": "tool",
+      "name": "grep",
+      "path": "capabilities/grep"
+    },
+    {
+      "id": "tool-legacy",
+      "kind": "mcp",
+      "name": "Legacy transport kind",
+      "path": "capabilities/legacy",
+      "deps": ["node"],
+      "endpoint": "npx legacy-mcp"
+    }
+  ],
+  "lifecycle": {
+    "watch_enabled": false,
+    "auto_register": true,
+    "auto_register_new_folders": true,
+    "schedule": "1h",
+    "on_toggle_reindex": "next-cycle",
+    "operator_note": "extra lifecycle flags are kept"
+  }
+}

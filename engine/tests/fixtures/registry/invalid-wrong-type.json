@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "libraries": [
+    {
+      "id": "library-notes",
+      "name": "Notes",
+      "path": "libraries/notes",
+      "enabled": "yes",
+      "tags": "a,b"
+    }
+  ],
+  "skills": {},
+  "kits": [],
+  "tools": [],
+  "lifecycle": {"watch_enabled": 1}
+}

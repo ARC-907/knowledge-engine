@@ -2,10 +2,11 @@
 
 The response models describe the payloads the routes have always returned.
 Registry entries and lifecycle state are read from the operator-edited
-``registry.json``, so their fields are documented with a JSON schema but
-passed through unchanged at runtime (and only the fields a row actually has
-are emitted): a hand-written row with an unexpected value type keeps being
-served instead of turning into a 500.
+``registry.json``, which is validated against the registry JSON Schema when
+it is loaded; their fields are documented with a JSON schema but passed
+through unchanged at runtime (and only the fields a row actually has are
+emitted), so fork-specific fields the schema leaves open are served as
+written instead of being dropped or turning into a 500.
 """
 
 from __future__ import annotations
