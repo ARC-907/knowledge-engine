@@ -375,3 +375,22 @@ def test_corpus_commands_surface_validation_errors(
     assert "  /libraries/0/tags: 'a,b' is not of type 'array'" in captured.err
     assert "knowledge-engine registry validate" in captured.err
     assert path.read_bytes() == before
+
+
+def test_utf8_bom_is_accepted(tmp_path: Path) -> None:
+    from knowledge_engine.core.registry import load_registry_document
+
+    path = tmp_path / "registry.json"
+    path.write_bytes(b"\xef\xbb\xbf" + json.dumps({"version": 1, "libraries": []}).encode())
+    assert load_registry_document(path)["version"] == 1
+
+
+def test_non_utf8_file_is_a_validation_error_not_a_traceback(tmp_path: Path) -> None:
+    from knowledge_engine.core.registry import RegistryValidationError, load_registry_document
+
+    path = tmp_path / "registry.json"
+    path.write_bytes(b'{"version": 1, "libraries": [], "note": "caf\xe9"}')  # latin-1 byte
+    with pytest.raises(RegistryValidationError) as excinfo:
+        load_registry_document(path)
+    assert excinfo.value.message == "is not UTF-8 encoded text"
+    assert excinfo.value.errors[0].keyword == "encoding"

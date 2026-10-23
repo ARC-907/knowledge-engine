@@ -54,6 +54,8 @@ def open_registry() -> tuple[Config, Registry]:
     try:
         registry = Registry(config.registry_path)
     except RegistryValidationError as exc:
+        # The registry module logs a one-line ERROR summary; the full report
+        # (one line per JSON pointer) is the command's output.
         _logger.debug("registry %s failed validation", config.registry_path, exc_info=True)
         raise CommandError(
             f"{exc.render()}\n"

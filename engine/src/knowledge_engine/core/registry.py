@@ -198,7 +198,16 @@ def load_registry_document(path: str | os.PathLike[str]) -> dict[str, Any]:
     JSON or does not match the schema.
     """
     path = Path(path)
-    text = path.read_text(encoding="utf-8")
+    try:
+        # utf-8-sig accepts (and strips) the BOM some Windows editors write.
+        text = path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError as exc:
+        issue = RegistryValidationIssue(
+            pointer="",
+            message=f"not valid UTF-8 at byte {exc.start}: {exc.reason}",
+            keyword="encoding",
+        )
+        raise RegistryValidationError(path, "is not UTF-8 encoded text", [issue]) from exc
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
