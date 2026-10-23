@@ -1,8 +1,8 @@
 """Registry JSON Schema: shipped schema, validation on load/write, ``registry validate`` CLI.
 
-``test_repo_registry_validates`` is the check CI relies on for the committed
-``corpus/registry.json`` (equivalent to ``knowledge-engine registry validate
-../corpus/registry.json`` run from ``engine/``).
+``test_repo_registry_validates`` mirrors the CI lint step that runs
+``knowledge-engine registry validate ../corpus/registry.json`` from ``engine/``,
+so a schema/registry drift fails locally before it fails in CI.
 """
 
 from __future__ import annotations
