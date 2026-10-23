@@ -104,7 +104,7 @@ def post_message(
         ),
     )
     conn.commit()
-    return read_message(message_id)  # type: ignore[return-value]  # row was just written, so the read is not None
+    return db.require_row(read_message(message_id), "message", message_id)
 
 
 def read_message(message_id: str) -> dict[str, Any] | None:

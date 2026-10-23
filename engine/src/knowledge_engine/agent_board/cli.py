@@ -143,13 +143,13 @@ def _print_messages(msgs: list[dict[str, Any]]) -> None:
 # ── Subcommand handlers ────────────────────────────────────────
 
 
-def _scope_of(args) -> str | None:
+def _scope_of(args: argparse.Namespace) -> str | None:
     """The --scope value, normalized to None when absent/blank."""
     s = (getattr(args, "scope", None) or "").strip()
     return s or None
 
 
-def cmd_status(args, base: str) -> int:
+def cmd_status(args: argparse.Namespace, base: str) -> int:
     try:
         st = _get(f"{base}/board/status")
     except BoardUnreachableError as e:
@@ -159,17 +159,17 @@ def cmd_status(args, base: str) -> int:
     return 0
 
 
-def cmd_channels(args, base: str) -> int:
+def cmd_channels(args: argparse.Namespace, base: str) -> int:
     print(json.dumps(_get(f"{base}/board/channels"), indent=2))
     return 0
 
 
-def cmd_types(args, base: str) -> int:
+def cmd_types(args: argparse.Namespace, base: str) -> int:
     print(json.dumps(_get(f"{base}/board/message_types"), indent=2))
     return 0
 
 
-def cmd_read(args, base: str) -> int:
+def cmd_read(args: argparse.Namespace, base: str) -> int:
     params: dict[str, str] = {}
     if args.since:
         params["since"] = args.since
@@ -200,7 +200,7 @@ def cmd_read(args, base: str) -> int:
     return 0
 
 
-def cmd_post(args, base: str) -> int:
+def cmd_post(args: argparse.Namespace, base: str) -> int:
     try:
         body = _resolve_body(args.body)
     except OSError as e:
@@ -244,7 +244,7 @@ def cmd_post(args, base: str) -> int:
     return 0
 
 
-def cmd_thread(args, base: str) -> int:
+def cmd_thread(args: argparse.Namespace, base: str) -> int:
     ident = args.correlation_id or args.thread_id
     if not ident:
         print(
@@ -273,7 +273,7 @@ def cmd_thread(args, base: str) -> int:
     return 0
 
 
-def cmd_search(args, base: str) -> int:
+def cmd_search(args: argparse.Namespace, base: str) -> int:
     params = {"q": args.query, "limit": str(args.limit)}
     if args.channel:
         params["channel"] = args.channel
@@ -285,7 +285,7 @@ def cmd_search(args, base: str) -> int:
     return 0
 
 
-def cmd_digest(args, base: str) -> int:
+def cmd_digest(args: argparse.Namespace, base: str) -> int:
     params: dict[str, str] = {}
     if args.channel:
         params["channel"] = args.channel
@@ -301,12 +301,12 @@ def cmd_digest(args, base: str) -> int:
     return 0
 
 
-def cmd_scopes(args, base: str) -> int:
+def cmd_scopes(args: argparse.Namespace, base: str) -> int:
     print(json.dumps(_get(f"{base}/board/scopes", key=args.key), indent=2))
     return 0
 
 
-def cmd_scopes_create(args, base: str) -> int:
+def cmd_scopes_create(args: argparse.Namespace, base: str) -> int:
     try:
         result = _put(f"{base}/board/scopes/{quote(args.name, safe='')}", key=args.key)
     except BoardHTTPError as e:
@@ -316,7 +316,7 @@ def cmd_scopes_create(args, base: str) -> int:
     return 0
 
 
-def cmd_ack(args, base: str) -> int:
+def cmd_ack(args: argparse.Namespace, base: str) -> int:
     payload = {"from": args.sender}
     if _scope_of(args):
         payload["scope"] = _scope_of(args)
@@ -333,7 +333,7 @@ def cmd_ack(args, base: str) -> int:
     return 0
 
 
-def cmd_sweep(args, base: str) -> int:
+def cmd_sweep(args: argparse.Namespace, base: str) -> int:
     try:
         result = _post(f"{base}/board/sweep", {}, key=args.key)
     except BoardHTTPError as e:
@@ -343,12 +343,12 @@ def cmd_sweep(args, base: str) -> int:
     return 0
 
 
-def cmd_keys_list(args, base: str) -> int:
+def cmd_keys_list(args: argparse.Namespace, base: str) -> int:
     print(json.dumps(_get(f"{base}/board/keys", key=args.key), indent=2))
     return 0
 
 
-def cmd_keys_create(args, base: str) -> int:
+def cmd_keys_create(args: argparse.Namespace, base: str) -> int:
     payload: dict[str, Any] = {"display_name": args.name}
     if args.notes:
         payload["notes"] = args.notes
@@ -364,7 +364,7 @@ def cmd_keys_create(args, base: str) -> int:
     return 0
 
 
-def cmd_keys_revoke(args, base: str) -> int:
+def cmd_keys_revoke(args: argparse.Namespace, base: str) -> int:
     print(
         json.dumps(
             _delete(f"{base}/board/keys/{quote(args.key_id, safe='')}", key=args.key),
@@ -374,7 +374,7 @@ def cmd_keys_revoke(args, base: str) -> int:
     return 0
 
 
-def cmd_keys_bootstrap(args, base: str) -> int:
+def cmd_keys_bootstrap(args: argparse.Namespace, base: str) -> int:
     try:
         result = _post(f"{base}/board/keys/bootstrap-master", {})
     except BoardHTTPError as e:
@@ -384,12 +384,12 @@ def cmd_keys_bootstrap(args, base: str) -> int:
     return 0
 
 
-def cmd_config_get(args, base: str) -> int:
+def cmd_config_get(args: argparse.Namespace, base: str) -> int:
     print(json.dumps(_get(f"{base}/board/config"), indent=2))
     return 0
 
 
-def cmd_config_set(args, base: str) -> int:
+def cmd_config_set(args: argparse.Namespace, base: str) -> int:
     patch: dict[str, Any] = {}
     if args.engine_port is not None:
         patch["engine_port"] = args.engine_port

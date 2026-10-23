@@ -18,16 +18,18 @@ older callers; each access resolves the current value.
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 from collections.abc import Mapping, MutableMapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
-try:
-    import yaml
+try:  # optional dependency; checked before use
+    yaml: ModuleType | None = importlib.import_module("yaml")
 except ImportError:  # pragma: no cover
-    yaml = None  # type: ignore[assignment]  # optional dependency; checked before use
+    yaml = None
 
 _logger = logging.getLogger(__name__)
 

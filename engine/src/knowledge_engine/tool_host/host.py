@@ -186,7 +186,7 @@ def register_tool(
     )
     conn.commit()
     db_mod.log_event("tool_registered", detail=f"{name} ({kind}) at /tools/{route}")
-    return get_tool(tool_id)  # type: ignore[return-value]  # row was just written, so the read is not None
+    return db_mod.require_row(get_tool(tool_id), "hosted tool", tool_id)
 
 
 def get_tool(tool_id_or_name: str) -> dict[str, Any] | None:

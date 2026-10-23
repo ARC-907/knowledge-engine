@@ -83,7 +83,7 @@ def register_worker(
     )
     conn.commit()
     db.log_event("worker_registered", node_id=node_id, conn=conn)
-    return get_worker(node_id)  # type: ignore[return-value]  # row was just written, so the read is not None
+    return db.require_row(get_worker(node_id), "worker", node_id)
 
 
 def unregister_worker(node_id: str) -> bool:

@@ -130,7 +130,7 @@ def create_task(
         "task_created", task_id=task_id, detail=f"{task_type} for {chapter_key}", conn=conn
     )
 
-    return read_task(task_id)  # type: ignore[return-value]  # row was just written, so the read is not None
+    return db.require_row(read_task(task_id), "task", task_id)
 
 
 def read_task(task_id: str) -> dict[str, Any] | None:
@@ -238,7 +238,7 @@ def transition_task(
         detail=f"{old_state} -> {new_state}",
         conn=conn,
     )
-    return read_task(task_id)  # type: ignore[return-value]  # row was just written, so the read is not None
+    return db.require_row(read_task(task_id), "task", task_id)
 
 
 # ── Claim / Lease ──────────────────────────────────────────
