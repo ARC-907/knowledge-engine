@@ -26,8 +26,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import UTC, datetime
 
+from ..core.util.time import utc_now_iso
 from . import fingerprints, hashing, pointers, sanitize, schema
 from .models import DocRecord
 
@@ -62,11 +62,6 @@ _DOC_COLUMNS = (
 )
 
 
-def _utcnow() -> str:
-    """Return the current UTC time as an ISO-8601 string."""
-    return datetime.now(UTC).isoformat()
-
-
 def _pointer_type(category: str) -> str:
     """Map a document category to its pointer type.
 
@@ -98,7 +93,7 @@ def begin_run(
         "INSERT INTO project_doc_ingestion_runs "
         "(ingestion_run_id, project_fp, branch_fp, mode, started_at, status) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (run_id, project_fp, branch_fp, mode, _utcnow(), schema.PENDING),
+        (run_id, project_fp, branch_fp, mode, utc_now_iso(), schema.PENDING),
     )
     project_conn.commit()
     return run_id
@@ -119,7 +114,7 @@ def finish_run(
     project_conn.execute(
         "UPDATE project_doc_ingestion_runs SET "
         "finished_at = ?, status = ?, stats_json = ? WHERE ingestion_run_id = ?",
-        (_utcnow(), status, json.dumps(stats or {}), run_id),
+        (utc_now_iso(), status, json.dumps(stats or {}), run_id),
     )
     project_conn.commit()
 
@@ -212,7 +207,7 @@ def ingest_record(
         clean_text = text
         sanitization_status = schema.SANITIZED
 
-    now = _utcnow()
+    now = utc_now_iso()
 
     # --- rejected: metadata-only row, no body, no FTS ---------------------
     if sanitization_status in schema.REJECTED_STATES:

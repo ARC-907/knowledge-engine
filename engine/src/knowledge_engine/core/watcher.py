@@ -11,25 +11,13 @@ from typing import TYPE_CHECKING
 
 from .config import Config
 from .registry import EntryKind, Registry, RegistryEntry
+from .util.slug import slugify
 
 if TYPE_CHECKING:
     from watchdog.events import DirCreatedEvent, FileCreatedEvent
     from watchdog.observers.api import BaseObserver
 
 log = logging.getLogger(__name__)
-
-
-def slugify(name: str) -> str:
-    out = []
-    for ch in name.lower():
-        if ch.isalnum():
-            out.append(ch)
-        elif ch in (" ", "-", "_", "&"):
-            out.append("-")
-    s = "".join(out)
-    while "--" in s:
-        s = s.replace("--", "-")
-    return s.strip("-")
 
 
 _FOLDER_TO_KIND: dict[str, EntryKind] = {

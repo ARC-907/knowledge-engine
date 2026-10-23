@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import stat
 from pathlib import Path
 
@@ -41,9 +40,6 @@ def test_fresh_registry_json_gets_the_umask_default_mode_not_0600(tmp_path: Path
         reg.close()
 
 
-@pytest.mark.skipif(
-    os.name == "nt", reason="POSIX permission bits are not representable on Windows"
-)
 @pytest.mark.parametrize("mode", [0o640, 0o664, 0o600])
 def test_persist_preserves_an_existing_registry_json_mode(tmp_path: Path, mode: int) -> None:
     registry_path = tmp_path / "registry.json"
@@ -61,8 +57,7 @@ def test_persist_preserves_an_existing_registry_json_mode(tmp_path: Path, mode: 
         reg.set_lifecycle(watch_enabled=False)
         assert _mode(registry_path) == mode, "set_lifecycle changed the file mode"
 
-        removed = reg.remove("kit-a")
-        assert removed is True
+        assert reg.remove("kit-a") is True
         assert _mode(registry_path) == mode, "remove changed the file mode"
     finally:
         reg.close()

@@ -16,12 +16,8 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+from ...core.util.time import utc_now_iso
 from ..foundation import config, db
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
-
 
 # ── Registration ───────────────────────────────────────────
 
@@ -52,7 +48,7 @@ def register_worker(
     role = role or node_cfg.get("role", "worker")
     display_name = display_name or node_cfg.get("display_name", node_id)
 
-    now = _now_iso()
+    now = utc_now_iso()
     conn = db.get_connection()
 
     conn.execute(
@@ -133,7 +129,7 @@ def send_heartbeat(
     resources: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Record a heartbeat with optional resource snapshot."""
-    now = _now_iso()
+    now = utc_now_iso()
     conn = db.get_connection()
     conn.execute(
         """UPDATE workers SET

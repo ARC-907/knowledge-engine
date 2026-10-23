@@ -1,6 +1,7 @@
 """Optional git metadata collection for the project-context subsystem.
 
-All git access in the subsystem goes through :func:`run_git` (argv list,
+All git access in the subsystem goes through :func:`run_git` (re-exported
+from :mod:`knowledge_engine.core.util.proc`; argv list,
 ``shell=False``, bounded timeout), and :func:`git_output` is its gracefully
 degrading wrapper. Git is entirely optional: if the ``git`` binary is missing,
 the directory is not a repository, or ``git.enabled`` is ``False`` in config,
@@ -21,7 +22,6 @@ to its remote without leaking the URL or any embedded token.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
@@ -31,12 +31,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from ..core.util.hashing import sha256_hex
+from ..core.util.proc import GIT_TIMEOUT_SECONDS, run_git
 from .models import DiffSummary, GitContext
 
 logger = logging.getLogger(__name__)
-
-#: Conservative timeout (seconds) so a hung/locked repo can never stall a caller.
-GIT_TIMEOUT_SECONDS: float = 10.0
 
 #: Upper bound on an accepted ref's length; real refs are far shorter.
 MAX_REF_LENGTH = 256
@@ -47,35 +46,6 @@ _REF_FORBIDDEN_CHARS = frozenset("~^:?*[\\")
 
 # Trailing ancestry operators accepted after a ref name: ``~``, ``~3``, ``^``, ``^2``.
 _REV_SUFFIX_RE = re.compile(r"(?:[~^][0-9]{0,9})*")
-
-
-def run_git(
-    args: Sequence[str],
-    cwd: Path,
-    *,
-    timeout: float = GIT_TIMEOUT_SECONDS,
-) -> subprocess.CompletedProcess[str]:
-    """Run ``git <args>`` in ``cwd`` and return the completed process.
-
-    This is the single git runner for the project-context subsystem. The argv
-    is passed as a list with ``shell=False``, so no shell parsing happens, and
-    ``check=False`` leaves the return code to the caller. Callers that pass
-    untrusted refs must run them through :func:`validate_ref` and terminate
-    options with ``--end-of-options`` / ``--`` themselves.
-
-    Raises:
-        FileNotFoundError / OSError: the ``git`` binary could not be started.
-        subprocess.TimeoutExpired: git did not finish within ``timeout`` seconds.
-    """
-    return subprocess.run(  # noqa: S603  # argv list with shell=False; refs are validated by callers
-        ["git", *args],  # noqa: S607  # git is resolved from PATH like any other optional tool
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        shell=False,
-        timeout=timeout,
-        check=False,  # the return code is inspected by the caller
-    )
 
 
 def git_output(
@@ -204,7 +174,7 @@ def _remote_hash(root: Path) -> str | None:
     sanitized = _sanitize_remote(url)
     if not sanitized:
         return None
-    return hashlib.sha256(sanitized.encode("utf-8")).hexdigest()
+    return sha256_hex(sanitized)
 
 
 def collect(root: Path | str, cfg: Any) -> GitContext | None:

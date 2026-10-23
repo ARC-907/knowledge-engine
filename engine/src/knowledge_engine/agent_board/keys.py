@@ -23,19 +23,19 @@ Permission levels: `read`, `write`, `invoke`, `admin`.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import secrets
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from ..core import paths
 from ..core.logsafe import log_safe
+from ..core.util.hashing import sha256_hex
+from ..core.util.time import utc_now_iso
 from ..runtime.foundation import db
 
 _logger = logging.getLogger(__name__)
@@ -76,12 +76,8 @@ _PERMISSION_COLUMNS = "perm_id, key_id, resource_type, resource_id, permission, 
 # ── Raw key generation + hashing ───────────────────────────────
 
 
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
-
-
 def _hash_key(raw_key: str) -> str:
-    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    return sha256_hex(raw_key)
 
 
 def generate_key() -> tuple[str, str]:
@@ -103,7 +99,7 @@ def create_key(
     """Create a new key. Returns dict including the raw_key (one-time view)."""
     raw_key, key_hash = generate_key()
     key_id = str(uuid4())
-    now = _now_iso()
+    now = utc_now_iso()
 
     conn = db.get_connection()
     conn.execute(
@@ -148,7 +144,7 @@ def verify_key(raw_key: str) -> dict[str, Any] | None:
     """Return the key row if valid+enabled+unexpired, else None."""
     key_hash = _hash_key(raw_key)
     conn = db.get_connection()
-    now = _now_iso()
+    now = utc_now_iso()
 
     row = conn.execute(
         f"""SELECT {_KEY_COLUMNS} FROM agent_api_keys
@@ -243,7 +239,7 @@ def toggle_key(key_id: str) -> dict[str, Any] | None:
     new_state = 0 if row["enabled"] else 1
     conn.execute(
         "UPDATE agent_api_keys SET enabled = ?, updated_at = ? WHERE key_id = ?",
-        (new_state, _now_iso(), key_id),
+        (new_state, utc_now_iso(), key_id),
     )
     conn.commit()
     _logger.info(
@@ -285,7 +281,7 @@ def grant_permission(
         raise ValueError(f"Invalid permission: {permission}")
 
     perm_id = str(uuid4())
-    now = _now_iso()
+    now = utc_now_iso()
 
     conn = db.get_connection()
     conn.execute(

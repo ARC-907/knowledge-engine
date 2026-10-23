@@ -38,12 +38,12 @@ import shlex
 import subprocess
 import uuid as _uuid
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime
 from http.client import HTTPMessage
 from pathlib import Path
 from typing import IO, Any
 from urllib import error as urllib_error, parse as urllib_parse, request as urllib_request
 
+from ..core.util.time import utc_now_iso
 from ..runtime.foundation import config, db as db_mod
 
 logger = logging.getLogger(__name__)
@@ -83,10 +83,6 @@ _ALLOWED_UPSTREAM_SCHEMES = frozenset({"http", "https"})
 _HTTP_TOKEN_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 _URL_FORBIDDEN_RE = re.compile(r"[\x00-\x20\x7f]")
 _CREDENTIAL_HEADERS = ("Authorization", "Cookie", "Proxy-authorization")
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def _load_tool_host_config() -> dict[str, Any]:
@@ -142,7 +138,7 @@ def register_tool(
 
     conn = db_mod.get_connection()
     tool_id = str(_uuid.uuid4())
-    now = _now_iso()
+    now = utc_now_iso()
 
     conn.execute(
         """INSERT INTO hosted_tools
@@ -271,7 +267,7 @@ def update_tool(tool_id: str, **fields: Any) -> dict[str, Any] | None:
         if field in updates and not isinstance(updates[field], str):
             updates[field] = json.dumps(updates[field])
 
-    updates["updated_at"] = _now_iso()
+    updates["updated_at"] = utc_now_iso()
 
     conn = db_mod.get_connection()
     set_clause = ", ".join(f"{k} = ?" for k in updates)
@@ -294,7 +290,7 @@ def toggle_tool(tool_id: str) -> dict[str, Any] | None:
     conn = db_mod.get_connection()
     conn.execute(
         "UPDATE hosted_tools SET enabled = 1 - enabled, updated_at = ? WHERE tool_id = ?",
-        (_now_iso(), tool_id),
+        (utc_now_iso(), tool_id),
     )
     conn.commit()
     return get_tool(tool_id)
@@ -311,7 +307,7 @@ def _record_invocation(tool_id: str) -> None:
            SET invocation_count = invocation_count + 1,
                last_invoked_at = ?
            WHERE tool_id = ?""",
-        (_now_iso(), tool_id),
+        (utc_now_iso(), tool_id),
     )
     conn.commit()
 

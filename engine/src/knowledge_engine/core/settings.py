@@ -19,7 +19,7 @@ them, and the ``Read by`` column names the module that consumes each one.
 Parsing is deliberately forgiving, as the ad-hoc readers it replaces were:
 an unparseable value is logged at WARNING (secrets are never echoed) and the
 field falls back to its default instead of aborting startup. Booleans share
-one parser: ``1/true/yes/on`` are on, ``0/false/no/off`` and the empty string
+one parser (:func:`knowledge_engine.core.util.env.parse_bool`): ``1/true/yes/on`` are on, ``0/false/no/off`` and the empty string
 are off, anything else is reported and ignored.
 
 Regenerate the operator reference with::
@@ -47,12 +47,17 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from . import paths as _paths
+from .util.env import (
+    FALSE_VALUES,
+    TRUE_VALUES,
+    parse_bool as parse_env_bool,
+    parse_bool_or as env_flag,
+    parse_list,
+)
 
 _logger = logging.getLogger(__name__)
 
 ENV_PREFIX = "KE_"
-TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
-FALSE_VALUES = frozenset({"0", "false", "no", "off", ""})
 MASK = "********"
 
 # Section keys, in the order the generated reference lists them.
@@ -63,32 +68,6 @@ SECTIONS: dict[str, str] = {
     "generation": "Generation providers",
     "substrate": "Pipeline and substrates",
 }
-
-
-def parse_env_bool(value: Any) -> Any:
-    """The one boolean parser for environment flags.
-
-    Returns ``True``/``False`` for a recognised spelling (case and surrounding
-    whitespace ignored; the empty string is off). Any other string is returned
-    unchanged so the field validator rejects it and the lenient fallback
-    reports it. Non-strings (``bool``, ``None``) pass through.
-    """
-    if not isinstance(value, str):
-        return value
-    text = value.strip().lower()
-    if text in TRUE_VALUES:
-        return True
-    if text in FALSE_VALUES:
-        return False
-    return value
-
-
-def env_flag(raw: str | None, default: bool) -> bool:
-    """Parse a raw flag value with :func:`parse_env_bool`; unset/unknown → ``default``."""
-    if raw is None:
-        return default
-    parsed = parse_env_bool(raw)
-    return parsed if isinstance(parsed, bool) else default
 
 
 EnvBool = Annotated[bool, BeforeValidator(parse_env_bool)]
@@ -558,7 +537,7 @@ class Settings(BaseSettings):
 
     def provider_order_list(self) -> list[str]:
         """``KE_PROVIDER_ORDER`` split into names (lower-cased, blanks dropped)."""
-        return [part.strip().lower() for part in self.provider_order.split(",") if part.strip()]
+        return parse_list(self.provider_order, lower=True)
 
     def cloud_configured(self) -> bool:
         """Both ``KE_CLOUD_ENDPOINT`` and ``KE_CLOUD_API_KEY`` are set."""

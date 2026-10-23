@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import Any
 
 from ...core import paths as engine_paths
+from ...core.util.sqlite import connect as sqlite_connect
+from ...core.util.time import utc_now_iso
 from . import config  # noqa: F401  — ensures .env is loaded before DB path resolves
 
 _logger = logging.getLogger(__name__)
@@ -171,13 +173,12 @@ def get_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
         _local.connections = {}
 
     if path not in _local.connections:
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        conn.execute("PRAGMA foreign_keys=ON")
-        _init_schema(conn)
+        conn = sqlite_connect(path)
+        try:
+            _init_schema(conn)
+        except BaseException:
+            conn.close()
+            raise
         _local.connections[path] = conn
 
     return _local.connections[path]
@@ -649,7 +650,7 @@ def seed_board_config(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT id FROM board_config WHERE id = 1").fetchone()
     if row is not None:
         return
-    now = datetime.now(UTC).isoformat()
+    now = utc_now_iso()
     defaults = BOARD_CONFIG_DEFAULTS
     conn.execute(
         """INSERT INTO board_config (
@@ -859,7 +860,7 @@ def log_event(
         """INSERT INTO events (timestamp, event_type, task_id, node_id, agent_id, detail, data_json)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (
-            datetime.now(UTC).isoformat(),
+            utc_now_iso(),
             event_type,
             task_id,
             node_id,

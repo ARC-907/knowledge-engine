@@ -13,14 +13,11 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
+from ...core.util.time import utc_now_iso
 from ..foundation import db
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def _extract_target_node(msg: dict[str, Any]) -> str | None:
@@ -75,10 +72,8 @@ def post_message(
     rather than requiring a follow-up UPDATE.
     """
     message_id = str(uuid.uuid4())
-    now = _now_iso()
-    expires_at = (
-        (datetime.now(UTC) + timedelta(hours=ttl_hours)).isoformat() if ttl_hours > 0 else None
-    )
+    now = utc_now_iso()
+    expires_at = utc_now_iso(timedelta(hours=ttl_hours)) if ttl_hours > 0 else None
 
     conn = db.get_connection()
     conn.execute(
@@ -265,7 +260,7 @@ def post_heartbeat_msg(node_id: str, tasks: list[str]) -> dict[str, Any]:
 
 def prune_expired() -> int:
     """Delete messages past their TTL. Returns count deleted."""
-    now = _now_iso()
+    now = utc_now_iso()
     conn = db.get_connection()
     cursor = conn.execute(
         "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at < ?",

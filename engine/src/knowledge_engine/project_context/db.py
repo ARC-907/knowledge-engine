@@ -18,24 +18,14 @@ import re
 import sqlite3
 from pathlib import Path
 
+from ..core.util.sqlite import connect as sqlite_connect
+
+#: Opens a connection with the engine's standard pragmas (WAL, busy timeout,
+#: foreign keys, ``sqlite3.Row`` rows); see :func:`knowledge_engine.core.util.sqlite.connect`.
+connect = sqlite_connect
+
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 _MIGRATION_RE = re.compile(r"^(\d+)_.*\.sql$")
-
-
-def connect(path: Path | str) -> sqlite3.Connection:
-    """Open a SQLite connection with the engine's standard pragmas.
-
-    WAL for concurrent reads, a busy timeout, foreign keys on, and a
-    ``Row`` factory so callers get mapping-style rows.
-    """
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(p), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
 
 
 def _ensure_version_table(conn: sqlite3.Connection) -> None:

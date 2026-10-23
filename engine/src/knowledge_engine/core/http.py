@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
 
 from .settings import env_flag
+from .util.env import parse_list
 
 if TYPE_CHECKING:
     from .settings import Settings
@@ -69,7 +70,7 @@ def parse_cors_origins(raw: str | None) -> list[str]:
         return list(DEFAULT_CORS_ORIGINS)
     if raw == "*":
         return ["*"]
-    return [o.strip() for o in raw.split(",") if o.strip()]
+    return parse_list(raw)
 
 
 def install_cors(app: FastAPI, origins: list[str], *, env_var: str) -> list[str]:

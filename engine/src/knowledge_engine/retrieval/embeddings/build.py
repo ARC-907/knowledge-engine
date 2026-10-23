@@ -20,7 +20,6 @@ Env vars:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -31,6 +30,7 @@ import urllib.request
 from pathlib import Path
 
 from ...core import paths as engine_paths
+from ...core.util.hashing import sha256_hex
 
 # ---------------------------------------------------------------------------
 # Config
@@ -89,11 +89,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
 
 def _file_hash(path: Path) -> str:
     """Compute a truncated SHA-256 hash of a file's contents."""
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for block in iter(lambda: f.read(8192), b""):
-            h.update(block)
-    return h.hexdigest()[:16]
+    return sha256_hex(path, length=16)
 
 
 def _chunk_text(text: str, path_rel: str) -> list[dict]:

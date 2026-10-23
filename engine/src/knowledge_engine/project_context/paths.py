@@ -10,34 +10,30 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ..core.util.proc import run_git
+from ..core.util.slug import slugify as _slugify
 from .config import ProjectContextConfig
 
+#: Separators of the project-slug rule (the registry rule plus ``.``).
+PROJECT_SLUG_SEPARATORS = " -_&."
 
-def slugify(name: str) -> str:
-    """Lowercase, alnum + ``-`` slug. Mirrors ``knowledge_engine.cli._slugify``."""
-    out: list[str] = []
-    for ch in name.lower():
-        if ch.isalnum():
-            out.append(ch)
-        elif ch in (" ", "-", "_", "&", "."):
-            out.append("-")
-    s = "".join(out)
-    while "--" in s:
-        s = s.replace("--", "-")
-    return s.strip("-") or "project"
+
+def project_slug(name: str) -> str:
+    """Lowercase, alnum + ``-`` slug of a project name; ``project`` when empty.
+
+    The registry's folder-slug rule (:func:`knowledge_engine.core.util.slug.slugify`)
+    with ``.`` also treated as a separator.
+    """
+    return _slugify(name, separators=PROJECT_SLUG_SEPARATORS, fallback="project")
+
+
+#: Historical name of :func:`project_slug` (kept for callers and tests).
+slugify = project_slug
 
 
 def _git_toplevel(start: Path) -> Path | None:
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607  # fixed argv, git resolved from PATH
-            cwd=str(start),
-            capture_output=True,
-            text=True,
-            timeout=5,
-            shell=False,
-            check=False,  # returncode is inspected below
-        )
+        result = run_git(["rev-parse", "--show-toplevel"], start, timeout=5)
     except (OSError, subprocess.SubprocessError):
         return None
     if result.returncode != 0:

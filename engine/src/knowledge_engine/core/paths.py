@@ -128,6 +128,29 @@ def ensure_data_dir(data_dir: Path | None = None) -> Path:
     return target
 
 
+def ensure_within(root: str | Path, path: str | Path, *, label: str = "the root") -> Path:
+    """Resolve ``path`` against ``root`` and require the result to stay under it.
+
+    Relative paths are joined to ``root``; absolute paths are taken as given.
+    Symlinks are followed, so a link that points outside ``root`` is rejected.
+    Returns the resolved path. Raises ``ValueError`` when the path escapes
+    ``root`` (``"... resolves outside <label>"``) or cannot be resolved
+    (including an embedded NUL byte).
+    """
+    if "\x00" in str(path):
+        # Windows' realpath swallows the embedded-null ValueError and returns
+        # the path unchanged, so check explicitly on every platform.
+        raise ValueError(f"cannot resolve {str(path)!r}: embedded null byte")
+    try:
+        root_resolved = Path(root).resolve()
+        resolved = (root_resolved / path).resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ValueError(f"cannot resolve {str(path)!r}: {exc}") from exc
+    if not resolved.is_relative_to(root_resolved):
+        raise ValueError(f"{str(path)!r} resolves outside {label}")
+    return resolved
+
+
 def _warn_if_corpus_missing(corpus_root: Path) -> None:
     if corpus_root.exists():
         return
@@ -156,6 +179,7 @@ __all__ = [
     "EnginePaths",
     "discover_home",
     "ensure_data_dir",
+    "ensure_within",
     "resolve",
     "resolve_data_dir",
     "resolve_home",
