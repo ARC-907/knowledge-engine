@@ -112,6 +112,23 @@ def create_app() -> FastAPI:
         except Exception:
             _logger.exception("agent board failed to mount; continuing without it")
 
+    # ── MCP over streamable HTTP at /mcp (opt-in via KE_MCP_HTTP=1) ──
+    # Shares this app's registry/indexer; the session manager runs inside
+    # `lifespan` (see lifespan.py).
+    if env_truthy("KE_MCP_HTTP", default=False):
+        try:
+            # Optional surface, imported lazily: the MCP SDK is only loaded when enabled.
+            from ..mcp.http import StreamableHTTPMount  # noqa: PLC0415
+            from ..mcp.server import build_server  # noqa: PLC0415
+
+            mcp_http = StreamableHTTPMount(
+                build_server(app.state.config, app.state.registry, app.state.indexer)
+            )
+            app.router.routes.append(mcp_http.route())
+            app.state.mcp_http = mcp_http
+        except Exception:
+            _logger.exception("MCP streamable-HTTP endpoint failed to mount; continuing without it")
+
     # Registered last so CORSMiddleware is the outermost layer (``add_middleware``
     # is LIFO): a 413 written by the body cap then still carries the CORS grant
     # for an allowed browser origin instead of surfacing as an opaque error.

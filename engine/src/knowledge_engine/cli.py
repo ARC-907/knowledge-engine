@@ -10,6 +10,7 @@ from typing import Any
 
 from .core.config import Config
 from .core.registry import EntryKind, Registry, RegistryEntry
+from .mcp.options import add_arguments as add_mcp_arguments
 from .retrieval.fts5 import Indexer
 
 BASE_MCP_TOOLS = ["search", "registry_list", "registry_toggle", "registry_get"]
@@ -166,7 +167,10 @@ def main() -> int:
     sub.add_parser("capabilities", help="Print runtime capability and retrieval-surface inventory")
     sub.add_parser("reindex", help="Rebuild FTS5 index over enabled entries")
     sub.add_parser("watch", help="Start watchdog: auto-register new corpus folders")
-    sub.add_parser("mcp", help="Run MCP stdio server for AI clients")
+    mcp_parser = sub.add_parser(
+        "mcp", help="Run the MCP server for AI clients (stdio, or streamable HTTP with --http)"
+    )
+    add_mcp_arguments(mcp_parser)
 
     sp = sub.add_parser("search", help="Search the index")
     sp.add_argument("query")
@@ -211,6 +215,11 @@ def main() -> int:
         from .agent_board.service import serve as board_serve
 
         return board_serve(host=args.host, port=args.port)
+
+    if args.cmd == "mcp":
+        from .mcp.server import run as mcp_run
+
+        return mcp_run(args)
 
     config = Config.from_env()
     # Every command below opens the registry mirror (and most write an index),
@@ -262,11 +271,6 @@ def main() -> int:
             observer.stop()
             observer.join()
         return 0
-
-    if args.cmd == "mcp":
-        from .mcp.server import main as mcp_main
-
-        return mcp_main()
 
     if args.cmd == "reindex":
         idx = Indexer(config, registry)

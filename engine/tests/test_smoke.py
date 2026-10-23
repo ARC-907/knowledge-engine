@@ -187,9 +187,29 @@ def test_capability_inventory_reports_empty_substrates(tmp_path: Path) -> None:
     assert inventory["sandbox"]["status"] == "available"
 
 
-def test_base_mcp_registry_schema_includes_kits() -> None:
-    from knowledge_engine.mcp_server import TOOLS
+def test_base_mcp_registry_schema_includes_kits(tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    data = tmp_path / "data"
+    corpus.mkdir()
+    data.mkdir()
+    _env(corpus, data)
 
-    by_name = {tool["name"]: tool for tool in TOOLS}
-    assert "kit" in by_name["search"]["inputSchema"]["properties"]["kind"]["enum"]
-    assert "kit" in by_name["registry_list"]["inputSchema"]["properties"]["kind"]["enum"]
+    import anyio
+
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry
+    from knowledge_engine.mcp.server import build_server
+    from knowledge_engine.retrieval.fts5 import Indexer
+
+    config = Config.from_env()
+    registry = Registry(config.registry_path, config.data_dir / "registry.db")
+    server = build_server(config, registry, Indexer(config, registry), include_groups=False)
+    by_name = {tool.name: tool.input_schema for tool in anyio.run(server.list_tools)}
+
+    def kind_enum(schema: dict) -> list[str]:
+        # Optional parameters are generated as anyOf[<enum>, null].
+        options = schema["properties"]["kind"]["anyOf"]
+        return next(option["enum"] for option in options if "enum" in option)
+
+    assert "kit" in kind_enum(by_name["search"])
+    assert "kit" in kind_enum(by_name["registry_list"])

@@ -1,7 +1,8 @@
 """Application lifespan + board-boot helpers, factored out of the app factory.
 
-Owns the FastAPI lifespan context (board sweeper start/stop) and the env-var
-gating used by both the lifespan and the factory's board-router mount.
+Owns the FastAPI lifespan context (board sweeper start/stop, the MCP
+streamable-HTTP session manager when ``KE_MCP_HTTP`` is on) and the env-var
+gating used by both the lifespan and the factory's optional mounts.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from types import ModuleType
 
 from fastapi import FastAPI
@@ -50,11 +51,11 @@ def _board_sweeper_should_run(board_sweeper: ModuleType) -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan — board sweeper start/stop lives here.
+    """Application lifespan — board sweeper start/stop and the MCP HTTP session manager.
 
     Replaces the deprecated `@app.on_event("startup"/"shutdown")`
     hooks (FastAPI ≥ 0.93 prefers the lifespan context). Wrapped in
-    try/except so a board failure can never block the lean core's
+    try/except so a board or MCP failure can never block the lean core's
     boot or shutdown.
     """
     board_sweeper: ModuleType | None = None
@@ -75,11 +76,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             _logger.exception("board sweeper failed to start; continuing")
             board_sweeper = None
-    try:
-        yield
-    finally:
-        if board_sweeper is not None:
+    async with AsyncExitStack() as optional_services:
+        mcp_http = getattr(app.state, "mcp_http", None)
+        if mcp_http is not None:
             try:
-                board_sweeper.stop()
+                await optional_services.enter_async_context(mcp_http.lifespan())
             except Exception:
-                _logger.exception("board sweeper failed to stop cleanly")
+                _logger.exception("MCP session manager failed to start; /mcp will answer 503")
+        try:
+            yield
+        finally:
+            if board_sweeper is not None:
+                try:
+                    board_sweeper.stop()
+                except Exception:
+                    _logger.exception("board sweeper failed to stop cleanly")
