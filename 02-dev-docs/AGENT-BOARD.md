@@ -12,7 +12,8 @@
 > key. Untrusted peers always get 403 regardless of `require_key_for_post`.
 > Flip `require_key_for_post=1` to additionally require an `X-Board-Key`
 > for non-loopback writes; override the trusted set via
-> `KE_BOARD_TRUSTED_CIDRS` (comma-separated, empty = loopback only).
+> `KE_BOARD_TRUSTED_CIDRS` (comma-separated; it replaces the default, so
+> include `127.0.0.1/32,::1/128` — an empty value trusts no peer).
 > **Admin routes** (key vault, provider registry, `PATCH /board/config`,
 > `POST /board/sweep`, scope creation) always require a key with
 > `board:admin` — loopback does not bypass them. Mint the first one with
@@ -24,15 +25,17 @@ Agents working on different branches or worktrees need a way to coordinate
 without scrolling each other's transcripts. The board gives them a structured,
 schema-validated message bus that:
 
-* Persists messages in the same SQLite file as the rest of the engine
+* Persists messages in the pipeline database under the data directory
+  (`<KE_DATA_DIR>/pipeline.db`), or in a per-scope file
 * Lets any agent post claims, releases, blockers, status updates, decisions,
   digests, reminders — anything matching the canonical schema
 * Searches the full history with FTS5 (bm25 ranking + snippets)
 * Produces **context-compressed digests** so an agent catching up doesn't
   have to load every body into its context window
 * Sweeps stale unacked blockers and emits reminders on a schedule
-* Holds provider-abstracted keys (Anthropic / OpenAI / Ollama / custom) so
-  local and cloud models share one key vault
+* Records which environment variable holds each upstream provider's
+  credential (`anthropic` / `openai` / `cloud-http` / `ollama` / `custom`)
+  without ever storing the secret itself
 
 The engine ships with the board on by default. To turn it off, set
 `KE_BOARD_ENABLED=0`.
@@ -129,7 +132,7 @@ when a fresh agent wakes up to a branch.
 | `/board/scopes`                  | GET    | List per-scope databases             |
 | `/board/scopes/{name}`           | PUT    | Create a scope DB (admin-only)       |
 | `/board/sweep`                   | POST   | Manual sweep (admin-only)            |
-| `/board/keys`                    | GET    | List provider keys (admin-only)      |
+| `/board/keys`                    | GET    | List board access keys (admin-only)  |
 | `/board/keys`                    | POST   | Create key (admin-only)              |
 | `/board/keys/{id}`               | GET    | Fetch key + permissions (admin)      |
 | `/board/keys/{id}/toggle`        | PATCH  | Enable/disable (admin)               |
@@ -139,6 +142,10 @@ when a fresh agent wakes up to a branch.
 | `/board/keys/bootstrap-master`   | POST   | Create first master key (loopback, once) |
 | `/board/config`                  | GET    | Read singleton config                |
 | `/board/config`                  | PATCH  | Update config (admin)                |
+| `/board/providers`               | GET / POST | Provider credential bindings (admin) |
+| `/board/providers/{id}`          | DELETE | Remove a binding (admin)             |
+| `/board/providers/{id}/toggle`   | PATCH  | Enable/disable a binding (admin)     |
+| `/board/providers/{id}/verify`   | POST   | Re-check that the env var is set (admin) |
 
 Routes fall into three classes:
 
@@ -150,22 +157,26 @@ Routes fall into three classes:
   keyless for trusted peers while `require_key_for_post=0` (default). With
   the flag on, non-loopback peers must send an `X-Board-Key` holding
   `board:write`; loopback writes stay keyless, but a key that *is* sent
-  must be valid.
+  must be valid. "Loopback" is the effective client address: behind a
+  trusted proxy with `KE_TRUST_PROXY=1` that is the forwarded address,
+  so a remote client coming through a same-host proxy is *not* loopback.
 - **ADMIN** (`/board/keys*`, `/board/providers*`, `PATCH /board/config`,
   `POST /board/sweep`, `PUT /board/scopes/{name}`): always require a valid
   `X-Board-Key` with `board:admin` (a master key, or a key granted
   `admin`). `401` without a key, `403` with a key that lacks admin.
-  Neither loopback nor `require_key_for_post` changes this.
+  Neither loopback nor `require_key_for_post` changes this. Keys are
+  verified against the **shared board's** vault before a request is routed
+  to any `scope`; scope databases do not have their own keys.
 
 | Env var                     | Purpose                                                |
 |-----------------------------|--------------------------------------------------------|
-| `KE_BOARD_TRUSTED_CIDRS`    | Comma-separated CIDR list — replaces the default set.  |
+| `KE_BOARD_TRUSTED_CIDRS`    | Comma-separated CIDR list — replaces the default set (include loopback; empty = nobody). |
 | `KE_TRUST_PROXY`            | `1` = honour `X-Forwarded-For` from a trusted proxy (see below). |
 | `KE_TRUSTED_PROXIES`        | CIDRs allowed to set `X-Forwarded-For`. Default: loopback. |
 | `KE_BOARD_MAX_SCOPES`       | Cap on per-scope databases (default 64; `0` = unlimited). |
 | `KE_CORS_ORIGINS`           | CORS allow-list for the engine app. Default: loopback origins; `*` only when explicit. |
 | `KE_BOARD_CORS_ORIGINS`     | Same, for the standalone service.                      |
-| `KE_LOG_LEVEL`              | Level of the `knowledge_engine.*` loggers under `serve` / `board-serve` (default `INFO`). |
+| `KE_LOG_LEVEL`              | Level of the `knowledge_engine.*` loggers under `serve` / `board-serve` / `mcp` / `watch` (default `INFO`; `-v`/`-q` override). |
 
 `X-Forwarded-For` is ignored unless `KE_TRUST_PROXY=1` **and** the socket
 peer is in `KE_TRUSTED_PROXIES`. The chain is then walked from the right,
@@ -248,9 +259,11 @@ Open `http://127.0.0.1:9210/ui/` and click the **Board** or **Config** tab.
 
 * **Board tab:** channel filter, type filter, FTS5 search, post form, ack
   button on `requires_ack` messages, digest view, manual sweep button.
-* **Config tab:** local port, sweeper interval, stale-blocker hours, digest
-  interval, retention caps, require-key-for-post toggle, provider-key vault
-  (create / list / revoke; raw key shown once on creation).
+* **Config tab:** an **API key** field (kept in the browser's localStorage
+  and sent as `X-Board-Key` on every `/board` request — admin actions need
+  it), sweeper interval, stale-blocker hours, digest interval, retention
+  caps, require-key-for-post toggle, provider credential bindings, and the
+  board access-key vault (create / list / revoke; raw key shown once).
 
 ## Keys — two distinct systems
 
@@ -259,7 +272,7 @@ thing, and conflating them is the most common point of confusion:
 
 | System | What it is | Where the secret lives | Ships |
 |---|---|---|---|
-| **Provider credentials** | Keys the engine uses to reach upstream models (Anthropic / OpenAI / Ollama / custom) | The **environment** — the registry stores only a `provider → ENV_VAR` binding | empty |
+| **Provider credentials** | Keys the engine uses to reach upstream models (`anthropic` / `openai` / `cloud-http` / `ollama` / `custom`) | The **environment** — the registry stores only a `provider → ENV_VAR` binding | empty |
 | **Board access keys** | `X-Board-Key` tokens that authenticate callers *to* this board | SHA-256 **hash** in the DB; raw shown once | empty |
 
 Both vaults ship **empty** — nothing is seeded, no secret is ever written
@@ -275,9 +288,9 @@ environment; the database holds the binding metadata only. The status dot
 shows whether that variable is currently set, and **Verify** re-checks it
 without ever revealing the value.
 
-This matches how the engine already reads credentials (`routing/cloud.py`,
-the classifier), so the registry is the single source of truth the engine
-resolves against — `agent_board.providers.resolve_secret("anthropic")`
+The generation providers read the same variables (`generation/cloud_http.py`
+reads `KE_CLOUD_API_KEY`), so the registry is the single source of truth the
+engine resolves against — `agent_board.provider_registry.resolve_secret("anthropic")`
 returns the live value for in-process use only. A local-only operator who
 prefers to paste a value just sets the env var in their shell / `.env`; the
 registry then reports it live.
@@ -369,22 +382,25 @@ Env-var equivalents (set before serve):
 
 * `KE_BOARD_ENABLED=0` — skip board mount entirely
 * `KE_BOARD_SWEEPER=0` — start the engine without the sweeper thread
-* `KE_BOARD_TRUSTED_CIDRS=...` — override the trusted peer set (default:
-  `127.0.0.1/32,::1/128,100.64.0.0/10`). Empty string keeps loopback only.
+* `KE_BOARD_TRUSTED_CIDRS=...` — replace the trusted peer set (default:
+  `127.0.0.1/32,::1/128,100.64.0.0/10`); `127.0.0.1/32,::1/128` is
+  loopback-only, an empty string trusts nobody.
 * `KE_TRUST_PROXY=1` — accept `X-Forwarded-For` from a trusted proxy (also
   switches on uvicorn's proxy-header handling for those proxies)
 * `KE_TRUSTED_PROXIES=...` — which peers count as proxies (default: loopback)
-* `KE_LOG_LEVEL=INFO` — level of the engine's own loggers under `serve`
+* `KE_LOG_LEVEL=INFO` — level of the engine's own loggers under `serve`,
+  `board-serve`, `mcp` and `watch` (`knowledge-engine -v`/`-q` override it)
 * `KE_BOARD_MAX_SCOPES=64` — cap on per-scope databases
 * `KE_CORS_ORIGINS=...` — CORS allowlist for the engine app (default: loopback)
 * `KE_BOARD_CORS_ORIGINS=...` — CORS allowlist for the standalone service
 * `KE_BOARD_URL` / `KE_BOARD_PORT` / `KE_BOARD_KEY` — CLI client targeting
 
-## Wiring board tools into Claude / Cursor / Continue
+## Wiring board tools into MCP clients
 
-The board tools land in the same MCP server as the corpus search tools.
-Existing MCP wiring (see [`MCP-WIRING.md`](../01-user-docs/MCP-WIRING.md)) Just Works™ — `tools/list`
-returns the board tools alongside `search` and `registry_*`.
+The board tools land in the same MCP server as the corpus search tools, so
+existing MCP wiring (see [`MCP-WIRING.md`](../01-user-docs/MCP-WIRING.md))
+needs no change — `tools/list` returns the board tools alongside `search` and
+`registry_*`.
 
 ## Files
 
@@ -395,7 +411,8 @@ engine/src/knowledge_engine/
     schemas.py         channels + types + validators
     store.py           store facade (FTS5, digest, ack)
     digest.py          context-compressed digest analytics (pure functions)
-    keys.py            provider-key vault
+    keys.py            board access-key vault + write/admin authorisation
+    provider_registry.py  provider -> env-var credential bindings
     sweeper.py         background loop (Sweeper object, owned by the app lifespan)
     http/              FastAPI router mounted at /board (assembled in __init__.py):
                        trust.py (trust + key gates), limits.py (body caps),
@@ -407,7 +424,9 @@ engine/src/knowledge_engine/
 scripts/agent-board/
   board-watchdog.ps1   Windows watchdog
 engine/tests/
-  test_agent_board.py  36 tests covering schema, store, FTS, keys, HTTP, MCP
+  test_agent_board.py, test_board_http.py, test_board_security.py,
+  test_board_substrate.py, test_board_sweeper.py, test_board_cli.py,
+  test_sweeper_lease.py
 ```
 
 ## Search syntax
@@ -469,10 +488,12 @@ to enumerate them.
 
 **Notes**
 
-- Each scope DB is independent — its `board_config` (channels, retention,
-  sweeper cadence) and its key vault are separate. A master key bootstrapped
-  on the shared board does **not** grant access to a scope DB; bootstrap per
-  scope if you key-gate it.
+- Each scope DB has its own messages, FTS index and `board_config`
+  (channels, retention, sweeper cadence). Access keys are **not** per scope:
+  the HTTP and MCP gates verify `X-Board-Key` / `board_key` against the
+  shared board's vault before the request is routed to the scope, so one
+  admin key administers every scope (and `bootstrap-master` has no scope
+  parameter).
 - The background sweeper makes **one leased pass** that sweeps the shared
   board plus every scope DB, so TTL prune / reminders / digests run
   everywhere without N competing sweepers.
@@ -512,7 +533,7 @@ to enumerate them.
 
 ## Versioning
 
-See [`CHANGELOG.md`](CHANGELOG.md) for the full version history. Board
+See [`CHANGELOG.md`](../CHANGELOG.md) for the full version history. Board
 highlights: SQLite + FTS5 schema, HTTP API, MCP tool group, CLI, dashboard
 tabs, sweeper, standalone watchdog mode, provider-credential registry,
 peer-trust gate covering loopback + Tailscale CGNAT, atomic acks,

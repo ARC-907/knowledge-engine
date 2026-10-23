@@ -1,47 +1,98 @@
-# Knowledge Engine
+# Knowledge Engine (package)
 
-Corpus-agnostic knowledge engine packaged in-tree. Spin-out ready: this `engine/`
-subtree is self-contained and can be lifted into its own repo without changes.
+The `knowledge-engine` Python package. This `engine/` subtree is
+self-contained — its own `pyproject.toml`, lockfile and tests — and is what the
+release workflow builds into an sdist and wheel. The repository root holds the
+corpus, the docs and the dashboard toolchain around it.
 
 ## Layout
 
-- `src/knowledge_engine/` — core package
-  - `cli/` — `knowledge-engine` CLI (parser in `__init__.py`, one module per command group; `-v`/`-q` set the stderr log level); `app.py` / `mcp_server.py` — compat shims
-  - `core/` — env config + path resolver (`KE_HOME`, `KE_CORPUS_ROOT`, `KE_DATA_DIR`), corpus registry (`registry.json`, the source of truth), watchdog auto-register, shared helpers (`util/`, `ollama.py`)
-  - `server/` — FastAPI app factory + HTTP route modules (`api/`) + packaged dashboard (`static/`, served at `/ui/`)
-  - `mcp/` — MCP server on the official MCP Python SDK (stdio + streamable HTTP)
-  - `generation/` — provider abstraction (echo / cloud HTTP / Ollama)
-  - `retrieval/` — FTS5 indexer (`fts5.py`) + optional bge-m3 embeddings
-  - `project_context/` — project/lane memory: scanner, pointers, git/log context, embeddings, MCP tools
-  - `agent_board/` — scoped board store, HTTP/CLI/MCP surfaces, sweeper, provider credential bindings
-  - `tool_host/` — hosted script/service/static tool registry
-  - `runtime/` — execution substrate: `foundation/` (SQLite backbone), `pipeline/`, `sandbox/` hook
-- `tests/` — pytest smoke tests
+- `src/knowledge_engine/`
+  - `cli/` — the `knowledge-engine` CLI: parser and dispatch in `__init__.py`
+    (`-v`/`-q` set the stderr log level), one module per command group
+    (`corpus`, `registry`, `embeddings`, `serve`, `mcp`, `board`,
+    `project_context`), imported lazily.
+  - `core/` — `paths.py` (`KE_HOME`, `KE_CORPUS_ROOT`, `KE_DATA_DIR`,
+    `KE_REGISTRY_PATH` resolver), `settings.py` (typed settings for every
+    environment variable), `config.py`, `registry.py` (`registry.json`, the
+    source of truth, validated against `registry.schema.json`), `watcher.py`
+    (auto-register), `http.py` (CORS, body cap, proxy policy),
+    `logging_config.py`, `logsafe.py`, `ollama.py` (one Ollama client), `util/`.
+  - `server/` — `app.py` (I/O-free FastAPI factory), `lifespan.py`, `deps.py`,
+    `schemas.py`, `api/` route modules, `static/` (the dashboard, served at
+    `/ui/`).
+  - `mcp/` — MCP server on the official MCP Python SDK (`server.py`), stdio and
+    streamable HTTP (`http.py`), legacy tool-group adapter (`toolkit.py`).
+  - `generation/` — provider abstraction: echo, Ollama, OpenAI-compatible HTTP.
+  - `retrieval/` — `fts5.py` (FTS5 index), `embeddings/` (corpus embedding
+    index), `hybrid.py` (`fts` / `vector` / `hybrid` modes).
+  - `project_context/` — per-project memory: scanner, ingest, pointers, git
+    and log context, embeddings, MCP tool group, CLI.
+  - `agent_board/` — scoped message board: store, schemas, scopes, keys,
+    provider credential bindings, sweeper, HTTP package, CLI, MCP tool group,
+    standalone service.
+  - `tool_host/` — hosted script / service / static tool registry.
+  - `runtime/` — `foundation/` (YAML config + versioned SQLite backbone),
+    `pipeline/` (queue, message board, worker registry, task classifier),
+    `sandbox/` (execution adapter hook).
+  - `app.py`, `mcp_server.py` — compatibility shims (`mcp_server` is
+    deprecated).
+- `tests/` — pytest suite; `tests/snapshots/` pins the CLI help, the OpenAPI
+  document and the MCP tool list.
 
 ## Run
 
+From the repository root:
+
 ```bash
-pip install -e .[dev]
-KE_CORPUS_ROOT=../corpus uvicorn knowledge_engine.app:create_app --factory --reload
+uv sync --project engine                 # all dependency groups (dev tools included)
+uv run --project engine knowledge-engine --help
+uv run --project engine knowledge-engine serve
 ```
+
+Or run the ASGI app under uvicorn yourself:
+
+```bash
+KE_HOME=/path/to/checkout uv run --project engine \
+  uvicorn knowledge_engine.app:create_app --factory --host 127.0.0.1 --port 9210
+```
+
+(`knowledge-engine serve` does the same and additionally wires logging and the
+proxy-header policy; prefer it unless you need uvicorn flags.)
 
 Capability inventory:
 
 ```bash
-knowledge-engine capabilities
+uv run --project engine knowledge-engine capabilities
 ```
 
-This prints seeded corpus counts plus available retrieval, board,
-project-context, hosted-tool, and sandbox surfaces. Empty tool tables are reported
+This prints registry counts plus the base MCP tools and the project-context,
+agent-board, hosted-tool and sandbox surfaces. Empty tool tables are reported
 as empty data, not as missing features.
 
-## Configuration (env)
+## Configuration
+
+Every variable is declared on `knowledge_engine.core.settings.Settings` and
+documented in [`01-user-docs/CONFIGURATION.md`](../01-user-docs/CONFIGURATION.md)
+(generated from that module). The paths:
 
 | Variable | Default | Purpose |
 | -------- | ------- | ------- |
-| `KE_HOME` | nearest dir (cwd upward) with `corpus/registry.json`, else cwd | Base for the defaults below |
-| `KE_CORPUS_ROOT` | `${KE_HOME}/corpus` | Root of the corpus tree |
-| `KE_DATA_DIR` | `${KE_HOME}/.knowledge-engine/data` | Runtime SQLite + index location (created on first write) |
-| `KE_REGISTRY_PATH` | `${KE_CORPUS_ROOT}/registry.json` | Registry file |
+| `KE_HOME` | nearest directory at or above the cwd with `corpus/registry.json`, else the cwd | Base for the defaults below |
+| `KE_CORPUS_ROOT` | `<KE_HOME>/corpus` | Root of the corpus tree |
+| `KE_REGISTRY_PATH` | `<KE_CORPUS_ROOT>/registry.json` | Registry file |
+| `KE_DATA_DIR` | `<KE_HOME>/.knowledge-engine/data` | Runtime SQLite databases and indexes (created on first write) |
 
-No path is hardcoded.
+`knowledge-engine config show` prints the effective values with secrets masked.
+
+## Development
+
+```bash
+uv run --project engine --directory engine ruff format --check .
+uv run --project engine --directory engine ruff check .
+uv run --project engine --directory engine mypy
+uv run --project engine --directory engine pytest -q
+```
+
+or `just check` from the repository root. See
+[`CONTRIBUTING.md`](../CONTRIBUTING.md).

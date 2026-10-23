@@ -63,7 +63,7 @@ schemas, prompts, and tool definitions for a repeatable workflow.
 **Tool** is a callable capability. Tools can be MCP tools, hosted tools,
 scripts, services, static resources, or sandbox-exposed actions.
 
-**Hosted Tool** is a registered runtime tool backed by `tools/host.py`. It can
+**Hosted Tool** is a registered runtime tool backed by `tool_host/host.py`. It can
 be a script, service proxy, or static file/directory. An empty install may have
 zero hosted tools, but the hosting substrate still exists.
 

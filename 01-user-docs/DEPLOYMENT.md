@@ -1,17 +1,17 @@
 # Deployment
 
 Knowledge-Engine is built **local-first**. The default deployment is your own
-machine, and that's a fully supported, intended way to run it. This guide
-covers running it beyond the laptop — on a server, on your LAN, with the
-hardening that requires.
+machine, and that is a fully supported, intended way to run it. This guide
+covers running it beyond the laptop — as a service, on your LAN, in a
+container — with the hardening that requires.
 
-> **Read this first:** the engine ships as **local-trust**. The core
-> routes (search, registry, generation) have no authentication; CORS is
-> limited to loopback origins by default (`KE_CORS_ORIGINS` to change it);
-> the agent board's admin routes require a key. It is safe on `localhost`.
-> It is **not** safe exposed directly to the internet. Everything below
-> about network exposure assumes you add the protections described here.
-> See [`SECURITY.md`](../SECURITY.md) for the trust model and reporting.
+> **Read this first:** the engine ships as **local-trust**. The core routes
+> (search, registry, generation) have no authentication; CORS is limited to
+> loopback origins by default (`KE_CORS_ORIGINS` widens it); the agent board's
+> admin routes require a key. It is safe on `localhost`. It is **not** safe
+> exposed directly to the internet. Everything below about network exposure
+> assumes you add the protections described here. See
+> [`SECURITY.md`](../SECURITY.md) for the trust model and reporting.
 
 ## Deployment modes
 
@@ -30,44 +30,60 @@ uv run --project engine knowledge-engine serve
 ```
 
 The server binds `127.0.0.1:9210` — reachable only from the same machine. For
-single-user use, you are done. Nothing further is required.
+single-user use, you are done.
 
 ## Running it as a long-lived service
 
 For a corpus you query daily, you may want the engine to start with the machine
-and stay up.
+and stay up. Wrap the serve command in whatever your OS uses for long-lived
+processes, with the `KE_*` variables in the unit's environment:
 
-The engine runs under uvicorn:
-
+```bash
+KE_HOME=/srv/knowledge-engine knowledge-engine serve --host 127.0.0.1 --port 9210
 ```
+
+`knowledge-engine serve` runs uvicorn with the engine's logging configuration
+and proxy-header policy. If you need uvicorn flags it does not expose, run
+uvicorn directly with the same environment:
+
+```bash
 uvicorn knowledge_engine.app:create_app --factory --host 127.0.0.1 --port 9210
 ```
 
-with `KE_CORPUS_ROOT`, `KE_DATA_DIR`, and `KE_REGISTRY_PATH` exported (the
-`serve` scripts do this). Wrap that command in whatever your OS uses for
-long-lived processes:
+Under plain uvicorn, `--port` is the only way to change the port (`KE_PORT`
+is read by `knowledge-engine serve`), and `KE_BIND_HOST` must be set to the
+bind address if you also enable the MCP mount (below).
 
-- **Linux:** a `systemd` user service or system unit running the uvicorn
-  command, with the `KE_*` vars in the unit's `Environment=` lines.
+- **Linux:** a `systemd` user service or system unit, `KE_*` in
+  `Environment=` lines.
 - **macOS:** a `launchd` agent (`~/Library/LaunchAgents/`).
 - **Windows:** a Scheduled Task set to run at logon, or a service wrapper such
-  as NSSM.
+  as NSSM. For the standalone agent board there is also
+  `scripts/agent-board/board-watchdog.ps1` (see
+  [`02-dev-docs/AGENT-BOARD.md`](../02-dev-docs/AGENT-BOARD.md)).
 
 Keep `--host 127.0.0.1` unless you are deliberately exposing it (next section).
+
+Logging: the servers log to stderr. `KE_LOG_LEVEL` (default `INFO`) sets the
+level of the engine's own loggers; the startup lines `CORS: allow_origins=...`
+and `board trust: ...` are emitted at INFO and are worth capturing in the
+service log. `knowledge-engine -v serve` / `-q serve` override the level for
+one run.
 
 ## LAN / team access
 
 To let other machines on a trusted network reach the engine:
 
-1. **Bind a reachable address.** Change `--host 127.0.0.1` to `--host 0.0.0.0`
-   (all interfaces) or to the specific LAN IP. Pass `--port <n>` (or set
-   `KE_PORT`) if you want a different port.
-2. **Put a reverse proxy in front.** Don't expose uvicorn directly. Run nginx,
-   Caddy, or similar in front of it to terminate connections, add access
-   controls, and log requests.
-3. **Restrict who can reach it.** A firewall rule, a private VPN (e.g. a mesh
-   VPN), or the reverse proxy's allowlist — pick one. The engine itself does
-   not gate access.
+1. **Bind a reachable address.** Pass `--host 0.0.0.0` (all interfaces) or the
+   specific LAN IP, and `--port <n>` (or `KE_PORT`) for a different port.
+2. **Put a reverse proxy in front.** Do not expose uvicorn directly. Run nginx,
+   Caddy or similar in front of it to terminate connections, add access
+   controls and log requests. Set `KE_TRUST_PROXY=1` so the agent board sees
+   real client addresses, and add the proxy's address to `KE_TRUSTED_PROXIES`
+   if it is not on the same host.
+3. **Restrict who can reach it.** A firewall rule, a private VPN (for example a
+   mesh VPN), or the reverse proxy's allowlist — pick one. The engine itself
+   does not gate access to the core routes.
 4. **If you serve MCP over HTTP (`KE_MCP_HTTP=1`),** the `/mcp` endpoint checks
    the `Host` header. `knowledge-engine serve --host 0.0.0.0` tells it about
    the bind address; with plain uvicorn set `KE_BIND_HOST=0.0.0.0` too, or
@@ -77,7 +93,9 @@ To let other machines on a trusted network reach the engine:
    [MCP-WIRING.md → Streamable HTTP](MCP-WIRING.md#streamable-http).
 
 For a team on a private VPN with no public endpoint, a reverse proxy plus the
-VPN's own access control is a reasonable setup.
+VPN's own access control is a reasonable setup. The agent board trusts
+loopback and the Tailscale range `100.64.0.0/10` by default; set
+`KE_BOARD_TRUSTED_CIDRS` to your own networks otherwise.
 
 ## Internet exposure — the hardening checklist
 
@@ -88,65 +106,79 @@ not enough. You **must** add a layer in front of it:
       directly.
 - [ ] **TLS** — HTTPS only. Caddy does this automatically; nginx via
       Let's Encrypt.
-- [ ] **Authentication** — the engine has none. Add HTTP basic auth at the
-      proxy, an OAuth proxy (e.g. oauth2-proxy), or an SSO gateway. Without
+- [ ] **Authentication** — the core routes have none. Add HTTP basic auth at
+      the proxy, an OAuth proxy (e.g. oauth2-proxy), or an SSO gateway. Without
       this, anyone with the URL can read your entire corpus and toggle the
       registry.
 - [ ] **Lock down write endpoints** — `POST /registry`, `PATCH
-      /registry/.../toggle`, `DELETE /registry/...`, and `POST
-      /search/reindex` all mutate state. At minimum, require auth for them; if
-      you only need read access, block them at the proxy.
-- [ ] **CORS** — the app allows loopback origins only by default. If a
-      browser UI is served from another origin, list it in
-      `KE_CORS_ORIGINS` (comma-separated); `*` is accepted only when set
-      explicitly. The dashboard at `/ui` is same-origin and needs nothing.
+      /registry/{id}/toggle`, `DELETE /registry/{id}`,
+      `PATCH /registry/lifecycle/state` and `POST /search/reindex` mutate
+      state. At minimum require auth for them; if you only need read access,
+      block them at the proxy.
+- [ ] **CORS** — the app allows loopback origins only by default. If a browser
+      UI is served from another origin, list it in `KE_CORS_ORIGINS`
+      (comma-separated); `*` is accepted only when set explicitly. The
+      dashboard at `/ui/` is same-origin and needs nothing. The CORS
+      middleware is installed by `create_app()` in
+      `engine/src/knowledge_engine/server/app.py`, using the shared helper in
+      `core/http.py`.
 - [ ] **Agent board** — admin routes need a key: run
-      `knowledge-engine board keys bootstrap-master` on the host once and
-      keep the key out of the browser. Set `KE_BOARD_TRUSTED_CIDRS` to the
-      networks that may read/post, and `KE_TRUST_PROXY=1` (plus
-      `KE_TRUSTED_PROXIES` if the proxy is not on the same box) so the
-      board sees real client addresses behind your reverse proxy. Without
-      `KE_TRUST_PROXY=1` the server ignores `X-Forwarded-For` and
-      `X-Forwarded-Proto` entirely, even from a proxy on the same host.
+      `knowledge-engine board keys bootstrap-master` once from the machine
+      the engine runs on (inside the container for Docker, see below), keep
+      the key out of the browser except in the dashboard's Config tab. Set
+      `KE_BOARD_TRUSTED_CIDRS` to the networks that may read/post, and
+      `KE_TRUST_PROXY=1` (plus `KE_TRUSTED_PROXIES` if the proxy is not on the
+      same box) so the board sees real client addresses behind your reverse
+      proxy. Without `KE_TRUST_PROXY=1` the server ignores `X-Forwarded-For`
+      and `X-Forwarded-Proto` entirely, even from a proxy on the same host.
 - [ ] **Rate limiting** — apply it at the proxy to blunt abuse and scraping.
 
-The engine is open source (MIT) — if you need real auth *inside* the app rather
-than at the proxy, you can add it. But for v1.0, gating at the proxy is the
+The engine is open source (MIT) — if you need authentication *inside* the app
+rather than at the proxy, you can add it. For 3.x, gating at the proxy is the
 supported approach.
 
 ## Generation providers and secrets
 
-The engine can route text generation to providers. If you wire those up:
+The engine can route text generation (`POST /generate`) to providers. Three
+are built in; `GET /generate/providers` lists them in selection order:
 
-- Provider API keys (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, etc.) are read
-  from the environment at startup. **Never commit them.** Use your platform's
-  secret store, or a `.env` file that is gitignored (`.env` is already in
-  `.gitignore`).
-- If no provider keys are set, the cloud provider is not registered and the echo
-  provider is always available — the engine still serves search and the
-  dashboard fine.
-- The `cloud-http` generation provider is a real OpenAI-compatible client: set
-  `KE_CLOUD_ENDPOINT` (e.g. `https://api.openai.com/v1`), `KE_CLOUD_API_KEY`
-  and `KE_CLOUD_MODEL` (optional `KE_CLOUD_TIMEOUT`, default 60 s). Upstream
+- **`echo`** — always available; returns the prompt. Useful for wiring tests.
+- **`ollama`** — always registered; used when an Ollama server answers at
+  `OLLAMA_BASE_URL` (default `http://127.0.0.1:11434`). Reachability is probed
+  lazily and cached for `KE_PROVIDER_PROBE_TTL` seconds (default 30);
+  unreachable providers are logged at startup (`KE_PROVIDER_STARTUP_PROBE`).
+  `OLLAMA_MODEL` and `OLLAMA_TIMEOUT` set the default model and timeout.
+- **`cloud-http`** — an OpenAI-compatible client, registered only when both
+  `KE_CLOUD_ENDPOINT` (e.g. `https://api.example/v1`; the provider POSTs to
+  `<endpoint>/chat/completions`) and `KE_CLOUD_API_KEY` are set. `KE_CLOUD_MODEL`
+  is the default model, `KE_CLOUD_TIMEOUT` the request timeout (60 s). Upstream
   failures answer `502` on `/generate`.
-- The Ollama provider is used automatically if Ollama is reachable at
-  `OLLAMA_BASE_URL`; no key needed. Reachability is probed lazily and cached
-  for `KE_PROVIDER_PROBE_TTL` seconds (default 30); `KE_PROVIDER_ORDER`
-  reorders the providers. Unreachable providers are logged at startup.
-- Every variable is listed in [CONFIGURATION.md](CONFIGURATION.md);
-  `knowledge-engine config show` prints the effective values (secrets masked).
+
+`KE_PROVIDER_ORDER` reorders the providers. Secrets:
+
+- Keep API keys in the environment or a gitignored `.env`
+  (`<KE_PIPELINE_ROOT>/.env` is loaded at startup; variables already set win).
+  **Never commit them.** `knowledge-engine config show` masks them; the engine
+  warns when `KE_CLOUD_ENDPOINT` would send a key over plain `http` to a
+  non-loopback host.
+- The agent board's provider-credential registry stores only the *name* of the
+  environment variable that holds a key (`KE_ANTHROPIC_API_KEY`,
+  `KE_OPENAI_API_KEY`, `KE_CLOUD_API_KEY`, …), never the value.
+- Every variable is listed in [CONFIGURATION.md](CONFIGURATION.md).
 
 ## Data, backups, and the index
 
-- **Your corpus is the source of truth.** It's plain markdown — back it up like
-  any other repo (git, your normal backup).
-- **The indexes are derived data.** `<KE_DATA_DIR>/index.db` (FTS5; default
-  data dir `<KE_HOME>/.knowledge-engine/data`) and
-  `embeddings.db` (if you built embeddings) can always be rebuilt with
-  `knowledge-engine reindex` and the embeddings `build` command. You do not
-  need to back them up — though backing them up saves a rebuild on restore.
-- `corpus/registry.json` *is* worth backing up — it records what's enabled.
-  It's small and lives with the corpus.
+- **Your corpus is the source of truth.** It is plain markdown — back it up
+  like any other repo.
+- **The indexes are derived data.** `<KE_DATA_DIR>/index.db` (FTS5) and
+  `<KE_DATA_DIR>/embeddings.db` (if you built embeddings) can always be rebuilt
+  with `knowledge-engine reindex` and `knowledge-engine embeddings build`. The
+  default data dir is `<KE_HOME>/.knowledge-engine/data`.
+- **The board and pipeline databases are state.** `<KE_DATA_DIR>/pipeline.db`
+  (shared board, keys, pipeline tables) and `<KE_DATA_DIR>/board-scopes/*.db`
+  hold messages and the key vault; back them up if you rely on the board.
+- `corpus/registry.json` *is* worth backing up — it records what is enabled.
+  It is small and lives with the corpus.
 
 ## Docker
 
@@ -162,7 +194,7 @@ working directory):
 | Path | Contents | Set by |
 | --- | --- | --- |
 | `/data/corpus` | Your corpus, including `registry.json` — mount it | `KE_CORPUS_ROOT=/data/corpus` |
-| `/data/.knowledge-engine/data` | FTS5 index, registry cache, agent-board databases | `KE_DATA_DIR` |
+| `/data/.knowledge-engine/data` | FTS5 index, embeddings, pipeline/board databases | `KE_DATA_DIR` |
 
 ### Compose
 
@@ -174,7 +206,7 @@ curl http://127.0.0.1:9210/health
 
 - `./corpus` is mounted **read-only** and must already contain
   `registry.json`; the engine writes a default registry when the file is
-  missing, which fails on a read-only mount. Search, reindexing, and the agent
+  missing, which fails on a read-only mount. Search, reindexing and the agent
   board work with a read-only corpus.
 - Registry edits (`POST /registry`, toggle, delete, lifecycle changes,
   `knowledge-engine bootstrap`, `knowledge-engine watch`) write
@@ -188,8 +220,15 @@ curl http://127.0.0.1:9210/health
 - The named volume `ke-data` holds `/data/.knowledge-engine`, so indexes and
   board databases survive restarts and image rebuilds. `docker compose down -v`
   deletes it; the index can always be rebuilt with `reindex`.
+- **Board admin key:** `bootstrap-master` only answers loopback callers, and
+  inside the container "loopback" means the container's own network namespace.
+  Run it in the container, then read the key from the data volume:
+  `docker compose exec knowledge-engine knowledge-engine board keys bootstrap-master`
+  (the raw key is printed once and written to
+  `/data/.knowledge-engine/data/board-master-key.txt`; delete that file after
+  copying the key).
 - The port is published on `127.0.0.1` only. The same rules as above apply to
-  wider exposure: reverse proxy, authentication, and TLS in front.
+  wider exposure: reverse proxy, authentication and TLS in front.
 - The service runs with a read-only root filesystem, all Linux capabilities
   dropped, and `no-new-privileges`.
 
@@ -231,17 +270,18 @@ knowledge-engine:local mcp` for an MCP client that launches the stdio server.
   `--build-arg KE_UID=...` / `KE_GID=...`.
 
 A container binds `0.0.0.0`. If it also serves MCP over HTTP (`KE_MCP_HTTP=1`),
-use `knowledge-engine serve --host 0.0.0.0` or set `KE_BIND_HOST=0.0.0.0`
-alongside plain uvicorn, and set `KE_MCP_ALLOWED_HOSTS` to the hostnames the
-reverse proxy forwards; otherwise `/mcp` only accepts loopback `Host` headers
-and answers `421` to everything else.
+the default `serve --host 0.0.0.0` command already tells the mount about the
+bind address; set `KE_MCP_ALLOWED_HOSTS` to the hostnames the reverse proxy
+forwards, otherwise `/mcp` accepts any `Host` and logs a warning at startup.
 
 ## Upgrades
 
-Knowledge-Engine is distributed as a repository. To take an update: pull the
-new version (or re-download), re-run the install script to pick up any new
-dependencies, and run `knowledge-engine reindex`. Your corpus and
-`registry.json` are yours and are not overwritten by an engine update.
+Knowledge-Engine is distributed as a repository and as GitHub Releases. To
+take an update: pull the new version and re-run `uv sync --project engine`
+(for a tool install, re-run `uv tool install --force` with the new tag), run
+`knowledge-engine registry validate`, then `knowledge-engine reindex`. Your corpus and `registry.json` are yours and are
+not overwritten by an engine update. Read the **Migrating** section of the
+release in [`CHANGELOG.md`](../CHANGELOG.md) for each major version.
 
 Existing pipeline and agent-board databases (`pipeline.db` and the per-scope
 board files under the data directory) are upgraded in place the first time the
@@ -249,3 +289,6 @@ new version opens them: a `schema_version` table is added, any columns the
 older layout lacked are created, and the applied versions are logged at INFO
 (`adopted pre-versioned database ... at schema version N`). No manual step is
 needed; back up the data directory before upgrading if you want a way back.
+Scope database files whose names are not valid scope names (for example
+`v1.2.db`) are listed but cannot be addressed; the engine logs a WARNING with
+the suggested new name — rename them with the engine stopped.
