@@ -44,8 +44,7 @@ from ..core.registry import Registry
 from ..core.settings import Settings, env_flag
 from ..generation import ProviderRegistry
 from ..generation.factory import build_provider_registry
-from ..retrieval.embeddings.factory import open_index
-from ..retrieval.embeddings.index import CorpusEmbeddingIndex
+from ..retrieval.embeddings.index import CorpusEmbeddingIndex, open_index
 from ..retrieval.fts5 import Indexer
 from ..runtime.foundation.config import load_dotenv_file
 

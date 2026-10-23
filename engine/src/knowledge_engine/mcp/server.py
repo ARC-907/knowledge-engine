@@ -241,7 +241,7 @@ def _host_logging_untouched() -> Iterator[None]:
 def _default_embeddings() -> tuple[CorpusEmbeddingIndex | None, str | None]:
     """The corpus embedding index from the environment (no I/O), or ``(None, reason)``."""
     from ..core.settings import Settings  # noqa: PLC0415 - read when the server is built
-    from ..retrieval.embeddings.factory import open_index  # noqa: PLC0415
+    from ..retrieval.embeddings.index import open_index  # noqa: PLC0415
 
     return open_index(Settings())
 

@@ -18,18 +18,11 @@ Explicit arguments (the CLI's ``--provider`` / ``--model`` / ``--batch`` /
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ...core.settings import EMBED_PROVIDERS, Settings
 from ...project_context.embeddings.providers import EmbeddingProvider, FakeProvider
-from .errors import EmbeddingError, EmbeddingUnavailableError
-
-if TYPE_CHECKING:
-    from .index import CorpusEmbeddingIndex
-
-_logger = logging.getLogger(__name__)
+from .errors import EmbeddingUnavailableError
 
 #: File name of the corpus embedding index inside the data directory.
 EMBEDDINGS_FILENAME = "embeddings.db"
@@ -96,33 +89,9 @@ def build_provider(
     )
 
 
-def open_index(settings: Settings) -> tuple[CorpusEmbeddingIndex | None, str | None]:
-    """The index described by ``settings`` for a long-lived search surface.
-
-    Returns ``(index, None)``, or ``(None, reason)`` -- logged at WARNING --
-    when the provider cannot be configured, so the caller keeps serving
-    ``fts`` search and reports ``reason`` on a ``vector``/``hybrid`` request.
-    No I/O: the index is opened per search.
-    """
-    from .index import CorpusEmbeddingIndex  # noqa: PLC0415 - index imports this module
-
-    try:
-        index = CorpusEmbeddingIndex.from_settings(settings)
-    except EmbeddingError as exc:
-        reason = f"{exc} ({exc.hint})" if exc.hint else str(exc)
-        _logger.warning("vector/hybrid search disabled: %s", reason)
-        return None, reason
-    except (ValueError, OSError) as exc:
-        _logger.warning("vector/hybrid search disabled: %s", exc)
-        return None, f"the embedding index could not be set up: {exc}"
-    _logger.debug("corpus embedding index: %r", index)
-    return index, None
-
-
 __all__ = [
     "EMBEDDINGS_FILENAME",
     "EMBED_TIMEOUT",
     "build_provider",
     "default_db_path",
-    "open_index",
 ]

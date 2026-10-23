@@ -1009,6 +1009,27 @@ class CorpusEmbeddingIndex:
         return self._hydrate(winners)
 
 
+def open_index(settings: Settings) -> tuple[CorpusEmbeddingIndex | None, str | None]:
+    """The index described by ``settings`` for a long-lived search surface.
+
+    Returns ``(index, None)``, or ``(None, reason)`` -- logged at WARNING --
+    when the provider cannot be configured, so the caller keeps serving
+    ``fts`` search and reports ``reason`` on a ``vector``/``hybrid`` request.
+    No I/O: the index is opened per search.
+    """
+    try:
+        index = CorpusEmbeddingIndex.from_settings(settings)
+    except EmbeddingError as exc:
+        reason = f"{exc} ({exc.hint})" if exc.hint else str(exc)
+        _logger.warning("vector/hybrid search disabled: %s", reason)
+        return None, reason
+    except (ValueError, OSError) as exc:
+        _logger.warning("vector/hybrid search disabled: %s", exc)
+        return None, f"the embedding index could not be set up: {exc}"
+    _logger.debug("corpus embedding index: %r", index)
+    return index, None
+
+
 __all__ = [
     "CHUNK_OVERLAP",
     "CHUNK_SIZE",
@@ -1023,5 +1044,6 @@ __all__ = [
     "VectorHit",
     "chunk_text",
     "library_of",
+    "open_index",
     "same_model",
 ]
