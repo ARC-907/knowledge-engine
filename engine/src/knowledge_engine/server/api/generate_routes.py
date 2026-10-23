@@ -10,7 +10,13 @@ from ..schemas import ErrorResponse, GenerateResponse, GenIn
 
 router = APIRouter()
 
-__all__ = ["GenIn", "router"]
+#: Hard ceiling on a POST /generate body, enforced for declared and
+#: streamed bodies by core.http.BodySizeLimitMiddleware (installed by
+#: server.app.create_app). Prompts larger than this belong in a file or
+#: a retrieval call, not in one request.
+MAX_REQUEST_BODY_BYTES = 1_048_576  # 1 MiB
+
+__all__ = ["MAX_REQUEST_BODY_BYTES", "GenIn", "router"]
 
 
 @router.post(

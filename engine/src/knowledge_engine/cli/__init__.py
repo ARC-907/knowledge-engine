@@ -32,6 +32,8 @@ from typing import Any
 
 from ..mcp.options import add_arguments as add_mcp_arguments
 
+_logger = logging.getLogger(__name__)
+
 PROG = "knowledge-engine"
 
 #: Commands that run until interrupted; their default log level is
@@ -299,7 +301,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return exc.exit_code
     finally:
+        _close_pipeline_db()
         restore()
+
+
+def _close_pipeline_db() -> None:
+    """Close cached pipeline/board DB connections before the process exits."""
+    # Only when a subcommand actually loaded the substrate: plain commands
+    # (search, serve ...) never pay for importing it.
+    db = sys.modules.get("knowledge_engine.runtime.foundation.db")
+    if db is None:
+        return
+    try:
+        db.close_all()
+    except Exception:
+        _logger.exception("closing the pipeline DB connections failed")
 
 
 def __getattr__(name: str) -> Any:

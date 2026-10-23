@@ -23,7 +23,11 @@
    session manager.
 
 On shutdown the sweeper is stopped (and the previous default restored), the
-MCP session manager exits, the registry is closed and the FTS connection is closed. Optional
+MCP session manager exits, the registry and the FTS connection are closed,
+every cached pipeline/board DB connection is closed
+(``runtime.foundation.db.close_all``), and the engine objects are removed
+from ``app.state`` so a request that still arrives gets ``503`` from
+``server.deps`` instead of touching a closed handle. Optional
 subsystems (board, MCP, provider probe) are wrapped so a failure there is
 logged and never blocks the core app; a failure to open the core databases
 aborts startup.
@@ -190,6 +194,11 @@ async def _start_mcp(
         _logger.exception("MCP session manager failed to start; /mcp will answer 503")
 
 
+#: ``app.state`` attributes the lifespan owns; cleared on shutdown so the
+#: ``server.deps`` providers answer 503 afterwards.
+ENGINE_STATE = ("indexer", "registry", "providers", "config")
+
+
 def _close_engine(app: FastAPI) -> None:
     for name in ("indexer", "registry"):
         resource = getattr(app.state, name, None)
@@ -199,6 +208,14 @@ def _close_engine(app: FastAPI) -> None:
             resource.close()
         except Exception:
             _logger.exception("closing %s failed", name)
+    for name in ENGINE_STATE:
+        setattr(app.state, name, None)
+    try:
+        from ..runtime.foundation import db as pipeline_db  # noqa: PLC0415 - optional substrate
+
+        pipeline_db.close_all()
+    except Exception:
+        _logger.exception("closing the pipeline DB connections failed")
 
 
 @asynccontextmanager
@@ -228,7 +245,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         _stop_board(owned_sweeper, previous_sweeper)
         _close_engine(app)
-        _logger.info("engine shut down; registry and index connections closed")
+        _logger.info("engine shut down; registry, index and pipeline DB connections closed")
 
 
 __all__ = [

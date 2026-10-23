@@ -334,9 +334,34 @@ def run(args: argparse.Namespace) -> int:
             exc.message,
         )
         return 1
-    indexer = Indexer(config, registry)
-    server = build_server(config, registry, indexer)
+    try:
+        indexer = Indexer(config, registry)
+    except BaseException:
+        registry.close()
+        raise
+    try:
+        return _serve(args, build_server(config, registry, indexer))
+    finally:
+        _shutdown(registry, indexer)
 
+
+def _shutdown(registry: Registry, indexer: Indexer) -> None:
+    """Close every handle the server opened (index, registry, pipeline/board DBs)."""
+    for name, resource in (("index", indexer), ("registry", registry)):
+        try:
+            resource.close()
+        except Exception:
+            logger.exception("closing the %s failed", name)
+    try:
+        from ..runtime.foundation import db as pipeline_db  # noqa: PLC0415 - optional substrate
+
+        pipeline_db.close_all()
+    except Exception:
+        logger.exception("closing the pipeline DB connections failed")
+    logger.debug("MCP server shut down; connections closed")
+
+
+def _serve(args: argparse.Namespace, server: MCPServer[Any]) -> int:
     if args.selftest:
         report = anyio.run(selftest, server)
         sys.stdout.write(json.dumps(report, indent=2) + "\n")

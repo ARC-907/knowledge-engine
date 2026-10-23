@@ -34,6 +34,7 @@ from ..core.errors import install_exception_handlers
 from ..core.http import install_cors, parse_cors_origins, uvicorn_proxy_kwargs
 from ..core.logging_config import uvicorn_log_config
 from ..core.settings import Settings
+from ..runtime.foundation import db
 from ..runtime.foundation.config import load_dotenv_file
 from . import http as board_http, sweeper as kb_sweeper
 
@@ -76,6 +77,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             _logger.exception("standalone sweeper failed to stop cleanly")
         kb_sweeper.install_default(previous)
+        try:
+            db.close_all()
+        except Exception:
+            _logger.exception("closing the board DB connections failed")
 
 
 def _resolve_cors_origins(settings: Settings | None = None) -> list[str]:

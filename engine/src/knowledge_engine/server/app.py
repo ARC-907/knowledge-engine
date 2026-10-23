@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
 from ..core.errors import error_response, install_exception_handlers
-from ..core.http import install_cors, parse_cors_origins
+from ..core.http import BodySizeLimitMiddleware, install_cors, parse_cors_origins
 from ..core.logsafe import log_safe
 from ..core.settings import Settings
 from ..generation import ProviderError
@@ -133,6 +133,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(registry_routes.router, prefix="/registry", tags=["registry"])
     app.include_router(search_routes.router, prefix="/search", tags=["search"])
     app.include_router(generate_routes.router, prefix="/generate", tags=["generate"])
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=generate_routes.MAX_REQUEST_BODY_BYTES,
+        path_prefix="/generate",
+    )
 
     # ── Agent Board (opt-out via KE_BOARD_ENABLED=0) ─────────────
     # Router + body cap are mounted here (cheap, no I/O); the sweeper is
