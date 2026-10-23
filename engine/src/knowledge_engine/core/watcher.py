@@ -1,4 +1,7 @@
-"""Optional watchdog: auto-register new folders when lifecycle says so.
+"""Optional watchdog: auto-register new corpus folders while `knowledge-engine watch` runs.
+
+The registry's lifecycle flags (`watch_enabled`, `auto_register`) are recorded and
+exposed over HTTP but not consulted here; starting the watcher is the opt-in.
 
 Soft-coupled: if `watchdog` package not installed, raises at startup.
 """

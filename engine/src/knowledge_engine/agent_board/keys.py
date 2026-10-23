@@ -15,7 +15,7 @@ Resource types are deliberately narrow:
 |---------------|------------------------------------------------------|
 | provider      | `anthropic`, `openai`, `ollama`, `localrouter`       |
 | board         | `*` (full board), `read`, `write`, `admin`           |
-| tool          | tool route ID from `tools/host.py` registrations     |
+| tool          | tool route ID from `tool_host/host.py` registrations |
 | model         | `claude-opus-4-7`, `gpt-4o`, `llama3:70b`, etc.      |
 | endpoint      | named endpoint group registered elsewhere            |
 

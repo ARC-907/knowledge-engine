@@ -13,9 +13,11 @@ two places:
   startup ``CORS: allow_origins=...`` and ``board trust: ...`` policy lines
   operators are told to watch) reach stderr next to uvicorn's.
 
-``KE_LOG_LEVEL`` (default ``INFO``) sets the level of the ``knowledge_engine``
-logger hierarchy. Other libraries stay at ``WARNING``; uvicorn keeps its own
-``log_level``.
+``KE_LOG_LEVEL`` (default ``INFO``) is the level the long-running commands run
+at; :func:`configure_cli_logging` applies it to the root logger, so third-party
+libraries follow it too, while :func:`uvicorn_log_config` keeps the root at
+``WARNING`` and applies it to the ``knowledge_engine`` hierarchy only. uvicorn
+keeps its own ``log_level``.
 """
 
 from __future__ import annotations

@@ -25,7 +25,7 @@ is used instead.
 | `KE_PORT` | int | *(unset)* | Default port of `knowledge-engine serve` when --port is not given (unset: 9210); also the board client's port fallback. | `cli, agent_board.cli` |
 | `KE_BIND_HOST` | string | `127.0.0.1` | Address the HTTP app is bound to; selects the /mcp Host-header policy. `knowledge-engine serve --host` sets it. | `server.app` |
 | `KE_CORS_ORIGINS` | string | *(empty)* | Comma-separated browser origins allowed to call the engine API. Empty: loopback origins only. `*` allows any origin. | `server.app` |
-| `KE_LOG_LEVEL` | string | `INFO` | Level of the knowledge_engine logger hierarchy for `serve`, `board-serve` and `mcp`. | `core.logging_config, mcp.server` |
+| `KE_LOG_LEVEL` | string | `INFO` | Log level of the long-running commands (`serve`, `board-serve`, `mcp`, `watch`); `-v`/`-q` override it. One-shot commands log at WARNING. | `core.logging_config, mcp.server` |
 | `KE_MCP_HTTP` | bool | `0` | Mount the MCP streamable-HTTP endpoint at /mcp on the engine app. | `server.app` |
 | `KE_MCP_ALLOWED_HOSTS` | string | *(empty)* | Extra Host-header names accepted by /mcp (comma-separated; `*` disables the check). | `mcp.http` |
 | `KE_TRUST_PROXY` | bool | `0` | Honour X-Forwarded-For from KE_TRUSTED_PROXIES (board trust gate and uvicorn). | `core.http, agent_board.http` |
@@ -37,7 +37,7 @@ is used instead.
 |---|---|---|---|---|
 | `KE_BOARD_ENABLED` | bool | `1` | Mount the agent board at /board on the engine app. | `server.app` |
 | `KE_BOARD_SWEEPER` | bool (optional) | *(unset)* | Boot override for the board sweeper thread. Unset: the persisted board_config.sweeper_enabled flag decides (default on). | `agent_board.sweeper, server.lifespan, agent_board.service` |
-| `KE_BOARD_TRUSTED_CIDRS` | string (optional) | *(unset)* | Comma-separated CIDRs of trusted board peers. Unset: loopback + Tailscale 100.64.0.0/10. Empty: loopback only. | `agent_board.http` |
+| `KE_BOARD_TRUSTED_CIDRS` | string (optional) | *(unset)* | Comma-separated CIDRs of trusted board peers. Unset: loopback + Tailscale 100.64.0.0/10. Set (even to an empty string) it REPLACES that default: an empty value trusts no peer, so set `127.0.0.1/32,::1/128` to keep loopback. | `agent_board.http` |
 | `KE_BOARD_CORS_ORIGINS` | string | *(empty)* | CORS allow-list of the standalone board service (same syntax as KE_CORS_ORIGINS). | `agent_board.service` |
 | `KE_BOARD_MAX_SCOPES` | int | `64` | Cap on per-scope board databases (0 = unlimited; negative values count as 0). | `agent_board.scopes` |
 | `BOARD_HOST` | string (optional) | *(unset)* | Default bind address of `knowledge-engine board-serve` when --host is not given (unset: 127.0.0.1). | `cli` |

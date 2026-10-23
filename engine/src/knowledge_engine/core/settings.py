@@ -183,7 +183,8 @@ class Settings(BaseSettings):
     log_level: str = _env(
         "KE_LOG_LEVEL",
         "INFO",
-        "Level of the knowledge_engine logger hierarchy for `serve`, `board-serve` and `mcp`.",
+        "Log level of the long-running commands (`serve`, `board-serve`, `mcp`, `watch`); "
+        "`-v`/`-q` override it. One-shot commands log at WARNING.",
         section="server",
         read_by="core.logging_config, mcp.server",
     )
@@ -237,7 +238,9 @@ class Settings(BaseSettings):
         "KE_BOARD_TRUSTED_CIDRS",
         None,
         "Comma-separated CIDRs of trusted board peers. Unset: loopback + "
-        "Tailscale 100.64.0.0/10. Empty: loopback only.",
+        "Tailscale 100.64.0.0/10. Set (even to an empty string) it REPLACES that "
+        "default: an empty value trusts no peer, so set `127.0.0.1/32,::1/128` to "
+        "keep loopback.",
         section="board",
         read_by="agent_board.http",
     )

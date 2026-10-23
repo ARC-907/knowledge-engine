@@ -11,7 +11,7 @@ Why env-var bindings rather than stored secrets:
 * Honors the cardinal rule — no secrets in any committed file. The shipped
   SQLite DB (and therefore any backup or repo) contains binding metadata
   only, never a credential.
-* Matches how `routing/cloud.py` and the classifier already read keys
+* Matches how `generation/cloud_http.py` and the classifier already read keys
   (`KE_ANTHROPIC_API_KEY`, `KE_OPENAI_API_KEY`, `KE_CLOUD_API_KEY`, …), so
   the registry is the single source of truth the engine resolves against
   instead of a parallel island.
