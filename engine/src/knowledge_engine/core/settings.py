@@ -142,7 +142,7 @@ class Settings(BaseSettings):
     data_dir: str | None = _env(
         "KE_DATA_DIR",
         None,
-        "Runtime data directory (SQLite mirror, FTS index, board DB). "
+        "Runtime data directory (FTS index, board DB, embeddings). "
         "Unset: <home>/.knowledge-engine/data.",
         section="paths",
         read_by="core.paths",

@@ -3,7 +3,7 @@
 ``create_app`` does no I/O; this lifespan does it all, in order:
 
 1. resolve the paths from ``app.state.settings``, create the data directory,
-   open the registry mirror and the FTS index (``app.state.config``,
+   load the registry and open the FTS index (``app.state.config``,
    ``registry``, ``indexer``);
 2. build the generation providers (``app.state.providers``) and, unless
    ``KE_PROVIDER_STARTUP_PROBE=0``, probe them on a background thread so an
@@ -16,7 +16,7 @@
    lifespan's registry/indexer to the mount and run its session manager.
 
 On shutdown the sweeper is stopped (and the previous default restored), the
-MCP session manager exits, and the SQLite connections are closed. Optional
+MCP session manager exits, the registry is closed and the FTS connection is closed. Optional
 subsystems (board, MCP, provider probe) are wrapped so a failure there is
 logged and never blocks the core app; a failure to open the core databases
 aborts startup.
@@ -78,7 +78,7 @@ def open_engine(settings: Settings) -> tuple[Config, Registry, Indexer]:
     config = Config.from_settings(settings)
     try:
         config.ensure_dirs()
-        registry = Registry(config.registry_path, config.data_dir / "registry.db")
+        registry = Registry(config.registry_path)
     except Exception:
         _logger.exception(
             "could not open the registry (registry=%s, data_dir=%s)",

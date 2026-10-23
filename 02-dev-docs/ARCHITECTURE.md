@@ -20,9 +20,9 @@ the engine's HTTP API. You can replace any one without touching the others.
 ## Flexible-corpus principle
 
 The engine **never hardcodes** library names, skill names, paths, or counts.
-Every piece of discovery goes through the registry. `corpus/registry.json`
-(mirrored into a queryable SQLite cache at `<KE_DATA_DIR>/registry.db`) is the
-single source of truth for what is enabled and indexed.
+Every piece of discovery goes through the registry. `corpus/registry.json` is
+the single source of truth for what is enabled and indexed (it is rewritten
+atomically on every change; there is no SQLite copy).
 
 This is what makes the engine corpus-agnostic: drop in any markdown corpus,
 register it, reindex, and the dashboard and MCP server expose it without a
@@ -192,13 +192,17 @@ is what an AI assistant sees, so anything not on it is invisible to agents.
 
 ## Concurrency note
 
-`Registry` and `Indexer` each hold a long-lived SQLite connection. Because the
-FastAPI app runs synchronous route handlers on a worker threadpool, those
-connections are opened with `check_same_thread=False` and every cursor
-operation is serialized behind a lock. This lets a single shared `Registry` /
-`Indexer` live on `app.state` and be used safely from any worker thread. If
-you add a new SQLite-backed component, follow this pattern — do not share a
-bare connection across threads.
+`Registry` holds the JSON document in memory and `Indexer` holds a long-lived
+SQLite connection. Because the FastAPI app runs synchronous route handlers on a
+worker threadpool, each serializes its state behind a lock: every registry
+mutation (and its atomic file write) runs under the registry lock, and every
+FTS cursor operation under the indexer lock — `rebuild()` reads the corpus
+first and only swaps the table contents under it. SQLite connections are
+opened through `core.util.sqlite.connect` (WAL, 5 s busy timeout, foreign keys,
+`check_same_thread=False`). This lets a single shared `Registry` / `Indexer`
+live on `app.state` and be used safely from any worker thread. If you add a new
+SQLite-backed component, follow this pattern — do not share a bare connection
+across threads.
 
 ## Optional layers (loud escape hatches)
 

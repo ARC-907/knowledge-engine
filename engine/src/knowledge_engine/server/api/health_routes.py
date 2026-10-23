@@ -22,12 +22,7 @@ def info(config: ConfigDep, registry: RegistryDep, providers: ProvidersDep) -> I
         version=__version__,
         corpus_root=str(config.corpus_root),
         data_dir=str(config.data_dir),
-        counts=RegistryCounts(
-            libraries=len(registry.list("library")),
-            skills=len(registry.list("skill")),
-            kits=len(registry.list("kit")),
-            tools=len(registry.list("tool")),
-        ),
+        counts=RegistryCounts.model_validate(registry.counts()),
         providers=providers.list(),
         lifecycle=LifecycleState.model_validate(registry.lifecycle()),
     )

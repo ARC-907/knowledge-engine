@@ -121,6 +121,13 @@ class SearchResponse(BaseModel):
     query: str
     count: int = Field(description="Number of hits returned.")
     results: list[SearchHit]
+    syntax_fallback: bool | None = Field(
+        None,
+        description=(
+            "Present (true) only when `q` was not valid FTS5 syntax and was "
+            "searched as one quoted phrase instead."
+        ),
+    )
 
 
 class ReindexResponse(BaseModel):

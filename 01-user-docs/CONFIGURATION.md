@@ -16,7 +16,7 @@ is used instead.
 | `KE_HOME` | string (optional) | *(unset)* | Engine home. Unset: the nearest directory at or above the working directory that contains corpus/registry.json, else the working directory. | `core.paths` |
 | `KE_CORPUS_ROOT` | string (optional) | *(unset)* | Corpus root. Unset: <home>/corpus. | `core.paths` |
 | `KE_REGISTRY_PATH` | string (optional) | *(unset)* | Registry JSON (the source of truth). Unset: <corpus_root>/registry.json. | `core.paths` |
-| `KE_DATA_DIR` | string (optional) | *(unset)* | Runtime data directory (SQLite mirror, FTS index, board DB). Unset: <home>/.knowledge-engine/data. | `core.paths` |
+| `KE_DATA_DIR` | string (optional) | *(unset)* | Runtime data directory (FTS index, board DB, embeddings). Unset: <home>/.knowledge-engine/data. | `core.paths` |
 
 ## HTTP server
 

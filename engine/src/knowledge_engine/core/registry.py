@@ -1,8 +1,17 @@
-"""Registry: corpus/registry.json is source of truth; SQLite mirror at data/registry.db."""
+"""Registry: ``corpus/registry.json`` is the single source of truth.
+
+The document lists every library, skill, kit and tool (one bucket per kind)
+plus the corpus lifecycle flags. It is held in memory, mutated under a lock
+and written back atomically after every change. Earlier releases also mirrored
+it into ``<data_dir>/registry.db``; nothing ever read that mirror, so it is no
+longer written (an existing file is left untouched and can be deleted).
+"""
 
 from __future__ import annotations
 
+import builtins
 import contextlib
+import copy
 import json
 import logging
 import os
@@ -11,9 +20,10 @@ import sqlite3
 import stat
 import threading
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, Literal, TypeVar, get_args
 
 EntryKind = Literal["library", "skill", "kit", "tool"]
 #: Public name for the entry-kind vocabulary (HTTP query/body validation uses it).
@@ -25,13 +35,37 @@ _logger = logging.getLogger(__name__)
 #: Random temp-file names collide only in theory; give up after this many tries.
 _REPLACEMENT_ATTEMPTS = 100
 
-_KIND_TO_BUCKET = {
+#: Entry kind → its bucket (top-level list) in ``registry.json``.
+KIND_TO_BUCKET: dict[EntryKind, str] = {
     "library": "libraries",
     "skill": "skills",
     "kit": "kits",
     "tool": "tools",
 }
-_BUCKET_TO_KIND = {v: k for k, v in _KIND_TO_BUCKET.items()}
+#: Bucket in ``registry.json`` → entry kind.
+BUCKET_TO_KIND: dict[str, EntryKind] = {v: k for k, v in KIND_TO_BUCKET.items()}
+#: Corpus sub-folder → the kind of entry each child folder registers as
+#: (tools live under ``corpus/capabilities/``).
+CORPUS_FOLDER_TO_KIND: dict[str, EntryKind] = {
+    "libraries": "library",
+    "skills": "skill",
+    "kits": "kit",
+    "capabilities": "tool",
+}
+
+# Back-compat private aliases.
+_KIND_TO_BUCKET = KIND_TO_BUCKET
+_BUCKET_TO_KIND = BUCKET_TO_KIND
+
+_T = TypeVar("_T")
+
+
+class RegistryClosedError(sqlite3.ProgrammingError):
+    """A mutation was attempted on a closed :class:`Registry`.
+
+    Subclasses :class:`sqlite3.ProgrammingError` (what a closed registry
+    raised while it still held a SQLite mirror) so existing handlers keep working.
+    """
 
 
 @dataclass
@@ -48,52 +82,42 @@ class RegistryEntry:
     last_updated: float = field(default_factory=time.time)
 
 
-class Registry:
-    """JSON-backed registry with SQLite mirror.
+def _default_document() -> dict[str, Any]:
+    return {
+        "version": 1,
+        "libraries": [],
+        "skills": [],
+        "kits": [],
+        "tools": [],
+        "lifecycle": {"watch_enabled": True, "auto_register": True},
+    }
 
-    JSON is canonical — SQLite is a queryable cache rebuilt from JSON on load.
+
+class Registry:
+    """JSON-backed registry of corpus entries.
 
     Thread safety: one re-entrant lock serialises every read and mutation of
-    the in-memory document, the JSON write and the SQLite mirror, so a single
-    instance can be shared by FastAPI's worker threadpool. The JSON file is
-    replaced atomically (temp file + ``os.replace``), so a crash mid-write
-    never leaves a truncated registry behind; the replacement keeps the
-    file's permission bits (a new file gets the umask default, like a plain
-    ``open()`` would). :meth:`close` releases the
-    SQLite connection; any later use raises ``sqlite3.ProgrammingError``.
+    the in-memory document and the file write, so a single instance can be
+    shared by FastAPI's worker threadpool. Each mutation is applied to a copy
+    of the document, written to disk atomically (temp file, ``fsync``,
+    ``os.replace``, keeping the file's permission bits) and only then swapped in, so a failed write leaves both
+    the file and the in-memory state unchanged and a crash mid-write never
+    truncates ``registry.json``.
+
+    :meth:`close` marks the registry closed; later mutations raise
+    :class:`RegistryClosedError`.
+
+    ``db_path`` is accepted for backwards compatibility and ignored (the
+    SQLite mirror is gone).
     """
 
-    SCHEMA = """
-    CREATE TABLE IF NOT EXISTS entries (
-        id TEXT PRIMARY KEY,
-        kind TEXT NOT NULL,
-        name TEXT NOT NULL,
-        path TEXT NOT NULL,
-        enabled INTEGER NOT NULL,
-        auto_registered INTEGER NOT NULL,
-        description TEXT,
-        tags TEXT,
-        created REAL,
-        last_updated REAL
-    );
-    CREATE INDEX IF NOT EXISTS idx_entries_kind ON entries(kind);
-    CREATE INDEX IF NOT EXISTS idx_entries_enabled ON entries(enabled);
-    """
-
-    def __init__(self, registry_path: Path, db_path: Path) -> None:
-        self.registry_path = registry_path
+    def __init__(self, registry_path: Path, db_path: Path | None = None) -> None:
+        self.registry_path = Path(registry_path)
         self.db_path = db_path
         self._lock = threading.RLock()
         self._closed = False
-        # check_same_thread=False + the lock above let a single shared Registry
-        # be held on app.state and mutated from FastAPI's worker threadpool.
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        try:
-            self._conn.executescript(self.SCHEMA)
-            self._load()
-        except BaseException:
-            self._conn.close()
-            raise
+        self._data: dict[str, Any] = {}
+        self._load()
 
     # ---------- Lifecycle ----------
     @property
@@ -101,41 +125,38 @@ class Registry:
         return self._closed
 
     def close(self) -> None:
-        """Close the SQLite mirror connection. Idempotent."""
+        """Mark the registry closed. Idempotent."""
         with self._lock:
             if self._closed:
                 return
             self._closed = True
-            self._conn.close()
-        _logger.debug("registry mirror %s closed", self.db_path)
+        _logger.debug("registry %s closed", self.registry_path)
 
     def _check_open(self) -> None:
         if self._closed:
-            raise sqlite3.ProgrammingError("Cannot operate on a closed registry.")
+            raise RegistryClosedError("Cannot operate on a closed registry.")
 
     # ---------- JSON I/O ----------
     def _load(self) -> None:
         with self._lock:
             if not self.registry_path.exists():
-                self._write_default()
+                self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+                self._write_json(_default_document())
             with self.registry_path.open("r", encoding="utf-8") as f:
-                self._data = json.load(f)
-            self._sync_to_sqlite()
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError(
+                    f"{self.registry_path}: expected a JSON object at the top level, "
+                    f"got {type(data).__name__}"
+                )
+            self._data = data
 
-    def _write_default(self) -> None:
-        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
-        default = {
-            "version": 1,
-            "libraries": [],
-            "skills": [],
-            "kits": [],
-            "tools": [],
-            "lifecycle": {"watch_enabled": True, "auto_register": True},
-        }
-        self._write_json(default)
+    def reload(self) -> None:
+        """Re-read ``registry.json`` from disk (after an out-of-band edit)."""
+        self._load()
 
     def _write_json(self, data: dict[str, Any]) -> None:
-        """Write ``data`` to the registry file atomically (temp file + replace).
+        """Write ``data`` to the registry file atomically (temp file, fsync, replace).
 
         The temp file is created with ``0o666`` masked by the process umask
         (what ``open()`` gives a new file), then chmod'ed to the existing
@@ -154,6 +175,8 @@ class Registry:
                 tmp.chmod(mode)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 handle.write(text)
+                handle.flush()
+                os.fsync(handle.fileno())
             tmp.replace(self.registry_path)
         except BaseException:
             with contextlib.suppress(OSError):
@@ -178,36 +201,20 @@ class Registry:
             f"could not create a temp file for {self.registry_path} in {directory}"
         )
 
-    def _persist(self) -> None:
+    def _mutate(self, change: Callable[[dict[str, Any]], _T]) -> _T:
+        """Apply ``change`` to a copy of the document, persist it, then swap it in.
+
+        ``change`` returns the call's result; it may raise to abort without
+        writing. The caller holds no lock; this method takes it.
+        """
         with self._lock:
             self._check_open()
-            self._data["last_updated"] = time.time()
-            self._write_json(self._data)
-            self._sync_to_sqlite()
-
-    def _sync_to_sqlite(self) -> None:
-        with self._lock:
-            cur = self._conn.cursor()
-            cur.execute("DELETE FROM entries")
-            for bucket, kind in _BUCKET_TO_KIND.items():
-                for row in self._data.get(bucket, []):
-                    cur.execute(
-                        "INSERT INTO entries (id, kind, name, path, enabled, auto_registered, description, tags, created, last_updated) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            row["id"],
-                            kind,
-                            row.get("name", ""),
-                            row.get("path", ""),
-                            1 if row.get("enabled", True) else 0,
-                            1 if row.get("auto_registered", False) else 0,
-                            row.get("description", ""),
-                            json.dumps(row.get("tags", [])),
-                            row.get("created", time.time()),
-                            row.get("last_updated", time.time()),
-                        ),
-                    )
-            self._conn.commit()
+            draft = copy.deepcopy(self._data)
+            result = change(draft)
+            draft["last_updated"] = time.time()
+            self._write_json(draft)
+            self._data = draft
+            return result
 
     # ---------- Public API ----------
     def list(
@@ -215,71 +222,103 @@ class Registry:
     ) -> list[dict[str, Any]]:
         with self._lock:
             results: list[dict[str, Any]] = []
-            kinds = [kind] if kind else list(_KIND_TO_BUCKET.keys())
+            kinds: Iterable[EntryKind] = [kind] if kind else KIND_TO_BUCKET.keys()
             for k in kinds:
-                for row in self._data.get(_KIND_TO_BUCKET[k], []):
+                for row in self._data.get(KIND_TO_BUCKET[k], []):
                     if enabled_only and not row.get("enabled", True):
                         continue
                     results.append({**row, "kind": k})
             return results
 
+    def counts(self) -> dict[str, int]:
+        """Entries per bucket: ``{"libraries": n, "skills": n, "kits": n, "tools": n}``."""
+        with self._lock:
+            return {bucket: len(self._data.get(bucket, [])) for bucket in BUCKET_TO_KIND}
+
     def get(self, entry_id: str) -> dict[str, Any] | None:
         with self._lock:
-            for bucket, kind in _BUCKET_TO_KIND.items():
+            for bucket, kind in BUCKET_TO_KIND.items():
                 for row in self._data.get(bucket, []):
                     if row["id"] == entry_id:
                         return {**row, "kind": kind}
             return None
 
+    @staticmethod
+    def _upsert_into(data: dict[str, Any], entry: RegistryEntry) -> dict[str, Any]:
+        rows: list[dict[str, Any]] = data.setdefault(KIND_TO_BUCKET[entry.kind], [])
+        payload = asdict(entry)
+        payload["last_updated"] = time.time()
+        for i, row in enumerate(rows):
+            if row["id"] == entry.id:
+                rows[i] = {**row, **payload}
+                return dict(rows[i])
+        rows.append(payload)
+        return dict(payload)
+
     def upsert(self, entry: RegistryEntry) -> dict[str, Any]:
-        with self._lock:
-            self._check_open()
-            bucket = _KIND_TO_BUCKET[entry.kind]
-            rows: list[dict[str, Any]] = self._data.setdefault(bucket, [])
-            payload = asdict(entry)
-            payload["last_updated"] = time.time()
-            for i, row in enumerate(rows):
-                if row["id"] == entry.id:
-                    rows[i] = {**row, **payload}
-                    self._persist()
-                    return dict(rows[i])
-            payload["created"] = payload.get("created", time.time())
-            rows.append(payload)
-            self._persist()
-            return dict(payload)
+        """Insert ``entry`` or update the row with the same id (one atomic write)."""
+        return self._mutate(lambda data: self._upsert_into(data, entry))
+
+    def upsert_many(self, entries: Iterable[RegistryEntry]) -> builtins.list[dict[str, Any]]:
+        """Upsert several entries with a single atomic write (none on an empty input)."""
+        batch = list(entries)
+        if not batch:
+            return []
+        return self._mutate(lambda data: [self._upsert_into(data, entry) for entry in batch])
 
     def set_enabled(self, entry_id: str, enabled: bool) -> dict[str, Any] | None:
-        with self._lock:
-            self._check_open()
-            for bucket, kind in _BUCKET_TO_KIND.items():
-                for row in self._data.get(bucket, []):
+        def change(data: dict[str, Any]) -> dict[str, Any] | None:
+            for bucket, kind in BUCKET_TO_KIND.items():
+                for row in data.get(bucket, []):
                     if row["id"] == entry_id:
                         row["enabled"] = bool(enabled)
                         row["last_updated"] = time.time()
-                        self._persist()
                         return {**row, "kind": kind}
             return None
 
-    def remove(self, entry_id: str) -> bool:
         with self._lock:
             self._check_open()
-            for bucket in _BUCKET_TO_KIND:
-                rows = self._data.get(bucket, [])
+            if self.get(entry_id) is None:
+                return None
+            return self._mutate(change)
+
+    def remove(self, entry_id: str) -> bool:
+        def change(data: dict[str, Any]) -> bool:
+            for bucket in BUCKET_TO_KIND:
+                rows = data.get(bucket, [])
                 for i, row in enumerate(rows):
                     if row["id"] == entry_id:
                         rows.pop(i)
-                        self._persist()
                         return True
             return False
+
+        with self._lock:
+            self._check_open()
+            if self.get(entry_id) is None:
+                return False
+            return self._mutate(change)
 
     def lifecycle(self) -> dict[str, Any]:
         with self._lock:
             return dict(self._data.get("lifecycle", {}))
 
     def set_lifecycle(self, **kwargs: Any) -> dict[str, Any]:
-        with self._lock:
-            self._check_open()
-            lc = self._data.setdefault("lifecycle", {})
+        def change(data: dict[str, Any]) -> dict[str, Any]:
+            lc = data.setdefault("lifecycle", {})
             lc.update(kwargs)
-            self._persist()
             return dict(lc)
+
+        return self._mutate(change)
+
+
+__all__ = [
+    "BUCKET_TO_KIND",
+    "CORPUS_FOLDER_TO_KIND",
+    "KIND_TO_BUCKET",
+    "REGISTRY_KINDS",
+    "EntryKind",
+    "Registry",
+    "RegistryClosedError",
+    "RegistryEntry",
+    "RegistryKind",
+]

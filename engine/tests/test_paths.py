@@ -224,7 +224,7 @@ def test_create_app_creates_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert not data.exists()
 
     with TestClient(app):
-        assert (data / "registry.db").is_file()
+        assert (data / "index.db").is_file()
 
 
 def test_mcp_server_creates_data_dir(
@@ -242,7 +242,7 @@ def test_mcp_server_creates_data_dir(
     assert main(["--selftest"]) == 0
 
     assert json.loads(capsys.readouterr().out)["ok"] is True
-    assert (data / "registry.db").is_file()
+    assert (data / "index.db").is_file()
 
 
 def test_cli_info_creates_data_dir_and_reports_paths(
@@ -259,7 +259,7 @@ def test_cli_info_creates_data_dir_and_reports_paths(
     out = json.loads(capsys.readouterr().out)
     assert out["corpus_root"] == str(repo / "corpus")
     assert out["data_dir"] == str(repo / ".knowledge-engine" / "data")
-    assert (repo / ".knowledge-engine" / "data" / "registry.db").is_file()
+    assert (repo / ".knowledge-engine" / "data").is_dir()
 
 
 # ── ensure_within (shared containment check) ─────────────────

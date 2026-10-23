@@ -26,6 +26,7 @@ from typing import Annotated, Any
 import anyio
 from mcp import Client
 from mcp.server.mcpserver import MCPServer
+from mcp.types import CallToolResult, TextContent
 from pydantic import BeforeValidator, Field
 
 from .. import __version__
@@ -142,12 +143,18 @@ def _register_base_tools(server: MCPServer[Any], registry: Registry, indexer: In
             BeforeValidator(_empty_is_none),
             Field(description="Optional kind filter"),
         ] = None,
-    ) -> str:
+    ) -> CallToolResult:
         """Full-text search across enabled libraries, skills, kits, and tools in the corpus."""
         with tool_errors("search"):
             if limit < 1:
                 raise ValueError("limit must be a positive integer")
-            return json.dumps(indexer.search(query, limit=limit, kind=kind), indent=2)
+            hits = indexer.search(query, limit=limit, kind=kind)
+            meta = getattr(hits, "meta", None) or None
+            # Same JSON text as always; an FTS5 syntax fallback is flagged in `_meta`.
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps(list(hits), indent=2))],
+                _meta=meta,
+            )
 
     def registry_list(
         kind: Annotated[EntryKind | None, BeforeValidator(_empty_is_none)] = None,
@@ -255,10 +262,10 @@ def run(args: argparse.Namespace) -> int:
     """Run the server as selected by the ``knowledge-engine mcp`` flags."""
     configure_logging()
     config = Config.from_env()
-    # Registry and Indexer open their SQLite files eagerly; a fresh KE_DATA_DIR
-    # must exist first (Config.from_env() itself never touches the filesystem).
+    # The Indexer opens its SQLite file eagerly; a fresh KE_DATA_DIR must exist
+    # first (Config.from_env() itself never touches the filesystem).
     config.ensure_dirs()
-    registry = Registry(config.registry_path, config.data_dir / "registry.db")
+    registry = Registry(config.registry_path)
     indexer = Indexer(config, registry)
     server = build_server(config, registry, indexer)
 

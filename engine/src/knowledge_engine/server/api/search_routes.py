@@ -13,7 +13,7 @@ router = APIRouter()
 MAX_SEARCH_LIMIT = 100
 
 
-@router.get("", response_model=SearchResponse)
+@router.get("", response_model=SearchResponse, response_model_exclude_none=True)
 def search(
     indexer: IndexerDep,
     q: str = Query(..., min_length=1),
@@ -24,6 +24,7 @@ def search(
         query=q,
         count=len(results),
         results=[SearchHit.model_validate(hit) for hit in results],
+        syntax_fallback=True if getattr(results, "syntax_fallback", False) else None,
     )
 
 
