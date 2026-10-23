@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
+from knowledge_engine import cli
 from knowledge_engine.core import registry as registry_mod
 from knowledge_engine.core.registry import (
     Registry,
@@ -281,3 +282,96 @@ def test_invalid_mutation_is_refused_without_writing(
     assert registry.get("kit-a") is None
     assert registry.lifecycle() == {"watch_enabled": True, "auto_register": True}
     assert list(tmp_path.glob(".registry.json.*.tmp")) == []
+
+
+# ── CLI: registry validate ───────────────────────────────────────────
+
+
+def test_cli_validate_valid_file(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["registry", "validate", str(FIXTURES / "valid.json")]) == 0
+    out = capsys.readouterr().out
+    assert out.strip() == f"{FIXTURES / 'valid.json'}: valid"
+
+
+def test_cli_validate_repo_registry(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["registry", "validate", str(CORPUS_REGISTRY)]) == 0
+    assert capsys.readouterr().out.strip().endswith(": valid")
+
+
+@pytest.mark.parametrize("name", sorted(INVALID_FIXTURES))
+def test_cli_validate_invalid_file(name: str, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["registry", "validate", str(FIXTURES / name)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    lines = captured.err.splitlines()
+    assert lines[0] == f"{FIXTURES / name}: " + _load_error(FIXTURES / name).message
+    assert len(lines) == 1 + len(INVALID_FIXTURES[name])
+    for pointer, _keyword in INVALID_FIXTURES[name]:
+        assert any(line.startswith(f"  {pointer or '/'}: ") for line in lines[1:])
+
+
+def test_cli_validate_json_output(capsys: pytest.CaptureFixture[str]) -> None:
+    path = FIXTURES / "invalid-missing-required.json"
+    assert cli.main(["registry", "validate", "--json", str(path)]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["valid"] is False
+    assert report["path"] == str(path)
+    assert [e["pointer"] for e in report["errors"]] == ["/kits/0", "/kits/0"]
+
+    assert cli.main(["registry", "validate", "--json", str(FIXTURES / "valid.json")]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "valid": True,
+        "path": str(FIXTURES / "valid.json"),
+        "message": "valid",
+        "errors": [],
+    }
+
+
+def test_cli_validate_missing_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    missing = tmp_path / "nope" / "registry.json"
+    assert cli.main(["registry", "validate", str(missing)]) == 1
+    assert "cannot read the registry" in capsys.readouterr().err
+    assert cli.main(["registry", "validate", "--json", str(missing)]) == 1
+    assert json.loads(capsys.readouterr().out)["valid"] is False
+    assert not missing.parent.exists()
+
+
+def test_cli_validate_defaults_to_the_configured_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "corpus" / "registry.json"
+    monkeypatch.setenv("KE_REGISTRY_PATH", str(path))
+    monkeypatch.setenv("KE_DATA_DIR", str(tmp_path / "data"))
+    assert cli.main(["registry", "validate"]) == 1  # missing: not created
+    assert not path.exists()
+    assert not (tmp_path / "data").exists()
+    capsys.readouterr()
+    path.parent.mkdir(parents=True)
+    shutil.copy(FIXTURES / "valid.json", path)
+    assert cli.main(["registry", "validate"]) == 0
+    assert capsys.readouterr().out.strip() == f"{path}: valid"
+
+
+@pytest.mark.parametrize("command", [["bootstrap"], ["reindex"], ["info"], ["search", "x"]])
+def test_corpus_commands_surface_validation_errors(
+    command: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    corpus = tmp_path / "corpus"
+    (corpus / "libraries" / "lib").mkdir(parents=True)
+    path = corpus / "registry.json"
+    shutil.copy(FIXTURES / "invalid-wrong-type.json", path)
+    before = path.read_bytes()
+    monkeypatch.setenv("KE_CORPUS_ROOT", str(corpus))
+    monkeypatch.setenv("KE_REGISTRY_PATH", str(path))
+    monkeypatch.setenv("KE_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("KE_PIPELINE_ROOT", str(tmp_path / "pipeline"))
+    assert cli.main(command) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"{path}: does not match the registry schema (4 errors)" in captured.err
+    assert "  /libraries/0/tags: 'a,b' is not of type 'array'" in captured.err
+    assert "knowledge-engine registry validate" in captured.err
+    assert path.read_bytes() == before

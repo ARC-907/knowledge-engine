@@ -1,15 +1,16 @@
 ### knowledge-engine --help
 usage: knowledge-engine [-h] [-v | -q]
-                        {info,bootstrap,capabilities,reindex,watch,config,mcp,search,serve,project-context,board,board-serve} ...
+                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,serve,project-context,board,board-serve} ...
 
 positional arguments:
-  {info,bootstrap,capabilities,reindex,watch,config,mcp,search,serve,project-context,board,board-serve}
+  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,serve,project-context,board,board-serve}
     info                Print configuration and counts
     bootstrap           Walk corpus/ and register every folder as an entry
     capabilities        Print runtime capability and retrieval-surface
                         inventory
     reindex             Rebuild FTS5 index over enabled entries
     watch               Start watchdog: auto-register new corpus folders
+    registry            Inspect the corpus registry (registry.json)
     config              Inspect the effective configuration
     mcp                 Run the MCP server for AI clients (stdio, or
                         streamable HTTP with --http)
@@ -49,6 +50,26 @@ usage: knowledge-engine watch [-h]
 
 options:
   -h, --help  show this help message and exit
+### knowledge-engine registry --help
+usage: knowledge-engine registry [-h] {validate} ...
+
+positional arguments:
+  {validate}
+    validate  Validate registry.json against the registry JSON Schema (exit 1
+              if invalid)
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine registry validate --help
+usage: knowledge-engine registry validate [-h] [--json] [path]
+
+positional arguments:
+  path        Registry file to check (default: $KE_REGISTRY_PATH or
+              <corpus_root>/registry.json)
+
+options:
+  -h, --help  show this help message and exit
+  --json      Print the result (and every error) as JSON
 ### knowledge-engine config --help
 usage: knowledge-engine config [-h] {show} ...
 

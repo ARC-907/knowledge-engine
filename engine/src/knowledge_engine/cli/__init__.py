@@ -6,13 +6,16 @@ a sibling module that is imported only when that subcommand runs:
 
 * :mod:`.corpus`          -- ``info``, ``bootstrap``, ``capabilities``, ``reindex``,
   ``watch``, ``search``, ``config show``
+* :mod:`.registry`        -- ``registry validate``
 * :mod:`.serve`           -- ``serve``, ``board-serve``
 * :mod:`.mcp`             -- ``mcp``
 * :mod:`.board`           -- ``board ...`` (the agent-board client)
 * :mod:`.project_context` -- ``project-context ...``
 
 :func:`main` configures stderr logging once (``-v``/``-q``), loads the
-pipeline ``.env`` (variables already set win) and runs the subcommand.
+pipeline ``.env`` (variables already set win) and runs the subcommand. A
+handler that raises :class:`CommandError` has its message printed on stderr
+and exits with the error's status (1) instead of a traceback.
 Library modules never print; command output goes to stdout from these
 modules only.
 """
@@ -22,6 +25,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import logging
+import sys
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -34,6 +38,14 @@ PROG = "knowledge-engine"
 LONG_RUNNING = frozenset({"serve", "board-serve", "mcp", "watch"})
 
 Handler = Callable[[argparse.Namespace, argparse.ArgumentParser], int]
+
+
+class CommandError(Exception):
+    """A subcommand failed in an expected way; :func:`main` prints it and exits non-zero."""
+
+    def __init__(self, message: str, exit_code: int = 1) -> None:
+        super().__init__(message)
+        self.exit_code = exit_code
 
 
 def _route(parser: argparse.ArgumentParser, module: str, func: str) -> None:
@@ -83,6 +95,22 @@ def build_parser() -> argparse.ArgumentParser:
         "corpus",
         "cmd_watch",
     )
+    reg_parser = sub.add_parser("registry", help="Inspect the corpus registry (registry.json)")
+    reg_sub = reg_parser.add_subparsers(dest="registry_cmd", required=True)
+    reg_validate = reg_sub.add_parser(
+        "validate",
+        help="Validate registry.json against the registry JSON Schema (exit 1 if invalid)",
+    )
+    reg_validate.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Registry file to check (default: $KE_REGISTRY_PATH or <corpus_root>/registry.json)",
+    )
+    reg_validate.add_argument(
+        "--json", action="store_true", help="Print the result (and every error) as JSON"
+    )
+    _route(reg_validate, "registry", "cmd_registry_validate")
     cfg_parser = sub.add_parser("config", help="Inspect the effective configuration")
     cfg_sub = cfg_parser.add_subparsers(dest="config_cmd", required=True)
     cfg_show = cfg_sub.add_parser(
@@ -160,6 +188,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         module, func = args._handler
         return _load_handler(module, func)(args, parser)
+    except CommandError as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.exit_code
     finally:
         restore()
 
@@ -172,7 +203,7 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["LONG_RUNNING", "PROG", "build_parser", "main"]
+__all__ = ["LONG_RUNNING", "PROG", "CommandError", "build_parser", "main"]
 
 
 if __name__ == "__main__":  # pragma: no cover
