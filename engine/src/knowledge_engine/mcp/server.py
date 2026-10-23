@@ -243,6 +243,9 @@ def run(args: argparse.Namespace) -> int:
     """Run the server as selected by the ``knowledge-engine mcp`` flags."""
     configure_logging()
     config = Config.from_env()
+    # Registry and Indexer open their SQLite files eagerly; a fresh KE_DATA_DIR
+    # must exist first (Config.from_env() itself never touches the filesystem).
+    config.ensure_dirs()
     registry = Registry(config.registry_path, config.data_dir / "registry.db")
     indexer = Indexer(config, registry)
     server = build_server(config, registry, indexer)

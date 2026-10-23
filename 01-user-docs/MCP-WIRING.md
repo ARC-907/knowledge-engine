@@ -51,9 +51,11 @@ Replace `ABSOLUTE_PATH` in every example with your repo root. Use the full path
 with no `~` and no environment variables — MCP clients do not expand them.
 
 `scripts/mcp-client-config.example.json` in this repo is a ready-to-edit
-starting point. It launches the server as `uvx knowledge-engine mcp` (or
-`knowledge-engine mcp` when the console script is on your `PATH`); the
-examples below use the virtualenv's Python so no extra tooling is needed.
+starting point. It launches the server as `knowledge-engine mcp` (the console
+script installed with the engine) and, as an alternative that needs no install,
+`uvx --from "git+https://github.com/ARC-907/knowledge-engine#subdirectory=engine" knowledge-engine mcp`
+(the engine is not published on PyPI); the examples below use the virtualenv's
+Python so no extra tooling is needed.
 
 ---
 
@@ -201,7 +203,8 @@ The pattern is identical everywhere. The server is launched as:
 <venv-python>  -m  knowledge_engine.mcp.server
 ```
 
-(or, equivalently, `knowledge-engine mcp` / `uvx knowledge-engine mcp`)
+(or, equivalently, `knowledge-engine mcp`, or without installing:
+`uvx --from "git+https://github.com/ARC-907/knowledge-engine#subdirectory=engine" knowledge-engine mcp`)
 
 with these environment variables set:
 
