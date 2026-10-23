@@ -20,6 +20,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import json
+import logging
 import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -28,13 +29,67 @@ from typing import TYPE_CHECKING, Any, Protocol
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
 from . import schemas
-from .scopes import scope_db_path
+from .scopes import scope_db_path, scope_exists
+
+_logger = logging.getLogger(__name__)
 
 
 class _Scoped[R](Protocol):
     """Call signature of a store function after ``_scoped`` wrapping."""
 
     def __call__(self, *args: Any, scope: str | None = None, **kwargs: Any) -> R: ...
+
+
+# Store functions allowed to bring a scope database into existence. Every
+# other scoped function is a read (or a maintenance pass) and must answer
+# "empty" for a scope that has no database yet — otherwise any trusted
+# ``GET ...?scope=<new>`` would mint a fresh SQLite file on disk.
+_SCOPE_CREATORS: frozenset[str] = frozenset({"post_with_validation", "update_config"})
+
+
+def _default_config() -> dict[str, Any]:
+    cfg = db.default_board_config()
+    cfg["channels"] = list(db.BOARD_CONFIG_DEFAULT_CHANNELS)
+    return cfg
+
+
+def _empty_digest(
+    channel: str | None = None,
+    since: str | None = None,
+    max_messages: int = 200,
+    include_sweeper_posts: bool = False,
+) -> dict[str, Any]:
+    return {
+        "channel": channel or "(all)",
+        "since": since,
+        "scanned": 0,
+        "counts_by_type": {},
+        "most_recent_per_type": {},
+        "open_blockers": [],
+        "top_senders": [],
+        "busy_threads": [],
+    }
+
+
+# What each read returns for a scope that does not exist. Keyed by function
+# name; the factory receives the call's own arguments so shape-dependent
+# answers (``digest``) can echo the filters back like the real thing.
+_EMPTY_FOR_UNKNOWN_SCOPE: dict[str, Callable[..., Any]] = {
+    "load_config": lambda *a, **k: _default_config(),
+    "read": lambda *a, **k: None,
+    "poll": lambda *a, **k: [],
+    "relevant_for": lambda *a, **k: [],
+    "thread_messages": lambda *a, **k: [],
+    "search_messages": lambda *a, **k: [],
+    "digest": _empty_digest,
+    "get_unacked_blockers": lambda *a, **k: [],
+    "ack_message": lambda *a, **k: None,
+    "channel_stats": lambda *a, **k: [],
+    "type_stats": lambda *a, **k: [],
+    "total_count": lambda *a, **k: 0,
+    "prune_expired": lambda *a, **k: 0,
+    "prune_by_count": lambda *a, **k: 0,
+}
 
 
 def _scoped[R](fn: Callable[..., R]) -> _Scoped[R]:
@@ -48,16 +103,25 @@ def _scoped[R](fn: Callable[..., R]) -> _Scoped[R]:
     whatever scope context is already active (so a wrapped function calling
     another wrapped function does the right thing without re-routing).
 
+    Only functions in ``_SCOPE_CREATORS`` may create the scope database; a
+    read of a scope that has none returns its empty value without touching
+    the filesystem. A malformed scope name raises ``ValueError`` either way.
+
     The wrapping is applied once at module load (see the loop near the
     bottom of this file) so each function body stays scope-agnostic.
     """
+    creates = fn.__name__ in _SCOPE_CREATORS
+    empty = _EMPTY_FOR_UNKNOWN_SCOPE.get(fn.__name__)
 
     @functools.wraps(fn)
     def wrapper(*args: Any, scope: str | None = None, **kwargs: Any) -> Any:
-        if scope:
-            with db.using_db(scope_db_path(scope)):
-                return fn(*args, **kwargs)
-        return fn(*args, **kwargs)
+        if not scope:
+            return fn(*args, **kwargs)
+        if not creates and empty is not None and not scope_exists(scope):
+            _logger.debug("%s: scope %r has no database; returning empty", fn.__name__, scope)
+            return empty(*args, **kwargs)
+        with db.using_db(scope_db_path(scope, create=creates)):
+            return fn(*args, **kwargs)
 
     return wrapper
 
