@@ -61,6 +61,24 @@ def test_bearer_token_redacted() -> None:
     assert "aaaa.bbbb.cccc" not in result.text
 
 
+@pytest.mark.parametrize(
+    "header",
+    [
+        "authorization: bearer aaaa.bbbb.cccc",
+        "Authorization: BEARER aaaa.bbbb.cccc",
+        "authorization: bearer 0123456789abcdefXYZ",
+        "Authorization: bEaReR 0123456789abcdefXYZ",
+    ],
+)
+def test_bearer_scheme_case_insensitive(header: str) -> None:
+    result = sanitize(header, _cfg())
+    assert result.status == schema.SANITIZED
+    assert result.redactions == 1
+    assert "aaaa.bbbb.cccc" not in result.text
+    assert "0123456789abcdefXYZ" not in result.text
+    assert "<REDACTED:BEARER_TOKEN>" in result.text
+
+
 def test_url_credentials_removed() -> None:
     text = "clone from https://alice:hunter2@example.com/repo.git now"
     result = sanitize(text, _cfg())

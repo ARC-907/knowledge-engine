@@ -129,18 +129,23 @@ _RULES: tuple[Rule, ...] = (
         pattern=re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}"),
         replacement=_placeholder("slack_token"),
     ),
-    # "Bearer <jwt>" authorization headers.
+    # "Bearer <jwt>" authorization headers. The scheme is case-insensitive
+    # per RFC 7235, so "bearer"/"BEARER" are matched too.
     Rule(
         name="bearer_token",
         pattern=re.compile(
             r"\bBearer\s+[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+",
+            re.IGNORECASE,
         ),
         replacement="Bearer " + _placeholder("bearer_token"),
     ),
     # "Bearer <opaque token>" (any RFC 6750 token68 of 16+ characters).
     Rule(
         name="bearer_opaque",
-        pattern=re.compile(r"\bBearer\s+" + _NOT_REDACTED + r"[A-Za-z0-9._~+/=\-]{16,}"),
+        pattern=re.compile(
+            r"\bBearer\s+" + _NOT_REDACTED + r"[A-Za-z0-9._~+/=\-]{16,}",
+            re.IGNORECASE,
+        ),
         replacement="Bearer " + _placeholder("bearer_token"),
     ),
     # JSON / Python-literal quoted pairs: "api_key": "value" or 'password': 'value'.
