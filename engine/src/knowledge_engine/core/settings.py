@@ -11,8 +11,9 @@ configuration from a ``Settings`` instance instead of ``os.environ``.
 A few substrate modules still read their own variables directly, deep inside
 code that predates this layer (``runtime.foundation.config``/``db``,
 ``runtime.pipeline.task_classifier``, ``project_context.config``,
-``retrieval.embeddings.build``, ``agent_board.scopes`` and
-``mcp.http``/``mcp.server``, through the shared parsers in ``core.util.env``). Those variables are declared here too, so
+``retrieval.embeddings.build``, ``agent_board.scopes`` and ``mcp.http``;
+flags and lists among them use the shared parsers in ``core.util.env``).
+Those variables are declared here too, so
 ``knowledge-engine config show`` and ``01-user-docs/CONFIGURATION.md`` list
 them, and the ``Read by`` column names the module that consumes each one.
 

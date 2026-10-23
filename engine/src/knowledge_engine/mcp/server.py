@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -232,16 +231,15 @@ def build_server(
 
 
 def configure_logging() -> None:
-    """Log to stderr at ``KE_LOG_LEVEL`` (default INFO); stdout is the transport."""
-    raw = os.environ.get("KE_LOG_LEVEL", "INFO").strip().upper()
-    level = logging.getLevelNamesMapping().get(raw)
-    logging.basicConfig(
-        stream=sys.stderr,
-        level=level if level is not None else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    if level is None:
-        logger.warning("ignoring invalid KE_LOG_LEVEL=%r; using INFO", raw)
+    """Log to stderr at ``KE_LOG_LEVEL`` (default INFO); stdout is the transport.
+
+    A no-op when the host already configured logging (``knowledge-engine mcp``
+    does, once, in the CLI's ``main``); an invalid level is reported by the
+    settings layer and replaced by INFO.
+    """
+    from ..core.logging_config import CLI_FORMAT, resolve_log_level  # noqa: PLC0415
+
+    logging.basicConfig(stream=sys.stderr, level=resolve_log_level(), format=CLI_FORMAT)
 
 
 async def selftest(server: MCPServer[Any]) -> dict[str, Any]:

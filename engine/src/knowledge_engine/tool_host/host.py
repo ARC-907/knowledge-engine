@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import IO, Any
 from urllib import error as urllib_error, parse as urllib_parse, request as urllib_request
 
+from ..core.util.env import parse_bool_or, parse_list
 from ..core.util.time import utc_now_iso
 from ..runtime.foundation import config, db as db_mod
 
@@ -667,7 +668,7 @@ def health_check_all_services() -> list[dict[str, Any]]:
 def _as_bool(value: Any) -> bool:
     """Interpret a DB/config flag (``1``, ``True``, ``"true"`` ...) as a bool."""
     if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
+        return parse_bool_or(value, False)
     return bool(value)
 
 
@@ -677,7 +678,7 @@ def _decode_list(value: Any) -> Any:
         try:
             return json.loads(value)
         except json.JSONDecodeError:
-            return [part.strip() for part in value.split(",") if part.strip()]
+            return parse_list(value)
     return value
 
 
