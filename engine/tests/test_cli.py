@@ -216,7 +216,8 @@ def test_main_loads_the_pipeline_dotenv(
     (tmp_path / "pipeline" / ".env").write_text("KE_CLI_DOTENV_PROBE=1\n", encoding="utf-8")
     monkeypatch.delenv("KE_CLI_DOTENV_PROBE", raising=False)
     assert cli.main(["config", "show"]) == 0
-    assert os.environ.pop("KE_CLI_DOTENV_PROBE") == "1"
+    probe = os.environ.pop("KE_CLI_DOTENV_PROBE")
+    assert probe == "1"
 
 
 @pytest.mark.parametrize(

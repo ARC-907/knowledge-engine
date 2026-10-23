@@ -70,7 +70,7 @@ def test_registry_concurrent_toggles_from_eight_threads(tmp_path: Path) -> None:
             for round_ in range(20):
                 registry.set_enabled(f"kit-{(worker + round_) % 8}", round_ % 2 == 0)
                 registry.list(enabled_only=True)
-        except BaseException as exc:  # pragma: no cover - failure path
+        except Exception as exc:  # pragma: no cover - failure path
             errors.append(exc)
 
     threads = [threading.Thread(target=toggle, args=(n,)) for n in range(8)]
@@ -113,8 +113,10 @@ def test_missing_ids_do_not_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     registry = Registry(_config(tmp_path).registry_path)
     writes: list[int] = []
     monkeypatch.setattr(registry, "_write_json", lambda _d: writes.append(1))
-    assert registry.set_enabled("nope", True) is None
-    assert registry.remove("nope") is False
+    toggled = registry.set_enabled("nope", True)
+    removed = registry.remove("nope")
+    assert toggled is None
+    assert removed is False
     assert writes == []
 
 
@@ -166,7 +168,10 @@ def test_register_corpus_folders_counts_sorted_and_single_write(
     for rel in ("libraries/Zeta", "libraries/alpha", "libraries/.hidden", "capabilities/My Tool"):
         (config.corpus_root / rel).mkdir(parents=True)
     (config.corpus_root / "libraries" / "file.md").write_text("x", encoding="utf-8")
-    (config.corpus_root / "libraries" / "ALPHA").mkdir()  # same slug as "alpha"
+    # Two folders with the same slug ("beta-gamma"); distinct names on
+    # case-insensitive filesystems too, unlike "alpha" vs "ALPHA".
+    (config.corpus_root / "libraries" / "beta gamma").mkdir()
+    (config.corpus_root / "libraries" / "beta-gamma").mkdir()
     registry = Registry(config.registry_path)
     writes: list[int] = []
     real_write = registry._write_json
@@ -178,20 +183,28 @@ def test_register_corpus_folders_counts_sorted_and_single_write(
     monkeypatch.setattr(registry, "_write_json", counting)
     with caplog.at_level(logging.WARNING, logger="knowledge_engine.core.watcher"):
         counts = watcher.register_corpus_folders(config, registry)
-    # Two folders share the slug "alpha": as before the refactor the later one
-    # wins and both count as added, but the collision is now logged.
-    assert counts == {"library": 3, "skill": 0, "kit": 0, "tool": 1, "skipped": 0}
+    # Two folders share the slug "beta-gamma": as before the refactor the later
+    # one (in sorted order) wins and both count as added; the collision is logged.
+    assert counts == {"library": 4, "skill": 0, "kit": 0, "tool": 1, "skipped": 0}
     assert writes == [1]
-    assert [e["id"] for e in registry.list("library")] == ["library-alpha", "library-zeta"]
-    assert registry.get("library-alpha")["name"] == "alpha"  # type: ignore[index]
-    assert "duplicate corpus slug 'library-alpha'" in caplog.text
+    # Insertion order follows the sorted directory walk ("Zeta" sorts before
+    # the lowercase names); the replaced duplicate keeps its slot.
+    assert [e["id"] for e in registry.list("library")] == [
+        "library-zeta",
+        "library-alpha",
+        "library-beta-gamma",
+    ]
+    assert registry.get("library-beta-gamma")["name"] == "beta-gamma"  # type: ignore[index]
+    assert "duplicate corpus slug 'library-beta-gamma'" in caplog.text
     assert registry.get("tool-my-tool")["path"] == "capabilities/My Tool"  # type: ignore[index]
 
     changed: list[int] = []
-    assert watcher.auto_register(config, registry, lambda: changed.append(1)) == 0
+    added = watcher.auto_register(config, registry, lambda: changed.append(1))
+    assert added == 0
     assert changed == []
     (config.corpus_root / "skills" / "new").mkdir(parents=True)
-    assert watcher.auto_register(config, registry, lambda: changed.append(1)) == 1
+    added = watcher.auto_register(config, registry, lambda: changed.append(1))
+    assert added == 1
     assert changed == [1]
 
 

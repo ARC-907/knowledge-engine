@@ -20,10 +20,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# Back-compat alias; the corpus-folder → kind map lives in core.registry.
-_FOLDER_TO_KIND = CORPUS_FOLDER_TO_KIND
-
-
 def register_corpus_folders(config: Config, registry: Registry) -> dict[str, int]:
     """Register every folder under ``corpus/{libraries,skills,kits,capabilities}``.
 

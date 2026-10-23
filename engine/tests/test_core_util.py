@@ -252,7 +252,7 @@ def test_connect_memory_and_check_same_thread() -> None:
     def use() -> None:
         try:
             conn.execute("SELECT 1").fetchone()
-        except BaseException as exc:  # pragma: no cover - failure path
+        except Exception as exc:  # pragma: no cover - failure path
             errors.append(exc)
 
     thread = threading.Thread(target=use)
@@ -268,6 +268,10 @@ def test_project_context_and_foundation_use_shared_connect() -> None:
     assert pc_db.connect is ke_sqlite.connect
 
 
+def _boom() -> None:
+    raise RuntimeError("boom")
+
+
 def test_transaction_commits_and_rolls_back(tmp_path: Path) -> None:
     conn = ke_sqlite.connect(tmp_path / "t.db")
     conn.execute("CREATE TABLE t (v INTEGER)")
@@ -276,7 +280,7 @@ def test_transaction_commits_and_rolls_back(tmp_path: Path) -> None:
         conn.execute("INSERT INTO t VALUES (1)")
     with pytest.raises(RuntimeError), ke_sqlite.transaction(conn, immediate=True):
         conn.execute("INSERT INTO t VALUES (2)")
-        raise RuntimeError("boom")
+        _boom()
     assert [row[0] for row in conn.execute("SELECT v FROM t")] == [1]
     conn.close()
 

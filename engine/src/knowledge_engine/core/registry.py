@@ -53,9 +53,6 @@ CORPUS_FOLDER_TO_KIND: dict[str, EntryKind] = {
     "capabilities": "tool",
 }
 
-# Back-compat private aliases.
-_KIND_TO_BUCKET = KIND_TO_BUCKET
-_BUCKET_TO_KIND = BUCKET_TO_KIND
 
 _T = TypeVar("_T")
 
