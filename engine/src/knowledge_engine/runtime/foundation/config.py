@@ -111,7 +111,12 @@ def _load_yaml(filename: str) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
     with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{path}: expected a YAML mapping at the top level, got {type(data).__name__}"
+        )
+    return data
 
 
 def _write_yaml(filename: str, data: dict[str, Any]) -> Path:
