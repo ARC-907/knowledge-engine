@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -278,11 +279,18 @@ def test_corpus_index_falls_back_per_chunk(monkeypatch: pytest.MonkeyPatch, tmp_
     assert index._embed_texts(["good", "bad"]) == [[1.0], None]
 
 
-def test_corpus_embed_chunks_count_malformed_url_as_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    from knowledge_engine.retrieval.embeddings import build
+def test_corpus_index_reports_malformed_url_as_a_structured_error(tmp_path: Path) -> None:
+    """A malformed Ollama URL surfaces as an embedding error, never as httpx.InvalidURL."""
+    from knowledge_engine.project_context.embeddings.local import LocalOllamaProvider
+    from knowledge_engine.retrieval.embeddings.errors import EmbeddingError
+    from knowledge_engine.retrieval.embeddings.index import CorpusEmbeddingIndex
 
-    monkeypatch.setattr(build, "OLLAMA_URL", "http://127.0.0.1:notaport")
-    assert build._embed_chunks("f.md", [{"text": "hello", "heading": ""}]) == [None]
+    provider = LocalOllamaProvider("bge-m3", "http://127.0.0.1:notaport")
+    index = CorpusEmbeddingIndex(tmp_path / "embeddings.db", provider)
+    with pytest.raises(EmbeddingError) as excinfo:
+        index._embed_texts(["hello"])
+    assert not isinstance(excinfo.value, httpx.InvalidURL)
+    assert "notaport" in str(excinfo.value) or "invalid" in str(excinfo.value).lower()
 
 
 def test_task_classifier_uses_ollama_client(monkeypatch: pytest.MonkeyPatch) -> None:
