@@ -67,8 +67,8 @@ scripts, services, static resources, or sandbox-exposed actions.
 be a script, service proxy, or static file/directory. An empty install may have
 zero hosted tools, but the hosting substrate still exists.
 
-**Execution Adapter** is the bridge to an external or sandboxed agent engine,
-for example OpenClaw/NemoClaw. It receives only the tools, skills, and context
+**Execution Adapter** is the bridge to an external or sandboxed agent engine
+(an external sandbox adapter). It receives only the tools, skills, and context
 allowed by scope policy.
 
 ## Retrieval
@@ -99,4 +99,4 @@ requires selected sources, selected scopes, policy approval, and traceability.
   that a skill or kit.
 - Do not call local scoped memory "global" unless it has been explicitly
   promoted.
-- Treat OpenClaw/NemoClaw as an execution adapter, not as the knowledge store.
+- Treat external agent runtimes as execution adapters, not as the knowledge store.

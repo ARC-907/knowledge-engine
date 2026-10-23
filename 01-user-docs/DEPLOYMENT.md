@@ -123,13 +123,87 @@ The engine can route text generation to providers. If you wire those up:
 - `corpus/registry.json` *is* worth backing up — it records what's enabled.
   It's small and lives with the corpus.
 
-## A note on Docker
+## Docker
 
-A Docker Compose template is **not** part of v1.0. The engine is a standard
-Python package, so containerizing it is straightforward if you want to — a
-slim Python base image, `pip install -e ./engine`, the uvicorn command as the
-entrypoint, and the corpus mounted as a volume. A maintained Compose template
-is on the roadmap for a later release.
+The repository root ships a `Dockerfile` and a `compose.yaml`. The image is a
+multi-stage build: uv installs the locked dependency set and the engine into a
+virtual environment, which is copied into a slim Python runtime. The server
+runs as an unprivileged user (UID/GID 10001) on port 9210, and a
+`HEALTHCHECK` polls `/health`.
+
+Inside the container everything lives under `/data` (`KE_HOME=/data`, also the
+working directory):
+
+| Path | Contents | Set by |
+| --- | --- | --- |
+| `/data/corpus` | Your corpus, including `registry.json` — mount it | `KE_CORPUS_ROOT=/data/corpus` |
+| `/data/.knowledge-engine/data` | FTS5 index, registry cache, agent-board databases | `KE_DATA_DIR` |
+
+### Compose
+
+```sh
+docker compose up -d --build                                   # build + start
+docker compose exec knowledge-engine knowledge-engine reindex  # build the index
+curl http://127.0.0.1:9210/health
+```
+
+- `./corpus` is mounted **read-only** and must already contain
+  `registry.json`; the engine writes a default registry when the file is
+  missing, which fails on a read-only mount. Search, reindexing, and the agent
+  board work with a read-only corpus.
+- Registry edits (`POST /registry`, toggle, delete, lifecycle changes,
+  `knowledge-engine bootstrap`, `knowledge-engine watch`) write
+  `registry.json` and need two things: a writable mount (drop `:ro` from the
+  volume line) **and** a container user that may write to `./corpus`. The
+  service runs as UID/GID 10001, so either build the image with your own ids
+  (`KE_UID=$(id -u) KE_GID=$(id -g) docker compose build`) or
+  `chown -R 10001:10001 corpus`. First run for a new corpus: mount it writable,
+  run `docker compose exec knowledge-engine knowledge-engine bootstrap`, then
+  switch back to `:ro`.
+- The named volume `ke-data` holds `/data/.knowledge-engine`, so indexes and
+  board databases survive restarts and image rebuilds. `docker compose down -v`
+  deletes it; the index can always be rebuilt with `reindex`.
+- The port is published on `127.0.0.1` only. The same rules as above apply to
+  wider exposure: reverse proxy, authentication, and TLS in front.
+- The service runs with a read-only root filesystem, all Linux capabilities
+  dropped, and `no-new-privileges`.
+
+### Plain `docker`
+
+```sh
+docker build -t knowledge-engine:local .
+docker run -d --name knowledge-engine -p 127.0.0.1:9210:9210 \
+  -v "$PWD/corpus:/data/corpus:ro" \
+  -v ke-data:/data/.knowledge-engine \
+  knowledge-engine:local
+docker exec knowledge-engine knowledge-engine reindex
+```
+
+The entrypoint is the `knowledge-engine` CLI and the default command is
+`serve --host 0.0.0.0 --port 9210`, so any other subcommand can be run in
+place of it — for example `docker run --rm -i -v "$PWD/corpus:/data/corpus:ro"
+knowledge-engine:local mcp` for an MCP client that launches the stdio server.
+
+- The index is built on demand: run `reindex` (CLI or `POST /search/reindex`)
+  after the first start and whenever the corpus changes.
+- The image's `HEALTHCHECK` always probes `http://127.0.0.1:9210/health`. When
+  you run a non-serving subcommand (such as `mcp`) or change the port, disable
+  it with `docker run --no-healthcheck` (compose: `healthcheck: {disable: true}`)
+  or the container will be reported unhealthy.
+- `VOLUME /data` means every `docker run` without `-v` for `/data` creates an
+  anonymous volume. Use `--rm` for one-off commands and `docker rm -v` when
+  removing a named container, so those volumes do not accumulate.
+- Pass provider settings and other `KE_*` variables with `-e` / `--env-file`
+  (or `environment:` / `env_file:` in compose). Never bake API keys into the
+  image. To reach an Ollama server on the host, point every Ollama consumer at
+  it: `OLLAMA_BASE_URL` (generation), `KE_OLLAMA_URL` (corpus embeddings) and,
+  if you use the task classifier, `KE_CLASSIFIER_ENDPOINT` (for example
+  `http://host.docker.internal:11434`, with
+  `--add-host=host.docker.internal:host-gateway` on Linux).
+- The base images can be overridden at build time with
+  `--build-arg BUILDER_IMAGE=...` and `--build-arg RUNTIME_IMAGE=...` (for
+  example to use a registry mirror); the user and group IDs with
+  `--build-arg KE_UID=...` / `KE_GID=...`.
 
 ## Upgrades
 

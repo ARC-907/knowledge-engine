@@ -11,7 +11,14 @@ from knowledge_engine.project_context import schema
 from knowledge_engine.project_context.config import ProjectContextConfig, ScannerCfg
 from knowledge_engine.project_context.models import Candidate
 from knowledge_engine.project_context.scanner import discovery
+from knowledge_engine.project_context.scanner.comments import CommentDetector
+from knowledge_engine.project_context.scanner.docstrings import DocstringDetector
+from knowledge_engine.project_context.scanner.logs import LogDetector
+from knowledge_engine.project_context.scanner.markdown import MarkdownDetector
 from knowledge_engine.project_context.scanner.validators import GateError, preflight
+
+#: Tracked, sanitized sample project (engine/tests/fixtures/sample_project).
+SAMPLE_PROJECT = Path(__file__).resolve().parent.parent / "fixtures" / "sample_project"
 
 
 def _cfg(**scanner_kwargs) -> ProjectContextConfig:
@@ -89,6 +96,41 @@ def test_walk_always_skips_git_dir(tmp_path: Path) -> None:
     names = _walk_names(tmp_path, cfg)
     assert "doc.md" in names
     assert "config" not in names
+
+
+def test_walk_sample_project_fixture_finds_expected_files() -> None:
+    """A real walk over the tracked sample project yields its source, docs, and devlog."""
+    assert SAMPLE_PROJECT.is_dir(), f"fixture missing: {SAMPLE_PROJECT}"
+    cfg = _cfg(enabled=True)
+    walked = {p.relative_to(SAMPLE_PROJECT).as_posix() for p in discovery.walk(SAMPLE_PROJECT, cfg)}
+    assert {
+        "src/widget.py",
+        "docs/overview.md",
+        "devlog/2026-01-01-init.md",
+        "logs/test-output.txt",
+    } <= walked
+
+
+def test_run_detectors_on_sample_project_fixture() -> None:
+    """The real detectors classify the sample project's files into the expected categories."""
+    cfg = _cfg(enabled=True)  # default discovery gates
+    detectors = [MarkdownDetector(), DocstringDetector(), CommentDetector(), LogDetector()]
+    candidates = discovery.run_detectors(SAMPLE_PROJECT, cfg, detectors)
+
+    categories: dict[str, set[str]] = {}
+    for cand in candidates:
+        categories.setdefault(cand.source_path, set()).add(cand.category)
+
+    assert schema.CATEGORY_DOC in categories["docs/overview.md"]
+    assert schema.CATEGORY_DEVLOG in categories["devlog/2026-01-01-init.md"]
+    assert schema.CATEGORY_DOCSTRING in categories["src/widget.py"]
+    assert schema.CATEGORY_TEST_LOG in categories["logs/test-output.txt"]
+
+    # Module, ``validate`` and ``handle`` docstrings, each with a source span.
+    widget = [c for c in candidates if c.source_path == "src/widget.py"]
+    assert {c.subtype for c in widget} >= {"module", "function"}
+    assert len(widget) == 3
+    assert all(c.span is not None for c in widget)
 
 
 def test_run_detectors_isolates_failure(tmp_path: Path) -> None:

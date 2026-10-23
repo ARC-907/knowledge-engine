@@ -64,9 +64,11 @@ class Indexer:
                 if not entry_root.exists():
                     counts["missing"] += 1
                     _logger.warning(
-                        "Library %r referenced in registry.json but not found "
-                        "at %s — see README for the Pro bundle (delivered via Polar) "
-                        "if you expected curated libraries to be present.",
+                        "Library %r is listed in registry.json but its content is "
+                        "missing from the corpus (expected at %s). Add the library "
+                        "folder under the corpus root (KE_CORPUS_ROOT) and reindex, "
+                        "or disable the entry in registry.json; see "
+                        "01-user-docs/BRING-YOUR-OWN-CORPUS.md.",
                         entry.get("name") or entry.get("id"),
                         entry_root,
                     )
