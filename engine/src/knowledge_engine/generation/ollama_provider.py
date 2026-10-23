@@ -1,5 +1,6 @@
 """Local Ollama provider - optional adjunct.
 
+HTTP goes through :class:`knowledge_engine.core.ollama.OllamaClient`.
 Environment variables read (through :class:`~knowledge_engine.core.settings.Settings`):
 ``OLLAMA_BASE_URL`` (default ``http://127.0.0.1:11434``), ``OLLAMA_MODEL``
 (default ``llama3.2``) and ``OLLAMA_TIMEOUT`` (seconds, default 30).
@@ -10,8 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-import httpx
-
+from ..core.ollama import DEFAULT_BASE_URL, PROBE_TIMEOUT, OllamaClient, OllamaError
 from .base import GenerationRequest, GenerationResponse, Provider, ProviderError
 
 if TYPE_CHECKING:
@@ -19,11 +19,12 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-#: Timeout of the ``/api/tags`` availability probe.
-PROBE_TIMEOUT = 2.0
+__all__ = ["PROBE_TIMEOUT", "OllamaProvider"]
 
 
 class OllamaProvider(Provider):
+    """Text generation through :class:`knowledge_engine.core.ollama.OllamaClient`."""
+
     name = "ollama"
 
     def __init__(
@@ -39,45 +40,27 @@ class OllamaProvider(Provider):
 
             settings = Settings()
         self.base_url = (
-            base_url or (settings.ollama_base_url if settings else "http://127.0.0.1:11434")
+            base_url or (settings.ollama_base_url if settings else DEFAULT_BASE_URL)
         ).rstrip("/")
         self.model = model or (settings.ollama_model if settings else "llama3.2")
         self._timeout = float(
             timeout if timeout is not None else settings.ollama_timeout if settings else 30.0
         )
+        self.client = OllamaClient(self.base_url, self._timeout, probe_timeout=PROBE_TIMEOUT)
 
     def available(self) -> bool:
-        try:
-            r = httpx.get(f"{self.base_url}/api/tags", timeout=PROBE_TIMEOUT)
-            return r.status_code == 200
-        except (httpx.HTTPError, OSError):
-            return False
+        return self.client.available()
 
     def generate(self, request: GenerationRequest) -> GenerationResponse:
         model = request.model or self.model
-        payload = {
-            "model": model,
-            "prompt": request.prompt,
-            "stream": False,
-            "options": {"temperature": request.temperature, "num_predict": request.max_tokens},
-        }
         try:
-            r = httpx.post(f"{self.base_url}/api/generate", json=payload, timeout=self._timeout)
-        except httpx.TimeoutException as exc:
-            raise ProviderError(self.name, f"timed out after {self._timeout:g}s") from exc
-        except (httpx.HTTPError, OSError) as exc:
-            raise ProviderError(self.name, f"request failed: {type(exc).__name__}") from exc
-        if r.status_code >= 400:
-            _logger.warning("ollama: HTTP %d from %s/api/generate", r.status_code, self.base_url)
-            raise ProviderError(
-                self.name, f"upstream returned HTTP {r.status_code}", status_code=r.status_code
+            data = self.client.generate(
+                model,
+                request.prompt,
+                options={"temperature": request.temperature, "num_predict": request.max_tokens},
             )
-        try:
-            data = r.json()
-        except ValueError as exc:
-            raise ProviderError(self.name, "upstream returned invalid JSON") from exc
-        if not isinstance(data, dict):
-            raise ProviderError(self.name, "upstream returned a non-object JSON body")
+        except OllamaError as exc:
+            raise ProviderError(self.name, str(exc), status_code=exc.status_code) from exc
         return GenerationResponse(
             text=str(data.get("response", "")),
             provider=self.name,

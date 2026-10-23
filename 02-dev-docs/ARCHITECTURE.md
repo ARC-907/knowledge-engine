@@ -45,7 +45,7 @@ surface over several source-owned systems:
 | Agent board | Scoped agent messages, digests, blockers, acknowledgements | `/board/*`, board CLI, `board_*` MCP tools |
 | Hosted tools | Script/service/static tool registrations | `tool_host/host.py` backed by `runtime.foundation.db` |
 | Foundation | Shared substrate, provider bindings, queues, tool records, future catalog/memory | SQLite WAL backbone and optional pipeline modules |
-| Sandbox/execution adapter | Execution delegated to an external or sandboxed agent runtime | `sandbox/` factory hook and `sandbox_adapter/` bring-your-own executor |
+| Sandbox/execution adapter | Execution delegated to an external or sandboxed agent runtime | `runtime/sandbox/` factory hook (`get_sandbox()`); bring your own executor |
 
 The future retrieval broker should normalize and govern these existing
 surfaces. It should not flatten all stores into one database. Each source keeps
@@ -76,8 +76,6 @@ engine/                          the engine (code layer)
     agent_board/                 agent coordination surface — schemas, scopes (per-project/branch/agent DB routing), store, FTS5 search, keys, provider_registry, sweeper, CLI, MCP tool group
     tool_host/                   opt-in tool host (script/service/static tool registry over HTTP)
     runtime/                     execution substrate — foundation/ (YAML config + SQLite WAL backbone), pipeline/ (queue + message board + worker registry + task classifier), sandbox/ hook
-  routing_local/                 opt-in Ollama provider module
-  sandbox_adapter/              opt-in sandboxed-agent scaffold (README only)
   tests/                         pytest smoke + regression tests
 
 scripts/
@@ -208,9 +206,18 @@ Several subsystems are **opt-in** and the lean core works without them:
 
 - `retrieval/embeddings/` — bge-m3 semantic search via Ollama. Build with
   `python -m knowledge_engine.retrieval.embeddings.build`.
-- `routing_local/` — the Ollama provider for local model routing.
-- `sandbox_adapter/` — a scaffold for sandboxed-agent execution; ships as a
-  README only. Bring your own executor.
+- Ollama — every Ollama HTTP call (the `ollama` generation provider, corpus
+  and project-context embeddings, the pipeline task classifier) goes through
+  one client, `core/ollama.py` (`OllamaClient`: `available()`, `generate()`,
+  batched `embed()`). Each consumer keeps its own variables (`OLLAMA_BASE_URL`
+  / `OLLAMA_MODEL` / `OLLAMA_TIMEOUT`, `KE_OLLAMA_URL` / `KE_EMBED_MODEL`,
+  the project-context `[embeddings] url`, `KE_CLASSIFIER_ENDPOINT`); the
+  module docstring lists the precedence.
+- `runtime/sandbox/` — the sandboxed-execution hook. `get_sandbox()` returns a
+  `NoopSandbox` (every `run(command, stdin=None, timeout=30.0)` answers
+  `SandboxResult(returncode=127)`); to delegate heavy or containerized work
+  (Docker, WSL, Firecracker, a subprocess jail), return your own object with
+  the same `run()` signature from that factory. Disabled by default.
 - `runtime/foundation/` — YAML config loader (`config.py`) + SQLite WAL backbone
   (`db.py`). The shared base for the pipeline and tool-host layers. Lives under
   `$KE_PIPELINE_ROOT` (default: `./pipeline`); SQLite at `$KE_PIPELINE_DB`

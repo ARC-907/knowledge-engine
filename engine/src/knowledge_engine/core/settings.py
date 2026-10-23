@@ -5,14 +5,14 @@ with its exact name, type and default (plus the three ``OLLAMA_*`` variables
 the Ollama provider has always honoured and the ``BOARD_HOST``/``BOARD_PORT``
 defaults of ``board-serve``). The HTTP server, the CLI's ``serve`` commands,
 the generation providers and the agent board's HTTP surface, standalone
-service and sweeper read their configuration from a ``Settings`` instance
-instead of ``os.environ``.
+service and sweeper and the ``knowledge-engine board`` client read their
+configuration from a ``Settings`` instance instead of ``os.environ``.
 
 A few substrate modules still read their own variables directly, deep inside
 code that predates this layer (``runtime.foundation.config``/``db``,
 ``runtime.pipeline.task_classifier``, ``project_context.config``,
-``retrieval.embeddings.build``, ``agent_board.cli``/``scopes`` and
-``mcp.http``/``mcp.server``). Those variables are declared here too, so
+``retrieval.embeddings.build``, ``agent_board.scopes`` and
+``mcp.http``/``mcp.server``, through the shared parsers in ``core.util.env``). Those variables are declared here too, so
 ``knowledge-engine config show`` and ``01-user-docs/CONFIGURATION.md`` list
 them, and the ``Read by`` column names the module that consumes each one.
 

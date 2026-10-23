@@ -45,8 +45,8 @@ add your own under `corpus/` and register them (see
 
 ### Optional adjuncts
 
-- `engine/routing_local/ollama_provider.py` — opt-in Ollama provider module
-- `engine/sandbox_adapter/` — opt-in sandbox scaffold (README only — bring your own executor)
+- `runtime/sandbox/` — `get_sandbox()` hook (default `NoopSandbox`); bring your own executor
+- Ollama: `core/ollama.py` (`OllamaClient`) serves the `ollama` generation provider, embeddings and the task classifier
 
 ### Tests (`engine/tests/`)
 

@@ -10,8 +10,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sqlite3
 
+from ...core.util.sqlite import connect as sqlite_connect
 from .build import (
     DB_PATH,
     blob_to_embedding,
@@ -39,8 +39,7 @@ def search(query: str, top: int = 10, library: str | None = None) -> list[dict]:
 
     q_emb = get_embedding(query)
 
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn = sqlite_connect(DB_PATH)
 
     if library:
         rows = conn.execute(

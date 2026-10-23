@@ -16,8 +16,6 @@ subtree is self-contained and can be lifted into its own repo without changes.
   - `agent_board/` — scoped board store, HTTP/CLI/MCP surfaces, sweeper, provider credential bindings
   - `tool_host/` — hosted script/service/static tool registry
   - `runtime/` — execution substrate: `foundation/` (SQLite backbone), `pipeline/`, `sandbox/` hook
-- `routing_local/` — **opt-in** Ollama / local-LLM provider; not imported unless installed
-- `sandbox_adapter/` — **opt-in** Docker / WSL sandbox adapter
 - `tests/` — pytest smoke tests
 
 ## Run
