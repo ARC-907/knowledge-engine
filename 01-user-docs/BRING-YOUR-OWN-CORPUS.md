@@ -88,7 +88,7 @@ $env:KE_CORPUS_ROOT = "C:\path\to\my\markdown"
 $env:KE_REGISTRY_PATH = "C:\path\to\my\markdown\registry.json"
 knowledge-engine bootstrap
 knowledge-engine reindex
-.\scripts\serve.ps1
+knowledge-engine serve
 ```
 
 ```bash
@@ -97,12 +97,13 @@ export KE_CORPUS_ROOT="/path/to/my/markdown"
 export KE_REGISTRY_PATH="/path/to/my/markdown/registry.json"
 knowledge-engine bootstrap
 knowledge-engine reindex
-./scripts/serve.sh
+knowledge-engine serve
 ```
 
-The `serve` scripts set `KE_CORPUS_ROOT`, `KE_DATA_DIR`, and `KE_REGISTRY_PATH`
-to the in-repo defaults — if you point at an external corpus, either edit the
-serve script or run `knowledge-engine serve` directly with your env vars set.
+(Prefix each command with `uv run --project engine` if the venv is not
+activated.) `KE_CORPUS_ROOT`, `KE_DATA_DIR`, and `KE_REGISTRY_PATH` default to
+the checkout's `corpus/` layout; set them before `serve` to point at an
+external corpus.
 
 The registry file will be created at `KE_REGISTRY_PATH` on first run if it
 doesn't exist.

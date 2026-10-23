@@ -23,12 +23,10 @@ hardening that requires.
 
 ## Localhost (the default)
 
-This is what the `serve` scripts do, and what [QUICKSTART.md](QUICKSTART.md)
-walks through:
+This is what [QUICKSTART.md](QUICKSTART.md) walks through:
 
-```pwsh
-.\scripts\serve.ps1     # Windows
-./scripts/serve.sh      # macOS / Linux
+```bash
+uv run --project engine knowledge-engine serve
 ```
 
 The server binds `127.0.0.1:9210` — reachable only from the same machine. For

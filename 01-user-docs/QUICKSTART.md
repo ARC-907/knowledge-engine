@@ -12,25 +12,17 @@ checkout.
 
 ## 1. Install (≈ 3 minutes)
 
-The install script creates a virtualenv under `engine/.venv` and installs the
-engine package into it as an editable install.
-
-**Windows (PowerShell):**
-
-```pwsh
-.\scripts\install.ps1
-.\engine\.venv\Scripts\Activate.ps1
-```
-
-**macOS / Linux:**
+Install [`uv`](https://docs.astral.sh/uv/), then create the project
+virtualenv under `engine/.venv` (the engine is installed into it editable):
 
 ```bash
-./scripts/install.sh
-source engine/.venv/bin/activate
+uv sync --project engine
 ```
 
-When the script finishes you have a `knowledge-engine` command on your PATH
-(inside the activated virtualenv).
+Every command below is run through `uv run --project engine ...`; to type
+`knowledge-engine` directly instead, activate the venv
+(`source engine/.venv/bin/activate`, or `.\engine\.venv\Scripts\Activate.ps1`
+on Windows).
 
 ## 2. Bootstrap (≈ 5 seconds)
 
@@ -86,14 +78,8 @@ anything looks off.
 
 ## 5. Serve the dashboard (≈ 5 seconds)
 
-```pwsh
-# Windows
-.\scripts\serve.ps1
-```
-
 ```bash
-# macOS / Linux
-./scripts/serve.sh
+uv run --project engine knowledge-engine serve
 ```
 
 The server starts on port **9210**. Open:
@@ -105,8 +91,7 @@ In the dashboard you can type a query, see ranked results with snippets, filter
 by kind, toggle libraries on and off, and trigger a reindex — all without
 touching the CLI again.
 
-> The serve script uses port 9210. To change it, set `KE_PORT` before running
-> the script, or run `knowledge-engine serve --port <n>` directly.
+> `serve` uses port 9210. To change it, run `knowledge-engine serve --port <n>`.
 
 ## You are at the 10-minute milestone
 

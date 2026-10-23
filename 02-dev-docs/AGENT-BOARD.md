@@ -41,10 +41,10 @@ The engine ships with the board on by default. To turn it off, set
 
 ```powershell
 # 0. One-time: install the engine as an editable package
-scripts\install.ps1
+uv sync --project engine
 
 # 1. Start the engine (FastAPI on 9210)
-scripts\serve.ps1
+uv run --project engine knowledge-engine serve
 
 # 2. From any worktree, post a claim
 knowledge-engine board post --from feat/auth --channel ops `
@@ -332,16 +332,11 @@ own port (default 11437 to avoid colliding with the engine's 9210):
 knowledge-engine board-serve --port 11437
 ```
 
-Windows watchdog (auto-restart if the service dies):
+Windows watchdog (auto-restarts its own child if the service dies; see
+`scripts/agent-board/README.md`):
 
 ```text
-scripts\agent-board\start-board.bat
-```
-
-POSIX foreground launcher:
-
-```text
-BOARD_PORT=11437 scripts/agent-board/serve-board.sh
+pwsh -NoProfile -File scripts\agent-board\board-watchdog.ps1 -Port 11437
 ```
 
 The standalone app exposes only `/board/*` and `/health` — no `/search`,
@@ -401,9 +396,7 @@ engine/src/knowledge_engine/
     mcp_tools/         15 MCP tools auto-discovered
   server/api/board_routes.py  FastAPI routes mounted at /board
 scripts/agent-board/
-  start-board.bat      Windows launcher
   board-watchdog.ps1   Windows watchdog
-  serve-board.sh       POSIX launcher
 engine/tests/
   test_agent_board.py  36 tests covering schema, store, FTS, keys, HTTP, MCP
 ```

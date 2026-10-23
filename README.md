@@ -12,31 +12,26 @@ Knowledge-Engine indexes a folder of markdown, serves full-text (and optional se
 
 ## Quickstart
 
-> **Prerequisite (Debian / Ubuntu):** install `python3-venv` first — `sudo apt install python3-venv`. Required by `python3 -m venv`; bundled on macOS and Windows.
-
-```pwsh
-# Windows
-.\scripts\install.ps1
-.\engine\.venv\Scripts\Activate.ps1
-knowledge-engine bootstrap
-knowledge-engine capabilities
-knowledge-engine reindex
-.\scripts\serve.ps1
-# open http://127.0.0.1:9210/ui/
-```
+> **Prerequisite:** [`uv`](https://docs.astral.sh/uv/) (it installs the right Python for you). No Node toolchain is needed to run the engine or the dashboard.
 
 ```bash
-# macOS / Linux
-./scripts/install.sh
-source engine/.venv/bin/activate
-knowledge-engine bootstrap
-knowledge-engine capabilities
-knowledge-engine reindex
-./scripts/serve.sh
+# Windows, macOS, Linux — same commands
+uv sync --project engine                 # creates engine/.venv with the engine + dev tools
+uv run --project engine knowledge-engine bootstrap
+uv run --project engine knowledge-engine capabilities
+uv run --project engine knowledge-engine reindex
+uv run --project engine knowledge-engine serve
 # open http://127.0.0.1:9210/ui/
 ```
 
-After `serve`, the dashboard is at <http://127.0.0.1:9210/ui/> and the OpenAPI docs are at <http://127.0.0.1:9210/docs>.
+Prefer a global `knowledge-engine` command instead of a checkout? Once a release is published:
+
+```bash
+uv tool install git+https://github.com/ARC-907/knowledge-engine#subdirectory=engine
+knowledge-engine serve
+```
+
+After `serve`, the dashboard is at <http://127.0.0.1:9210/ui/> and the OpenAPI docs are at <http://127.0.0.1:9210/docs>. Run `uv run --project engine knowledge-engine serve --port <n>` to change the port.
 
 The repo ships a small demo corpus — **1 demo library** (`corpus/samples/demo-library`) and **1 demo skill** (`corpus/samples/demo-skill`), both enabled by default — so `reindex` does real work on a fresh clone. Replace them with your own content when you're ready (see [Bring your own corpus](01-user-docs/BRING-YOUR-OWN-CORPUS.md)).
 
@@ -46,7 +41,7 @@ If `corpus/registry.json` references a library that isn't present in `corpus/`, 
 
 ## What's in the box
 
-- FastAPI app with health, info, search, registry, generation, and board routes; single-file Alpine.js + Tailwind dashboard at `/ui/`
+- FastAPI app with health, info, search, registry, generation, and board routes; Alpine.js + compiled-Tailwind dashboard at `/ui/` (light/dark, keyboard-accessible, no CDN)
 - MCP server on the official MCP Python SDK (stdio or streamable HTTP; protocol `2026-07-28`, `initialize` clients back to `2024-11-05`) — compatible with Claude Desktop, Cursor, Continue, any MCP client
 - SQLite FTS5 indexer with `bm25` ranking + snippet highlighting; optional bge-m3 embedding index for semantic search
 - Pluggable provider abstraction (echo / Ollama / cloud HTTP stub) for generation routing
