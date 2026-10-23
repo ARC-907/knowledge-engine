@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import sys
 from pathlib import Path
@@ -139,7 +140,14 @@ def test_secrets_are_masked_and_never_logged(
 
 def test_exact_env_names_are_case_sensitive(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ke_bind_host", "10.0.0.1")
-    assert Settings().bind_host == "127.0.0.1"
+    if os.name == "nt":
+        # Windows environment variable names are case-insensitive at the OS
+        # level (os.environ upper-cases them), so the lowercase spelling is
+        # the same variable there.
+        assert Settings().bind_host == "10.0.0.1"
+        monkeypatch.delenv("ke_bind_host")
+    else:
+        assert Settings().bind_host == "127.0.0.1"
     monkeypatch.setenv("KE_BIND_HOST", "  ")
     assert Settings().bind_host == "127.0.0.1"
     monkeypatch.setenv("KE_BIND_HOST", "0.0.0.0")  # noqa: S104 -- value under test
