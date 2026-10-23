@@ -5,10 +5,13 @@ machine, and that's a fully supported, intended way to run it. This guide
 covers running it beyond the laptop — on a server, on your LAN, with the
 hardening that requires.
 
-> **Read this first:** the engine ships as **local-trust**. There is no
-> authentication and CORS is fully open. It is safe on `localhost`. It is
-> **not** safe exposed directly to the internet. Everything below about
-> network exposure assumes you add the protections described here.
+> **Read this first:** the engine ships as **local-trust**. The core
+> routes (search, registry, generation) have no authentication; CORS is
+> limited to loopback origins by default (`KE_CORS_ORIGINS` to change it);
+> the agent board's admin routes require a key. It is safe on `localhost`.
+> It is **not** safe exposed directly to the internet. Everything below
+> about network exposure assumes you add the protections described here.
+> See [`SECURITY.md`](../SECURITY.md) for the trust model and reporting.
 
 ## Deployment modes
 
@@ -88,9 +91,16 @@ not enough. You **must** add a layer in front of it:
       /registry/.../toggle`, `DELETE /registry/...`, and `POST
       /search/reindex` all mutate state. At minimum, require auth for them; if
       you only need read access, block them at the proxy.
-- [ ] **Tighten CORS** — the app sets `allow_origins=["*"]`. If the dashboard
-      is served from a known origin, restrict CORS to it (edit
-      `engine/src/knowledge_engine/app.py`, the `CORSMiddleware` block).
+- [ ] **CORS** — the app allows loopback origins only by default. If a
+      browser UI is served from another origin, list it in
+      `KE_CORS_ORIGINS` (comma-separated); `*` is accepted only when set
+      explicitly. The dashboard at `/ui` is same-origin and needs nothing.
+- [ ] **Agent board** — admin routes need a key: run
+      `knowledge-engine board keys bootstrap-master` on the host once and
+      keep the key out of the browser. Set `KE_BOARD_TRUSTED_CIDRS` to the
+      networks that may read/post, and `KE_TRUST_PROXY=1` (plus
+      `KE_TRUSTED_PROXIES` if the proxy is not on the same box) so the
+      board sees real client addresses behind your reverse proxy.
 - [ ] **Rate limiting** — apply it at the proxy to blunt abuse and scraping.
 
 The engine is open source (MIT) — if you need real auth *inside* the app rather
