@@ -15,7 +15,11 @@ under random ordering:
   starting the background sweeper, which would otherwise post digests and
   reminders into the database a test is asserting on. A test that needs the
   sweeper sets ``KE_BOARD_SWEEPER=1`` itself.
-* **Module state** -- the sweeper singleton is stopped and cleared, and this
+* **Provider probe** -- ``KE_PROVIDER_STARTUP_PROBE=0`` keeps the app lifespan
+  from probing generation providers (an HTTP call to a local Ollama) on a
+  background thread; tests stay offline and deterministic. A test that needs
+  the probe sets it itself.
+* **Module state** -- the default sweeper is stopped and cleared, and this
   thread's cached pipeline-DB connections are closed, before and after each
   test.
 """
@@ -47,6 +51,7 @@ def _isolate_ke_env(tmp_path: Path) -> Iterator[None]:
         del os.environ[key]
     os.environ["KE_HOME"] = str(tmp_path / "ke-home")
     os.environ["KE_BOARD_SWEEPER"] = "0"
+    os.environ["KE_PROVIDER_STARTUP_PROBE"] = "0"
     _reset_engine_state()
     try:
         yield

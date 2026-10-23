@@ -7,6 +7,7 @@
 - Python 3.10+
 - `fastapi`, `uvicorn` — dashboard / API surface
 - `httpx` — HTTP client (cloud routing, future integrations)
+- `pydantic-settings` — typed `KE_*` environment settings (`core/settings.py`)
 - `watchdog` — file-watch for re-index (soft-required; falls back to manual re-bootstrap if missing)
 - `pytest` — included so smoke tests are runnable post-install
 
@@ -16,9 +17,9 @@ All required-core deps are pinned in `engine/pyproject.toml`.
 
 | Feature | Deps | Enabled by |
 | --- | --- | --- |
-| Local model routing via Ollama | Ollama installed at `OLLAMA_BASE_URL` | runtime detection; provider registered if reachable, otherwise skipped |
+| Local model routing via Ollama | Ollama installed at `OLLAMA_BASE_URL` | always registered; reachability probed lazily and cached (`KE_PROVIDER_PROBE_TTL`), unreachable → next provider |
 | Sandboxed agent execution | Docker / WSL / subprocess executor of your choice | `engine/sandbox_adapter/` is a scaffold — bring your own executor |
-| Cloud model routing | API keys for your provider (e.g. `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`) | runtime detection; cloud provider in read-only mode if keys absent |
+| Cloud model routing | An OpenAI-compatible endpoint + key (`KE_CLOUD_ENDPOINT`, `KE_CLOUD_API_KEY`, `KE_CLOUD_MODEL`) | `cloud-http` provider registered first when both endpoint and key are set; otherwise not registered |
 | Filename / fulltext index over external files | Index those files into FTS5 by registering their parent folder | manual — `knowledge-engine reindex` |
 | Pipeline foundation (`runtime/foundation/`) | `pyyaml` for config-loader YAML files | import-time: `KE_PIPELINE_ROOT` / `KE_PIPELINE_DB` env vars; foundation SQLite auto-creates on first connect |
 | Multi-worker pipeline (`runtime/pipeline/`) | `runtime/foundation/` enabled | import-time: enable `runtime/foundation/`, then drive `queue` / `message_board` / `worker_registry` / `task_classifier` from your own worker scripts |

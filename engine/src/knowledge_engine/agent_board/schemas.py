@@ -149,6 +149,94 @@ MAX_LEN_MODEL_ID = 200
 MAX_TTL_HOURS = 24 * 365
 
 
+@dataclass(frozen=True)
+class FieldSpec:
+    """One documented field of a board request body.
+
+    The HTTP layer derives its OpenAPI request models from these tables; the
+    runtime rules stay in :func:`validate` (and the caps above), which the
+    models call, so there is one source of truth for what a message may hold.
+    """
+
+    name: str
+    json_type: str  # "string" | "integer" | "boolean"
+    description: str
+    max_len: int | None = None
+    required: bool = False
+    default: Any = None
+    enum: tuple[str, ...] | None = None
+
+    def json_schema(self) -> dict[str, Any]:
+        schema: dict[str, Any] = {"type": self.json_type, "description": self.description}
+        if self.max_len is not None:
+            schema["maxLength"] = self.max_len
+        if self.default is not None:
+            schema["default"] = self.default
+        if self.enum is not None:
+            schema["enum"] = list(self.enum)
+        if self.name == "ttl_hours":
+            schema.update(minimum=0, maximum=MAX_TTL_HOURS)
+        return schema
+
+
+#: Fields of a message post (``POST /board/messages``), in documentation order.
+MESSAGE_FIELDS: tuple[FieldSpec, ...] = (
+    FieldSpec(
+        "channel",
+        "string",
+        "Channel; must be one of the board's configured channels.",
+        MAX_LEN_CHANNEL,
+        default="ops",
+    ),
+    FieldSpec(
+        "message_type",
+        "string",
+        "Message type (canonical types in GET /board/message_types; custom types allowed).",
+        MAX_LEN_MESSAGE_TYPE,
+        required=True,
+    ),
+    FieldSpec(
+        "sender_node_id",
+        "string",
+        "Identity of the posting agent/node.",
+        MAX_LEN_SENDER_NODE_ID,
+        required=True,
+    ),
+    FieldSpec(
+        "body", "string", "Message body (free text / markdown).", MAX_LEN_BODY, required=True
+    ),
+    FieldSpec("subject", "string", "Optional one-line subject.", MAX_LEN_SUBJECT),
+    FieldSpec(
+        "visibility_scope",
+        "string",
+        "Who should see the message.",
+        default="all",
+        enum=VISIBILITY_SCOPES,
+    ),
+    FieldSpec("sender_role", "string", "Role of the sender.", MAX_LEN_ROLE),
+    FieldSpec("task_id", "string", "Task the message belongs to.", MAX_LEN_TASK_ID),
+    FieldSpec("product_id", "string", "Product (library/chapter) id.", MAX_LEN_PRODUCT_ID),
+    FieldSpec(
+        "target_node_id",
+        "string",
+        "Target node for visibility_scope=node.",
+        MAX_LEN_TARGET_NODE_ID,
+    ),
+    FieldSpec("target_role", "string", "Target role for visibility_scope=role.", MAX_LEN_ROLE),
+    FieldSpec("requires_ack", "boolean", "Ask recipients to acknowledge.", default=False),
+    FieldSpec("reply_to", "string", "message_id this replies to.", MAX_LEN_REPLY_TO),
+    FieldSpec("correlation_id", "string", "Thread correlation id.", MAX_LEN_CORRELATION_ID),
+    FieldSpec("thread_id", "string", "Thread id.", MAX_LEN_THREAD_ID),
+    FieldSpec(
+        "ttl_hours",
+        "integer",
+        "Hours until the message expires (0 = never).",
+        default=168,
+    ),
+    FieldSpec("model_id", "string", "Model that produced the message.", MAX_LEN_MODEL_ID),
+)
+
+
 def _check_len(errors: list[str], name: str, value: Any, cap: int) -> None:
     if value is None:
         return
@@ -157,18 +245,24 @@ def _check_len(errors: list[str], name: str, value: Any, cap: int) -> None:
 
 
 def validate(
-    draft: dict[str, Any], known_channels: list[str] | None = None
+    draft: dict[str, Any],
+    known_channels: list[str] | None = None,
+    *,
+    check_channel: bool = True,
 ) -> tuple[MessageDraft | None, list[str]]:
     """Validate a raw payload. Returns (draft, errors). On error, draft is None.
 
     `known_channels` defaults to DEFAULT_CHANNELS but is normally passed from
     `board_config.channels_json` so runtime additions are respected.
+    `check_channel=False` skips only the channel-membership test (the HTTP
+    request models use it: the configured set lives in the target scope's
+    database and is checked again when the message is stored).
     """
     errors: list[str] = []
     channels = tuple(known_channels) if known_channels else DEFAULT_CHANNELS
 
     channel = str(draft.get("channel") or "ops").strip()
-    if channel not in channels:
+    if check_channel and channel not in channels:
         errors.append(f"channel '{channel}' not in configured set (known: {', '.join(channels)})")
     _check_len(errors, "channel", channel, MAX_LEN_CHANNEL)
 

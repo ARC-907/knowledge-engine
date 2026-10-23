@@ -122,11 +122,19 @@ The engine can route text generation to providers. If you wire those up:
   from the environment at startup. **Never commit them.** Use your platform's
   secret store, or a `.env` file that is gitignored (`.env` is already in
   `.gitignore`).
-- If no provider keys are set, the cloud provider runs read-only and the echo
+- If no provider keys are set, the cloud provider is not registered and the echo
   provider is always available — the engine still serves search and the
   dashboard fine.
+- The `cloud-http` generation provider is a real OpenAI-compatible client: set
+  `KE_CLOUD_ENDPOINT` (e.g. `https://api.openai.com/v1`), `KE_CLOUD_API_KEY`
+  and `KE_CLOUD_MODEL` (optional `KE_CLOUD_TIMEOUT`, default 60 s). Upstream
+  failures answer `502` on `/generate`.
 - The Ollama provider is used automatically if Ollama is reachable at
-  `OLLAMA_BASE_URL`; no key needed.
+  `OLLAMA_BASE_URL`; no key needed. Reachability is probed lazily and cached
+  for `KE_PROVIDER_PROBE_TTL` seconds (default 30); `KE_PROVIDER_ORDER`
+  reorders the providers. Unreachable providers are logged at startup.
+- Every variable is listed in [CONFIGURATION.md](CONFIGURATION.md);
+  `knowledge-engine config show` prints the effective values (secrets masked).
 
 ## Data, backups, and the index
 

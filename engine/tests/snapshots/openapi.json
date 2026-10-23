@@ -1,0 +1,2880 @@
+{
+  "components": {
+    "schemas": {
+      "AckIn": {
+        "additionalProperties": true,
+        "description": "``POST /board/messages/{id}/ack`` body. ``from`` (or ``acker``) is required.",
+        "properties": {
+          "acker": {
+            "description": "Alias of `from`.",
+            "title": "Acker",
+            "type": "string"
+          },
+          "from": {
+            "description": "Identity of the acknowledging agent.",
+            "title": "From",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Optional per-scope database (project/branch/agent/loop). Overrides the `scope` query parameter when both are given.",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "AckIn",
+        "type": "object"
+      },
+      "ConfigPatchIn": {
+        "additionalProperties": true,
+        "description": "``PATCH /board/config`` body: any subset of the board config fields.",
+        "properties": {
+          "channels": {
+            "description": "Full list of configured channels.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "default_ttl_hours": {
+            "description": "Default message TTL in hours.",
+            "title": "Default Ttl Hours",
+            "type": "integer"
+          },
+          "digest_interval_minutes": {
+            "description": "Minutes between per-channel digests (0 = off).",
+            "title": "Digest Interval Minutes",
+            "type": "integer"
+          },
+          "engine_port": {
+            "description": "Engine HTTP port shown to clients.",
+            "title": "Engine Port",
+            "type": "integer"
+          },
+          "max_messages_before_prune": {
+            "description": "Message count that triggers overflow pruning.",
+            "title": "Max Messages Before Prune",
+            "type": "integer"
+          },
+          "require_key_for_post": {
+            "description": "1 to require X-Board-Key for non-loopback writes.",
+            "title": "Require Key For Post",
+            "type": "integer"
+          },
+          "scope": {
+            "description": "Optional per-scope database (project/branch/agent/loop). Overrides the `scope` query parameter when both are given.",
+            "title": "Scope",
+            "type": "string"
+          },
+          "stale_blocker_hours": {
+            "description": "Hours before an unacked blocker gets a reminder.",
+            "title": "Stale Blocker Hours",
+            "type": "integer"
+          },
+          "standalone_port": {
+            "description": "Standalone board service port shown to clients.",
+            "title": "Standalone Port",
+            "type": "integer"
+          },
+          "sweep_interval_s": {
+            "description": "Seconds between sweeper passes.",
+            "title": "Sweep Interval S",
+            "type": "integer"
+          },
+          "sweeper_enabled": {
+            "description": "1 to run the sweeper, 0 to stop it.",
+            "title": "Sweeper Enabled",
+            "type": "integer"
+          }
+        },
+        "title": "ConfigPatchIn",
+        "type": "object"
+      },
+      "EntryIn": {
+        "properties": {
+          "auto_registered": {
+            "default": false,
+            "title": "Auto Registered",
+            "type": "boolean"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "library",
+              "skill",
+              "kit",
+              "tool"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "path"
+        ],
+        "title": "EntryIn",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "description": "Body of the 400/502/503 answers produced by the global exception handlers.",
+        "properties": {
+          "detail": {
+            "title": "Detail"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "type"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "GenIn": {
+        "properties": {
+          "max_tokens": {
+            "default": 1024,
+            "minimum": 1.0,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Preferred provider; falls back to the first available one.",
+            "title": "Provider"
+          },
+          "temperature": {
+            "default": 0.2,
+            "minimum": 0.0,
+            "title": "Temperature",
+            "type": "number"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "GenIn",
+        "type": "object"
+      },
+      "GenerateResponse": {
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          }
+        },
+        "required": [
+          "text",
+          "provider",
+          "model"
+        ],
+        "title": "GenerateResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "description": "Always `ok` when the app is serving.",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "InfoResponse": {
+        "properties": {
+          "corpus_root": {
+            "title": "Corpus Root",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/RegistryCounts"
+          },
+          "data_dir": {
+            "title": "Data Dir",
+            "type": "string"
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/LifecycleState"
+          },
+          "providers": {
+            "description": "Registered generation providers, in selection order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "corpus_root",
+          "data_dir",
+          "counts",
+          "providers",
+          "lifecycle"
+        ],
+        "title": "InfoResponse",
+        "type": "object"
+      },
+      "KeyCreateIn": {
+        "additionalProperties": true,
+        "description": "``POST /board/keys`` body. ``display_name`` is required (max 200 chars).",
+        "properties": {
+          "display_name": {
+            "description": "Human-readable key name.",
+            "maxLength": 200,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "ISO-8601 expiry timestamp.",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "notes": {
+            "description": "Free-text notes.",
+            "title": "Notes",
+            "type": "string"
+          },
+          "permissions": {
+            "description": "Grants to attach to the new key.",
+            "items": {
+              "properties": {
+                "permission": {
+                  "default": "invoke",
+                  "type": "string"
+                },
+                "resource_id": {
+                  "default": "*",
+                  "type": "string"
+                },
+                "resource_type": {
+                  "default": "*",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "title": "Permissions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "KeyCreateIn",
+        "type": "object"
+      },
+      "LifecycleIn": {
+        "properties": {
+          "auto_register": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Register"
+          },
+          "watch_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch Enabled"
+          }
+        },
+        "title": "LifecycleIn",
+        "type": "object"
+      },
+      "LifecycleState": {
+        "additionalProperties": true,
+        "description": "Corpus lifecycle flags (``registry.json`` → ``lifecycle``).",
+        "properties": {
+          "auto_register": {
+            "description": "Register new corpus folders automatically.",
+            "title": "Auto Register",
+            "type": "boolean"
+          },
+          "watch_enabled": {
+            "description": "Watch the corpus for new folders.",
+            "title": "Watch Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "LifecycleState",
+        "type": "object"
+      },
+      "MessageIn": {
+        "additionalProperties": true,
+        "description": "``POST /board/messages`` body (see ``agent_board.schemas.MESSAGE_FIELDS``).",
+        "properties": {
+          "body": {
+            "description": "Message body (free text / markdown).",
+            "maxLength": 50000,
+            "title": "Body",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Channel; must be one of the board's configured channels.",
+            "maxLength": 64,
+            "title": "Channel",
+            "type": "string"
+          },
+          "correlation_id": {
+            "description": "Thread correlation id.",
+            "maxLength": 200,
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "message_type": {
+            "description": "Message type (canonical types in GET /board/message_types; custom types allowed).",
+            "maxLength": 64,
+            "title": "Message Type",
+            "type": "string"
+          },
+          "model_id": {
+            "description": "Model that produced the message.",
+            "maxLength": 200,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "product_id": {
+            "description": "Product (library/chapter) id.",
+            "maxLength": 200,
+            "title": "Product Id",
+            "type": "string"
+          },
+          "reply_to": {
+            "description": "message_id this replies to.",
+            "maxLength": 100,
+            "title": "Reply To",
+            "type": "string"
+          },
+          "requires_ack": {
+            "description": "Ask recipients to acknowledge.",
+            "title": "Requires Ack",
+            "type": "boolean"
+          },
+          "scope": {
+            "description": "Optional per-scope database (project/branch/agent/loop). Overrides the `scope` query parameter when both are given.",
+            "title": "Scope",
+            "type": "string"
+          },
+          "sender_node_id": {
+            "description": "Identity of the posting agent/node.",
+            "maxLength": 100,
+            "title": "Sender Node Id",
+            "type": "string"
+          },
+          "sender_role": {
+            "description": "Role of the sender.",
+            "maxLength": 100,
+            "title": "Sender Role",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Optional one-line subject.",
+            "maxLength": 500,
+            "title": "Subject",
+            "type": "string"
+          },
+          "target_node_id": {
+            "description": "Target node for visibility_scope=node.",
+            "maxLength": 200,
+            "title": "Target Node Id",
+            "type": "string"
+          },
+          "target_role": {
+            "description": "Target role for visibility_scope=role.",
+            "maxLength": 100,
+            "title": "Target Role",
+            "type": "string"
+          },
+          "task_id": {
+            "description": "Task the message belongs to.",
+            "maxLength": 200,
+            "title": "Task Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "description": "Thread id.",
+            "maxLength": 200,
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "ttl_hours": {
+            "description": "Hours until the message expires (0 = never).",
+            "maximum": 8760.0,
+            "minimum": 0.0,
+            "title": "Ttl Hours",
+            "type": "integer"
+          },
+          "visibility_scope": {
+            "description": "Who should see the message.",
+            "enum": [
+              "all",
+              "task",
+              "product",
+              "role",
+              "node"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_type",
+          "sender_node_id",
+          "body"
+        ],
+        "title": "MessageIn",
+        "type": "object"
+      },
+      "PermissionGrantIn": {
+        "additionalProperties": true,
+        "description": "A permission grant on a board key.",
+        "properties": {
+          "permission": {
+            "description": "Permission (e.g. `invoke`, `write`, `admin`).",
+            "title": "Permission",
+            "type": "string"
+          },
+          "resource_id": {
+            "description": "Resource id or `*`.",
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "description": "Resource type (e.g. `board`).",
+            "title": "Resource Type",
+            "type": "string"
+          }
+        },
+        "title": "PermissionGrantIn",
+        "type": "object"
+      },
+      "ProviderBindingIn": {
+        "additionalProperties": true,
+        "description": "``POST /board/providers`` body: bind a provider to the env var holding its secret.",
+        "properties": {
+          "display_name": {
+            "description": "Human-readable name.",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "env_var": {
+            "description": "Environment variable that holds the secret (default per provider).",
+            "title": "Env Var",
+            "type": "string"
+          },
+          "notes": {
+            "description": "Free-text notes.",
+            "title": "Notes",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider name.",
+            "examples": [
+              "anthropic",
+              "openai",
+              "cloud-http",
+              "ollama",
+              "custom"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ProviderBindingIn",
+        "type": "object"
+      },
+      "RegistryCounts": {
+        "properties": {
+          "kits": {
+            "title": "Kits",
+            "type": "integer"
+          },
+          "libraries": {
+            "title": "Libraries",
+            "type": "integer"
+          },
+          "skills": {
+            "title": "Skills",
+            "type": "integer"
+          },
+          "tools": {
+            "title": "Tools",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "libraries",
+          "skills",
+          "kits",
+          "tools"
+        ],
+        "title": "RegistryCounts",
+        "type": "object"
+      },
+      "RegistryEntryOut": {
+        "additionalProperties": true,
+        "description": "One registry entry as stored in ``registry.json`` plus its ``kind``.",
+        "properties": {
+          "auto_registered": {
+            "title": "Auto Registered",
+            "type": "boolean"
+          },
+          "created": {
+            "description": "Unix time.",
+            "title": "Created",
+            "type": "number"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "library",
+              "skill",
+              "kit",
+              "tool"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_updated": {
+            "description": "Unix time.",
+            "title": "Last Updated",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "description": "Relative to the corpus root.",
+            "title": "Path",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "RegistryEntryOut",
+        "type": "object"
+      },
+      "ReindexResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "entries": {
+            "description": "Enabled registry entries visited.",
+            "title": "Entries",
+            "type": "integer"
+          },
+          "files": {
+            "description": "Files indexed.",
+            "title": "Files",
+            "type": "integer"
+          },
+          "missing": {
+            "description": "Entries whose folder is missing from the corpus.",
+            "title": "Missing",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "entries",
+          "files",
+          "missing"
+        ],
+        "title": "ReindexResponse",
+        "type": "object"
+      },
+      "RemovedResponse": {
+        "properties": {
+          "removed": {
+            "title": "Removed",
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "title": "RemovedResponse",
+        "type": "object"
+      },
+      "SearchHit": {
+        "properties": {
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "entry_kind": {
+            "title": "Entry Kind",
+            "type": "string"
+          },
+          "path": {
+            "description": "Matched file, relative to the corpus root.",
+            "title": "Path",
+            "type": "string"
+          },
+          "score": {
+            "description": "BM25 rank (lower is better).",
+            "title": "Score",
+            "type": "number"
+          },
+          "snippet": {
+            "description": "Match context; hits are wrapped in <mark>...</mark>.",
+            "title": "Snippet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "entry_kind",
+          "path",
+          "snippet",
+          "score"
+        ],
+        "title": "SearchHit",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "properties": {
+          "count": {
+            "description": "Number of hits returned.",
+            "title": "Count",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "count",
+          "results"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "ToggleIn": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ToggleIn",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Knowledge Engine",
+    "version": "<version>"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/board/channels": {
+      "get": {
+        "operationId": "list_channels_board_channels_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Channels Board Channels Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Channels",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/config": {
+      "get": {
+        "operationId": "get_config_board_config_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Config Board Config Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Config",
+        "tags": [
+          "board"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_config_board_config_patch",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Patch Config Board Config Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Config",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/digest": {
+      "get": {
+        "operationId": "digest_board_digest_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_messages",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 10,
+              "title": "Max Messages",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Digest Board Digest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Digest",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/keys": {
+      "get": {
+        "operationId": "list_keys_board_keys_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Keys Board Keys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Keys",
+        "tags": [
+          "board"
+        ]
+      },
+      "post": {
+        "operationId": "create_key_board_keys_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Key Board Keys Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Key",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/keys/bootstrap-master": {
+      "post": {
+        "description": "One-shot master-key bootstrap.\n\nHardened: only the immediate peer's address counts — `X-Forwarded-For`\nis rejected on this route regardless of `KE_TRUST_PROXY` so a\nmisconfigured proxy can't escalate. Peer must be loopback (not\nTailscale) — bootstrap on the box, not the mesh.",
+        "operationId": "bootstrap_master_board_keys_bootstrap_master_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Bootstrap Master Board Keys Bootstrap Master Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Bootstrap Master",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/keys/permissions/{perm_id}": {
+      "delete": {
+        "operationId": "revoke_permission_board_keys_permissions__perm_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "perm_id",
+            "required": true,
+            "schema": {
+              "title": "Perm Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Revoke Permission Board Keys Permissions  Perm Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Permission",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/keys/{key_id}": {
+      "delete": {
+        "operationId": "delete_key_board_keys__key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Key Board Keys  Key Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Key",
+        "tags": [
+          "board"
+        ]
+      },
+      "get": {
+        "operationId": "get_key_board_keys__key_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Key Board Keys  Key Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Key",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/keys/{key_id}/permissions": {
+      "post": {
+        "operationId": "grant_permission_board_keys__key_id__permissions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionGrantIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Grant Permission Board Keys  Key Id  Permissions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant Permission",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/keys/{key_id}/toggle": {
+      "patch": {
+        "operationId": "toggle_key_board_keys__key_id__toggle_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Toggle Key Board Keys  Key Id  Toggle Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Toggle Key",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/message_types": {
+      "get": {
+        "operationId": "list_message_types_board_message_types_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Message Types Board Message Types Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Message Types",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/messages": {
+      "get": {
+        "operationId": "list_messages_board_messages_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "in": "query",
+            "name": "message_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Message Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "product_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sender_node_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sender Node Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Messages Board Messages Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Messages",
+        "tags": [
+          "board"
+        ]
+      },
+      "post": {
+        "operationId": "post_message_board_messages_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Message Board Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Message",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/messages/{message_id}": {
+      "get": {
+        "operationId": "get_message_board_messages__message_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Message Board Messages  Message Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Message",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/messages/{message_id}/ack": {
+      "post": {
+        "operationId": "ack_message_board_messages__message_id__ack_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "title": "Message Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ack Message Board Messages  Message Id  Ack Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ack Message",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/providers": {
+      "get": {
+        "operationId": "list_providers_board_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Providers Board Providers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Providers",
+        "tags": [
+          "board"
+        ]
+      },
+      "post": {
+        "operationId": "register_provider_board_providers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderBindingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Register Provider Board Providers Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Provider",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/providers/{key_id}": {
+      "delete": {
+        "operationId": "delete_provider_board_providers__key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Provider Board Providers  Key Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Provider",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/providers/{key_id}/toggle": {
+      "patch": {
+        "operationId": "toggle_provider_board_providers__key_id__toggle_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Toggle Provider Board Providers  Key Id  Toggle Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Toggle Provider",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/providers/{key_id}/verify": {
+      "post": {
+        "operationId": "verify_provider_board_providers__key_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Verify Provider Board Providers  Key Id  Verify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Provider",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/scopes": {
+      "get": {
+        "description": "List known per-scope databases (project/branch/agent/loop).",
+        "operationId": "list_scopes_board_scopes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Scopes Board Scopes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Scopes",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/scopes/{name}": {
+      "put": {
+        "description": "Explicitly create a per-scope database (ADMIN). Idempotent: 200 when\nthe scope already exists, 201 when it was created, 400 on a bad name,\n507 at the `KE_BOARD_MAX_SCOPES` cap.",
+        "operationId": "create_scope_board_scopes__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Scope Board Scopes  Name  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scope",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/search": {
+      "get": {
+        "operationId": "search_board_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Search Board Search Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/stats/channels": {
+      "get": {
+        "operationId": "stats_channels_board_stats_channels_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Stats Channels Board Stats Channels Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stats Channels",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/stats/types": {
+      "get": {
+        "operationId": "stats_types_board_stats_types_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Stats Types Board Stats Types Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stats Types",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/status": {
+      "get": {
+        "operationId": "status_board_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Status Board Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/sweep": {
+      "post": {
+        "operationId": "sweep_now_board_sweep_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Sweep Now Board Sweep Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sweep Now",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/board/threads/{correlation_id}": {
+      "get": {
+        "operationId": "get_thread_board_threads__correlation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "correlation_id",
+            "required": true,
+            "schema": {
+              "title": "Correlation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Get Thread Board Threads  Correlation Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread",
+        "tags": [
+          "board"
+        ]
+      }
+    },
+    "/generate": {
+      "post": {
+        "operationId": "generate_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The selected provider failed."
+          }
+        },
+        "summary": "Generate",
+        "tags": [
+          "generate"
+        ]
+      }
+    },
+    "/generate/providers": {
+      "get": {
+        "operationId": "list_providers_generate_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Providers Generate Providers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Providers",
+        "tags": [
+          "generate"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/info": {
+      "get": {
+        "operationId": "info_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InfoResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Info"
+      }
+    },
+    "/registry": {
+      "get": {
+        "operationId": "list_entries_registry_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "library",
+                    "skill",
+                    "kit",
+                    "tool"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "enabled_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Enabled Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RegistryEntryOut"
+                  },
+                  "title": "Response List Entries Registry Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Entries",
+        "tags": [
+          "registry"
+        ]
+      },
+      "post": {
+        "operationId": "upsert_entry_registry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryEntryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert Entry",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/registry/lifecycle/state": {
+      "get": {
+        "operationId": "get_lifecycle_registry_lifecycle_state_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Lifecycle",
+        "tags": [
+          "registry"
+        ]
+      },
+      "patch": {
+        "operationId": "set_lifecycle_registry_lifecycle_state_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecycleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Lifecycle",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/registry/{entry_id}": {
+      "delete": {
+        "operationId": "remove_entry_registry__entry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Entry",
+        "tags": [
+          "registry"
+        ]
+      },
+      "get": {
+        "operationId": "get_entry_registry__entry_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryEntryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Entry",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/registry/{entry_id}/toggle": {
+      "patch": {
+        "operationId": "toggle_entry_registry__entry_id__toggle_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToggleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryEntryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Toggle Entry",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/search": {
+      "get": {
+        "operationId": "search_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/search/reindex": {
+      "post": {
+        "operationId": "reindex_search_reindex_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReindexResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reindex",
+        "tags": [
+          "search"
+        ]
+      }
+    }
+  }
+}

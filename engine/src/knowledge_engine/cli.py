@@ -11,6 +11,7 @@ from typing import Any
 
 from .core.config import Config
 from .core.registry import EntryKind, Registry, RegistryEntry
+from .core.settings import Settings
 from .mcp.options import add_arguments as add_mcp_arguments, resolve_http_options
 from .retrieval.fts5 import Indexer
 
@@ -175,6 +176,29 @@ def _env_port(env_var: str, fallback: int) -> int:
         return fallback
 
 
+def _config_command(args: argparse.Namespace) -> int:
+    """``knowledge-engine config show [--markdown]`` (no filesystem writes)."""
+    from .core.settings import markdown_reference
+
+    if args.markdown:
+        sys.stdout.write(markdown_reference())
+        return 0
+    settings = Settings()
+    resolved = settings.resolve_paths(warn_missing_corpus=False)
+    report = {
+        "settings": settings.masked(),
+        "set_in_environment": settings.explicitly_set(),
+        "paths": {
+            "home": str(resolved.home),
+            "corpus_root": str(resolved.corpus_root),
+            "registry_path": str(resolved.registry_path),
+            "data_dir": str(resolved.data_dir),
+        },
+    }
+    print(json.dumps(report, indent=2, default=str))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="knowledge-engine")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -184,6 +208,16 @@ def main() -> int:
     sub.add_parser("capabilities", help="Print runtime capability and retrieval-surface inventory")
     sub.add_parser("reindex", help="Rebuild FTS5 index over enabled entries")
     sub.add_parser("watch", help="Start watchdog: auto-register new corpus folders")
+    cfg_parser = sub.add_parser("config", help="Inspect the effective configuration")
+    cfg_sub = cfg_parser.add_subparsers(dest="config_cmd", required=True)
+    cfg_show = cfg_sub.add_parser(
+        "show", help="Print every setting's effective value (secrets masked) as JSON"
+    )
+    cfg_show.add_argument(
+        "--markdown",
+        action="store_true",
+        help="Print the configuration reference table instead (01-user-docs/CONFIGURATION.md)",
+    )
     mcp_parser = sub.add_parser(
         "mcp", help="Run the MCP server for AI clients (stdio, or streamable HTTP with --http)"
     )
@@ -218,6 +252,9 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    if args.cmd == "config":
+        return _config_command(args)
+
     if args.cmd == "project-context":
         from .project_context.cli import main as pd_main
 
@@ -232,8 +269,11 @@ def main() -> int:
         from .agent_board.service import serve as board_serve
 
         # The removed serve-board.sh honoured BOARD_HOST/BOARD_PORT; keep those knobs.
-        host = args.host or os.environ.get("BOARD_HOST", "").strip() or "127.0.0.1"
-        port = args.port if args.port is not None else _env_port("BOARD_PORT", 11437)
+        settings = Settings()
+        host = args.host or settings.board_serve_host or "127.0.0.1"
+        port = args.port
+        if port is None:
+            port = settings.board_serve_port or settings.board_standalone_port
         return board_serve(host=host, port=port)
 
     if args.cmd == "mcp":
@@ -306,7 +346,8 @@ def main() -> int:
         return 0
 
     if args.cmd == "serve":
-        port = args.port if args.port is not None else _env_port("KE_PORT", 9210)
+        settings = Settings()
+        port = args.port if args.port is not None else settings.port or 9210
         try:
             import uvicorn
         except ImportError:
@@ -319,6 +360,7 @@ def main() -> int:
         # travels through the environment so the optional MCP mount can set its
         # Host-header policy (see server/lifespan.py: BIND_HOST_ENV).
         os.environ["KE_BIND_HOST"] = args.host
+        settings = settings.model_copy(update={"bind_host": args.host})
         # Logging: uvicorn's default config wires only its own loggers, so the
         # engine's INFO policy lines would never be emitted. Proxy headers:
         # uvicorn trusts loopback X-Forwarded-For by default, which would
@@ -328,8 +370,8 @@ def main() -> int:
             host=args.host,
             port=port,
             factory=True,
-            log_config=uvicorn_log_config(),
-            **uvicorn_proxy_kwargs(),
+            log_config=uvicorn_log_config(settings.log_level),
+            **uvicorn_proxy_kwargs(settings=settings),
         )
         return 0
 

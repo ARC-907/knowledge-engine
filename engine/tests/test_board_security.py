@@ -140,7 +140,7 @@ def test_invalid_key_is_401_on_admin_route() -> None:
 @pytest.mark.usefixtures("board_env")
 def test_bootstrap_master_once_from_loopback_then_409(caplog: pytest.LogCaptureFixture) -> None:
     with (
-        caplog.at_level(logging.WARNING, logger="knowledge_engine.server.api.board_routes"),
+        caplog.at_level(logging.WARNING, logger="knowledge_engine.agent_board.http"),
         TestClient(create_app(), client=LOOPBACK) as client,
     ):
         first = client.post("/board/keys/bootstrap-master")
@@ -320,7 +320,7 @@ def test_trusted_proxies_env_extends_the_proxy_set(monkeypatch: pytest.MonkeyPat
 @pytest.mark.usefixtures("board_env")
 def test_trust_policy_logged_at_startup(caplog: pytest.LogCaptureFixture) -> None:
     with (
-        caplog.at_level(logging.INFO, logger="knowledge_engine.server.api.board_routes"),
+        caplog.at_level(logging.INFO, logger="knowledge_engine.agent_board.http"),
         TestClient(create_app(), client=LOOPBACK),
     ):
         pass
@@ -359,6 +359,70 @@ def test_write_gate_with_flag_off_is_keyless_for_trusted_peers() -> None:
         assert mesh.post("/board/messages", json=POST_BODY).status_code == 201
     with TestClient(create_app(), client=INTERNET) as outsider:
         assert outsider.post("/board/messages", json=POST_BODY).status_code == 403
+
+
+INVALID_BODIES: list[tuple[str, str, Any]] = [
+    # Fails schemas.validate (loopback answers 400 "payload_invalid").
+    ("POST", "/board/messages", {"channel": "ops"}),
+    ("POST", "/board/messages", {**POST_BODY, "channel": "nope"}),
+    # Not even an object: FastAPI itself would answer 422.
+    ("POST", "/board/messages", [1, 2]),
+    ("POST", "/board/messages/some-id/ack", {}),
+    ("POST", "/board/messages/some-id/ack", "not-an-object"),
+]
+
+ADMIN_INVALID_BODIES: list[tuple[str, str, Any]] = [
+    ("POST", "/board/keys", {}),
+    ("POST", "/board/keys", [1, 2]),
+    ("POST", "/board/keys/some-id/permissions", "nope"),
+    ("POST", "/board/providers", {}),
+    ("PATCH", "/board/config", [1, 2]),
+]
+
+
+@pytest.mark.usefixtures("board_env")
+@pytest.mark.parametrize(("method", "path", "body"), INVALID_BODIES + ADMIN_INVALID_BODIES)
+def test_untrusted_peer_gets_403_before_the_body_is_validated(
+    method: str, path: str, body: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The trust gate decides first: no 400/422 oracle on payload validity for outsiders."""
+    with TestClient(create_app(), client=INTERNET) as outsider, caplog.at_level(logging.WARNING):
+        r = outsider.request(method, path, json=body)
+    assert r.status_code == 403, r.text
+    assert "peer not on a trusted network" in r.json()["detail"]
+    assert any("untrusted peer" in rec.getMessage() for rec in caplog.records)
+
+
+@pytest.mark.usefixtures("board_env")
+@pytest.mark.parametrize(("method", "path", "body"), ADMIN_INVALID_BODIES)
+def test_admin_routes_answer_401_before_the_body_is_validated(
+    method: str, path: str, body: Any
+) -> None:
+    with TestClient(create_app(), client=LOOPBACK) as local:
+        assert local.request(method, path, json=body).status_code == 401
+        bad_key = {"X-Board-Key": "keb_x"}
+        assert local.request(method, path, json=body, headers=bad_key).status_code == 401
+
+
+@pytest.mark.usefixtures("board_env")
+def test_write_gate_with_flag_on_decides_before_the_body_is_validated() -> None:
+    store.update_config({"require_key_for_post": 1})
+    with TestClient(create_app(), client=TAILSCALE) as mesh:
+        # Keyless mesh peer: 401 even though the body would also fail validation.
+        assert mesh.post("/board/messages", json={"channel": "ops"}).status_code == 401
+        # With a valid write key the body is validated as usual.
+        r = mesh.post("/board/messages", json={"channel": "ops"}, headers=_write_key_headers())
+        assert r.status_code == 400
+        assert r.json()["type"] == "payload_invalid"
+
+
+@pytest.mark.usefixtures("board_env")
+def test_trusted_peer_invalid_body_still_answers_400() -> None:
+    with TestClient(create_app(), client=LOOPBACK) as local:
+        r = local.post("/board/messages", json={"channel": "ops"})
+        assert r.status_code == 400
+        assert r.json()["type"] == "payload_invalid"
+        assert local.post("/board/messages", json=[1, 2]).status_code == 422
 
 
 # ── Body cap ───────────────────────────────────────────────────
@@ -883,7 +947,7 @@ def test_startup_policy_lines_reach_stderr_under_server_log_config(
     assert proc.stdout == "done"
     assert "CORS: allow_origins=" in proc.stderr, proc.stderr
     assert "board trust: trusted_cidrs=" in proc.stderr, proc.stderr
-    assert "knowledge_engine.server.api.board_routes:" in proc.stderr
+    assert "knowledge_engine.agent_board.http:" in proc.stderr
     assert "INFO" in proc.stderr
 
     quiet = run("WARNING")

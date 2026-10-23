@@ -2,20 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Any
+from fastapi import APIRouter, Query
 
-from fastapi import APIRouter, Query, Request
+from ..deps import IndexerDep
+from ..schemas import ReindexResponse, SearchHit, SearchResponse
 
 router = APIRouter()
 
-
-@router.get("")
-def search(request: Request, q: str = Query(..., min_length=1), limit: int = 20) -> dict[str, Any]:
-    results = request.app.state.indexer.search(q, limit=limit)
-    return {"query": q, "count": len(results), "results": results}
+#: Upper bound of ``limit`` on ``GET /search``.
+MAX_SEARCH_LIMIT = 100
 
 
-@router.post("/reindex")
-def reindex(request: Request) -> dict[str, Any]:
-    counts = request.app.state.indexer.rebuild()
-    return {"status": "ok", **counts}
+@router.get("", response_model=SearchResponse)
+def search(
+    indexer: IndexerDep,
+    q: str = Query(..., min_length=1),
+    limit: int = Query(20, ge=1, le=MAX_SEARCH_LIMIT),
+) -> SearchResponse:
+    results = indexer.search(q, limit=limit)
+    return SearchResponse(
+        query=q,
+        count=len(results),
+        results=[SearchHit.model_validate(hit) for hit in results],
+    )
+
+
+@router.post("/reindex", response_model=ReindexResponse)
+def reindex(indexer: IndexerDep) -> ReindexResponse:
+    counts = indexer.rebuild()
+    return ReindexResponse.model_validate({"status": "ok", **counts})

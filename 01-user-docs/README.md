@@ -12,6 +12,7 @@ and work down; each guide is self-contained.
 | [MCP-WIRING.md](MCP-WIRING.md) | Wire the MCP server into Claude Desktop, Cursor, or Continue. |
 | [EMBEDDINGS.md](EMBEDDINGS.md) | Turn on semantic (bge-m3) search alongside FTS5. |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Run the engine beyond your laptop — server, hardening, backups. |
+| [CONFIGURATION.md](CONFIGURATION.md) | Look up every environment variable, its type and default (generated). |
 | [THEMING.md](THEMING.md) | Restyle or rebuild the dashboard. |
 | [FAQ.md](FAQ.md) | Quick answers to the common questions. |
 

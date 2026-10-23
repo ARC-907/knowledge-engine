@@ -92,10 +92,18 @@ class StreamableHTTPMount:
     ``Host``-header policy (see :func:`transport_security`). The SDK session
     manager is single-use, so every :meth:`lifespan` builds a fresh one;
     requests that arrive outside the lifespan get ``503``.
+
+    ``server`` may be ``None`` at construction so a host app can mount the
+    route before its engine objects exist; :meth:`attach` supplies the
+    server (the engine app does that in its lifespan, per lifespan).
     """
 
     def __init__(
-        self, server: MCPServer[Any], *, path: str = "/mcp", host: str = DEFAULT_BIND_HOST
+        self,
+        server: MCPServer[Any] | None = None,
+        *,
+        path: str = "/mcp",
+        host: str = DEFAULT_BIND_HOST,
     ) -> None:
         self.server = server
         self.path = path
@@ -106,9 +114,17 @@ class StreamableHTTPMount:
         """A Starlette route (all methods) that forwards to the session manager."""
         return Route(self.path, endpoint=self)
 
+    def attach(self, server: MCPServer[Any]) -> None:
+        """Serve ``server`` from the next :meth:`lifespan` on."""
+        if self._running:
+            raise RuntimeError("cannot replace the MCP server while the transport is running")
+        self.server = server
+
     @asynccontextmanager
     async def lifespan(self) -> AsyncIterator[None]:
         """Run the session manager; enter this inside the host app's lifespan."""
+        if self.server is None:
+            raise RuntimeError("no MCP server attached; call attach() first")
         self.server.streamable_http_app(
             streamable_http_path=self.path,
             transport_security=transport_security(self.host),
@@ -123,7 +139,7 @@ class StreamableHTTPMount:
                 self._running = False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if not self._running:
+        if not self._running or self.server is None:
             response = PlainTextResponse("MCP transport is not running", status_code=503)
             await response(scope, receive, send)
             return
