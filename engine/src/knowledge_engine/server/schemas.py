@@ -142,7 +142,8 @@ class GenIn(BaseModel):
     )
     model: str | None = None
     max_tokens: int = Field(1024, ge=1)
-    temperature: float = Field(0.2, ge=0.0, le=2.0)
+    # No upper bound: backends differ (OpenAI caps at 2.0, Ollama does not).
+    temperature: float = Field(0.2, ge=0.0)
 
 
 class GenerateResponse(BaseModel):

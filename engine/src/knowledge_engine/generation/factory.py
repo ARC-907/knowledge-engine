@@ -36,7 +36,13 @@ def build_provider_registry(settings: Settings) -> ProviderRegistry:
         for problem in cloud.config_problems():
             _logger.warning("cloud-http provider: %s", problem)
         registry.register(cloud)
-    registry.register(OllamaProvider(settings=settings))
+    ollama = OllamaProvider(settings=settings)
+    # Only an explicitly configured Ollama endpoint is worth a WARNING when it
+    # is unreachable; the default loopback endpoint is probed quietly so a
+    # deployment without Ollama (the container image, for one) does not log a
+    # misleading "configured but unreachable" line at every start.
+    ollama.explicitly_configured = "ollama_base_url" in settings.model_fields_set
+    registry.register(ollama)
     registry.register(EchoProvider())
     order = settings.provider_order_list()
     if order:

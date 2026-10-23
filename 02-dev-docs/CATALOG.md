@@ -31,7 +31,7 @@ add your own under `corpus/` and register them (see
 ## Engine modules (`engine/src/knowledge_engine/`)
 
 - `cli.py` — `knowledge-engine` console-script entrypoint
-  (`info | bootstrap | capabilities | reindex | watch | search | serve | mcp | project-context | board | board-serve`)
+  (`info | bootstrap | capabilities | reindex | watch | search | serve | mcp | config | project-context | board | board-serve`)
 - `app.py`, `mcp_server.py` — compatibility shims re-exporting `server.app` / `mcp.server` (`mcp_server` is deprecated)
 - `core/` — `settings.py` (typed `Settings`: every `KE_*` / `OLLAMA_*` env var; `config show`, generates `01-user-docs/CONFIGURATION.md`), `config.py` (path view over `Settings`), `errors.py` (shared HTTP exception handlers), `registry.py` (JSON registry + SQLite mirror), `watcher.py` (`watchdog` auto-register)
 - `server/` — `app.py` (I/O-free FastAPI application factory), `lifespan.py` (opens/closes the registry, index, providers, board sweeper and MCP mount), `deps.py` (`Depends` providers), `schemas.py` (request/response models), and `api/` route modules: `health_routes`, `registry_routes`, `search_routes`, `generate_routes`, `board_routes` (alias of `agent_board/http.py`)

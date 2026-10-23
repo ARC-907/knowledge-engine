@@ -131,15 +131,30 @@ def test_startup_probe_warns_about_unreachable_providers(
     monkeypatch.setattr(
         lifespan_mod, "_start_provider_probe", lambda p: threads.append(real(p)) or threads[-1]
     )
+    # An explicitly configured endpoint that does not answer is a WARNING ...
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
     with (
-        caplog.at_level(logging.WARNING, logger="knowledge_engine.generation.base"),
+        caplog.at_level(logging.INFO, logger="knowledge_engine.generation.base"),
         TestClient(_app(provider_startup_probe=True)) as client,
     ):
         threads[0].join(timeout=10)
         # The cached probe result is reused: /generate falls through to echo.
         r = client.post("/generate", json={"prompt": "hi"})
         assert r.json()["provider"] == "echo"
-    assert any("'ollama'" in r.getMessage() for r in caplog.records)
+    warned = [r for r in caplog.records if "'ollama'" in r.getMessage()]
+    assert warned and all(r.levelno == logging.WARNING for r in warned)
+
+    # ... while the built-in default endpoint is only reported at INFO.
+    caplog.clear()
+    monkeypatch.delenv("OLLAMA_BASE_URL")
+    with (
+        caplog.at_level(logging.INFO, logger="knowledge_engine.generation.base"),
+        TestClient(_app(provider_startup_probe=True)) as client,
+    ):
+        threads[-1].join(timeout=10)
+        assert client.post("/generate", json={"prompt": "hi"}).json()["provider"] == "echo"
+    quiet = [r for r in caplog.records if "'ollama'" in r.getMessage()]
+    assert quiet and all(r.levelno == logging.INFO for r in quiet)
 
 
 # ── Validation ───────────────────────────────────────────────────
@@ -172,7 +187,7 @@ def test_entry_tags_default_is_not_shared() -> None:
 def test_generate_input_is_validated(engine_env: Path) -> None:
     with TestClient(_app()) as client:
         assert client.post("/generate", json={"prompt": "x", "max_tokens": 0}).status_code == 422
-        assert client.post("/generate", json={"prompt": "x", "temperature": 9}).status_code == 422
+        assert client.post("/generate", json={"prompt": "x", "temperature": -1}).status_code == 422
         r = client.post("/generate", json={"prompt": "x", "provider": "echo"})
         assert r.status_code == 200
         assert r.json() == {"text": "x", "provider": "echo", "model": "echo-1", "usage": None}

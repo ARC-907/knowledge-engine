@@ -57,6 +57,11 @@ class Provider(ABC):
     which :class:`ProviderRegistry` caches.
     """
 
+    #: False when the provider was registered with its built-in default
+    #: endpoint rather than operator configuration; an unreachable default is
+    #: reported at INFO instead of WARNING.
+    explicitly_configured: bool = True
+
     name: str = "abstract"
 
     @abstractmethod
@@ -178,11 +183,18 @@ class ProviderRegistry:
             ok = self.probe(provider)
             results[provider.name] = ok
             if warn and not ok:
-                _logger.warning(
-                    "generation provider %r is configured but unreachable; "
-                    "requests fall through to the next available provider",
-                    provider.name,
-                )
+                if getattr(provider, "explicitly_configured", True):
+                    _logger.warning(
+                        "generation provider %r is configured but unreachable; "
+                        "requests fall through to the next available provider",
+                        provider.name,
+                    )
+                else:
+                    _logger.info(
+                        "generation provider %r is not reachable at its default endpoint; "
+                        "skipped until it answers",
+                        provider.name,
+                    )
         return results
 
     def select(self, preferred: str | None = None) -> Provider | None:
