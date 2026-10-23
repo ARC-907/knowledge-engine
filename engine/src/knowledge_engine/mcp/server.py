@@ -267,7 +267,7 @@ def run(args: argparse.Namespace) -> int:
                 transport="streamable-http",
                 host=args.host,
                 port=args.port,
-                transport_security=transport_security(),
+                transport_security=transport_security(args.host),
             )
         else:
             logger.info("serving MCP over stdio")

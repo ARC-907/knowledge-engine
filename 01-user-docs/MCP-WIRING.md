@@ -25,6 +25,31 @@ exposes four base tools:
 The client launches the server as a subprocess and talks to it over stdin/
 stdout. You never start it yourself — the client manages its lifecycle.
 
+### Streamable HTTP
+
+For clients that connect over HTTP instead of launching a subprocess, the same
+server is available two ways:
+
+- `knowledge-engine mcp --http [--host 127.0.0.1] [--port 9211]` runs it on
+  its own, at `http://<host>:<port>/mcp`.
+- `KE_MCP_HTTP=1 knowledge-engine serve` mounts it at `/mcp` on the dashboard
+  / API server, sharing that process's registry and index.
+
+Both apply the same `Host`-header policy (DNS-rebinding protection), chosen
+from the address the server is bound to:
+
+| Setting | Effect |
+| --- | --- |
+| Bound to `127.0.0.1`, `localhost` or `::1` (the defaults) | Only `Host: 127.0.0.1`, `localhost` or `[::1]` (any port) is accepted; any other name gets `421 Invalid Host header`. |
+| Bound elsewhere (`0.0.0.0`, a LAN IP), `KE_MCP_ALLOWED_HOSTS` unset | The header is not checked (a reverse proxy usually sets its own `Host`). A warning is logged at startup. |
+| `KE_MCP_ALLOWED_HOSTS=kb.internal,kb.example.org` | Those names (any port) are accepted in addition to the loopback names, whatever the bind address. |
+| `KE_MCP_ALLOWED_HOSTS=*` | The check is turned off (logged as a warning). |
+
+`knowledge-engine serve --host …` passes its bind address to the mount
+itself. If you run uvicorn directly (`uvicorn knowledge_engine.app:create_app
+--factory --host 0.0.0.0`), set `KE_BIND_HOST` to the same address, otherwise
+the mount assumes a loopback bind and refuses non-loopback `Host` headers.
+
 ## Before you start: confirm the server runs
 
 Make sure the engine is installed (see [QUICKSTART.md](QUICKSTART.md)) and
@@ -245,3 +270,4 @@ is in the client config — almost always a wrong absolute path.
 | Works in terminal, fails in client | The client can't find the interpreter or corpus. Re-check every absolute path; no `~`, no env vars. |
 | Windows: "file not found" on the command | Backslashes not doubled in JSON, or path has spaces — quote it / double the slashes. |
 | Changes to the corpus don't show up | The MCP server reads the index at each call, but you must `reindex` after changing content. |
+| HTTP: `/mcp` answers `421 Invalid Host header` | The server thinks it is bound to loopback but clients use another name. Pass the real bind address (`serve --host …`, or `KE_BIND_HOST` with plain uvicorn) or list the names in `KE_MCP_ALLOWED_HOSTS` — see [Streamable HTTP](#streamable-http). |

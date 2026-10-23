@@ -17,12 +17,24 @@ from fastapi import FastAPI
 
 _logger = logging.getLogger(__name__)
 
+#: The address the host app is bound to. ``knowledge-engine serve`` sets it
+#: from ``--host``; set it yourself when running uvicorn directly. The app
+#: factory takes no arguments, so this is how optional mounts (the MCP endpoint)
+#: learn the bind address for their Host-header policy.
+BIND_HOST_ENV = "KE_BIND_HOST"
+DEFAULT_BIND_HOST = "127.0.0.1"
+
 
 def env_truthy(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None:
         return default
     return raw.strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def bind_host() -> str:
+    """The address the app is bound to (``KE_BIND_HOST``, default loopback)."""
+    return os.environ.get(BIND_HOST_ENV, "").strip() or DEFAULT_BIND_HOST
 
 
 def _board_sweeper_should_run(board_sweeper: ModuleType) -> bool:

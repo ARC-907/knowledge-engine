@@ -70,6 +70,13 @@ To let other machines on a trusted network reach the engine:
 3. **Restrict who can reach it.** A firewall rule, a private VPN (e.g. a mesh
    VPN), or the reverse proxy's allowlist — pick one. The engine itself does
    not gate access.
+4. **If you serve MCP over HTTP (`KE_MCP_HTTP=1`),** the `/mcp` endpoint checks
+   the `Host` header. `knowledge-engine serve --host 0.0.0.0` tells it about
+   the bind address; with plain uvicorn set `KE_BIND_HOST=0.0.0.0` too, or
+   every non-loopback `Host` is refused with `421`. Set
+   `KE_MCP_ALLOWED_HOSTS` to the names your proxy forwards (comma-separated;
+   `*` disables the check) — see
+   [MCP-WIRING.md → Streamable HTTP](MCP-WIRING.md#streamable-http).
 
 For a team on a private VPN with no public endpoint, a reverse proxy plus the
 VPN's own access control is a reasonable setup.
@@ -216,6 +223,12 @@ knowledge-engine:local mcp` for an MCP client that launches the stdio server.
   `--build-arg BUILDER_IMAGE=...` and `--build-arg RUNTIME_IMAGE=...` (for
   example to use a registry mirror); the user and group IDs with
   `--build-arg KE_UID=...` / `KE_GID=...`.
+
+A container binds `0.0.0.0`. If it also serves MCP over HTTP (`KE_MCP_HTTP=1`),
+use `knowledge-engine serve --host 0.0.0.0` or set `KE_BIND_HOST=0.0.0.0`
+alongside plain uvicorn, and set `KE_MCP_ALLOWED_HOSTS` to the hostnames the
+reverse proxy forwards; otherwise `/mcp` only accepts loopback `Host` headers
+and answers `421` to everything else.
 
 ## Upgrades
 

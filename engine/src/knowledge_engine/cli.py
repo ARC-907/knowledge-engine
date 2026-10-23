@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -293,6 +294,10 @@ def main() -> int:
         from .core.http import uvicorn_proxy_kwargs
         from .core.logging_config import uvicorn_log_config
 
+        # The factory is called by uvicorn without arguments; the bind address
+        # travels through the environment so the optional MCP mount can set its
+        # Host-header policy (see server/lifespan.py: BIND_HOST_ENV).
+        os.environ["KE_BIND_HOST"] = args.host
         # Logging: uvicorn's default config wires only its own loggers, so the
         # engine's INFO policy lines would never be emitted. Proxy headers:
         # uvicorn trusts loopback X-Forwarded-For by default, which would

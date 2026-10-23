@@ -26,6 +26,7 @@ from mcp.types.version import LATEST_HANDSHAKE_VERSION
 SNAPSHOT = Path(__file__).parent / "snapshots" / "mcp_tools.json"
 BASE_TOOLS = ["search", "registry_list", "registry_toggle", "registry_get"]
 HTTP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+ALL_INTERFACES = "0.0.0.0"  # noqa: S104 -- the bind address under test, never a listener
 
 
 @pytest.fixture
@@ -41,7 +42,7 @@ def ke_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("KE_PIPELINE_DB", str(data / "pipeline.db"))
     # A missing config file means project-context defaults: its MCP tools are on.
     monkeypatch.setenv("KE_CONFIG_PATH", str(tmp_path / "absent-knowledge-engine.toml"))
-    for var in ("KE_MCP_HTTP", "KE_MCP_ALLOWED_HOSTS", "KE_LOG_LEVEL"):
+    for var in ("KE_MCP_HTTP", "KE_MCP_ALLOWED_HOSTS", "KE_BIND_HOST", "KE_LOG_LEVEL"):
         monkeypatch.delenv(var, raising=False)
     # Project-context tools resolve their root from the CWD; keep it out of the repo.
     monkeypatch.chdir(tmp_path)
@@ -722,18 +723,90 @@ def test_http_mount_is_off_by_default(ke_env: Path) -> None:
         assert client.post("/mcp", headers=HTTP_HEADERS, json={}).status_code == 404
 
 
-def test_transport_security_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_transport_security_policy(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     from knowledge_engine.mcp.http import transport_security
 
     monkeypatch.delenv("KE_MCP_ALLOWED_HOSTS", raising=False)
-    assert transport_security() is None  # SDK default: loopback-only for loopback binds
+    # Loopback binds: protection on, loopback names only (the SDK default made explicit).
+    for bind in ("127.0.0.1", "localhost", "::1"):
+        settings = transport_security(bind)
+        assert settings.enable_dns_rebinding_protection
+        assert {"127.0.0.1", "127.0.0.1:*", "localhost:*", "[::1]:*"} <= set(settings.allowed_hosts)
+        assert not any("kb.internal" in host for host in settings.allowed_hosts)
+    # Any other bind without KE_MCP_ALLOWED_HOSTS: the check is off, and operators are told.
+    with caplog.at_level(logging.WARNING, logger="knowledge_engine.mcp.http"):
+        settings = transport_security(ALL_INTERFACES)
+    assert not settings.enable_dns_rebinding_protection
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert ALL_INTERFACES in warnings[0] and "KE_MCP_ALLOWED_HOSTS" in warnings[0]
+
     monkeypatch.setenv("KE_MCP_ALLOWED_HOSTS", " kb.internal , ")
-    settings = transport_security()
-    assert settings is not None
-    assert settings.enable_dns_rebinding_protection
-    assert {"kb.internal", "kb.internal:*", "127.0.0.1:*"} <= set(settings.allowed_hosts)
-    assert "https://kb.internal:*" in settings.allowed_origins
+    for bind in ("127.0.0.1", ALL_INTERFACES):
+        settings = transport_security(bind)
+        assert settings.enable_dns_rebinding_protection
+        assert {"kb.internal", "kb.internal:*", "127.0.0.1:*"} <= set(settings.allowed_hosts)
+        assert "https://kb.internal:*" in settings.allowed_origins
     monkeypatch.setenv("KE_MCP_ALLOWED_HOSTS", "*")
     settings = transport_security()
-    assert settings is not None
     assert not settings.enable_dns_rebinding_protection
+
+
+def test_http_mount_follows_the_bind_host(
+    ke_env: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """`serve --host 0.0.0.0` must not answer 421 to every non-loopback Host (reverse proxies)."""
+    from fastapi.testclient import TestClient
+
+    from knowledge_engine.app import create_app
+
+    monkeypatch.setenv("KE_MCP_HTTP", "1")
+    monkeypatch.setenv("KE_BOARD_SWEEPER", "0")
+    monkeypatch.setenv("KE_BIND_HOST", ALL_INTERFACES)
+    app = create_app()
+    assert app.state.mcp_http.host == ALL_INTERFACES
+    with (
+        caplog.at_level(logging.WARNING, logger="knowledge_engine.mcp.http"),
+        TestClient(app, base_url="http://kb.internal:9210") as client,
+    ):
+        message, _ = _initialize(client, LATEST_HANDSHAKE_VERSION)
+        assert message["result"]["serverInfo"]["name"] == "knowledge-engine"
+        r = client.post("/mcp", headers={**HTTP_HEADERS, "Host": "192.168.1.20:9210"}, json={})
+        assert r.status_code != 421, r.text
+    assert any("KE_MCP_ALLOWED_HOSTS" in r.getMessage() for r in caplog.records)
+
+    # An allowlist restores the check on a non-loopback bind.
+    monkeypatch.setenv("KE_MCP_ALLOWED_HOSTS", "kb.internal")
+    with TestClient(app, base_url="http://kb.internal:9210") as client:
+        message, _ = _initialize(client, LATEST_HANDSHAKE_VERSION)
+        assert message["result"]["serverInfo"]["name"] == "knowledge-engine"
+        r = client.post("/mcp", headers={**HTTP_HEADERS, "Host": "192.168.1.20:9210"}, json={})
+        assert r.status_code == 421
+
+
+def test_cli_serve_exports_the_bind_host(ke_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import uvicorn
+
+    from knowledge_engine import cli
+
+    calls: list[dict[str, Any]] = []
+
+    def fake_run(app: str, **kwargs: Any) -> None:
+        calls.append({"app": app, "bind_host_env": os.environ.get("KE_BIND_HOST"), **kwargs})
+
+    monkeypatch.setattr(uvicorn, "run", fake_run)
+    monkeypatch.setattr(
+        sys, "argv", ["knowledge-engine", "serve", "--host", ALL_INTERFACES, "--port", "1"]
+    )
+    assert cli.main() == 0
+    assert calls == [
+        {
+            "app": "knowledge_engine.app:create_app",
+            "bind_host_env": ALL_INTERFACES,
+            "host": ALL_INTERFACES,
+            "port": 1,
+            "factory": True,
+        }
+    ]
