@@ -26,6 +26,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
+from ..core.logsafe import log_safe
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
 from . import schemas
@@ -122,7 +123,9 @@ def _scoped[R](fn: Callable[..., R]) -> _Scoped[R]:
         if not scope:
             return fn(*args, **kwargs)
         if not creates and empty is not None and not scope_exists(scope):
-            _logger.debug("%s: scope %r has no database; returning empty", fn.__name__, scope)
+            _logger.debug(
+                "%s: scope %r has no database; returning empty", fn.__name__, log_safe(scope)
+            )
             return empty(*args, **kwargs)
         with db.using_db(scope_db_path(scope, create=creates)):
             return fn(*args, **kwargs)
