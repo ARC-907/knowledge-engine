@@ -114,13 +114,15 @@ def _launch_chromium(pw: Any) -> Any:
     """Prefer Playwright's own browser; fall back to any installed Chromium."""
     try:
         return pw.chromium.launch()
-    except Exception as exc:
-        for candidate in _chromium_candidates():
-            try:
-                return pw.chromium.launch(executable_path=candidate)
-            except Exception:  # noqa: S112 - try the next build
-                continue
-        pytest.skip(f"no usable Chromium for Playwright: {exc}")
+    except Exception as exc:  # any launch failure means "try the fallbacks"
+        first_error = exc
+    for candidate in _chromium_candidates():
+        try:
+            return pw.chromium.launch(executable_path=candidate)
+        except Exception:  # noqa: S112 - try the next build
+            continue
+    pytest.skip(f"no usable Chromium for Playwright: {first_error}")
+    raise AssertionError("unreachable: pytest.skip() raises")  # keeps every path explicit
 
 
 @pytest.fixture
