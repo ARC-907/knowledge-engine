@@ -17,7 +17,7 @@ exposes four base tools:
 
 | Tool | What it does |
 | --- | --- |
-| `search` | Full-text search across enabled libraries / skills / tools. Args: `query` (required), `limit`, `kind`. |
+| `search` | Full-text search across enabled libraries / skills / tools. Args: `query` (required), `limit`, `kind`, `mode` (`fts` default; `vector` / `hybrid` need the [embedding index](EMBEDDINGS.md)). |
 | `registry_list` | List registry entries. Args: `kind`, `enabled_only`. |
 | `registry_toggle` | Enable / disable an entry. Args: `entry_id`, `enabled`. |
 | `registry_get` | Fetch one registry entry. Args: `entry_id`. |
