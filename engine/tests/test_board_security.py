@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import stat
+import subprocess
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -17,6 +19,7 @@ from knowledge_engine.agent_board import keys, scopes, store
 from knowledge_engine.agent_board.mcp_tools import collect_tools
 from knowledge_engine.agent_board.mcp_tools.base import BoardContext
 from knowledge_engine.app import create_app
+from knowledge_engine.core import http as core_http, logging_config
 from knowledge_engine.server.api import board_routes
 
 LOOPBACK = ("127.0.0.1", 50000)
@@ -699,3 +702,174 @@ def test_mcp_post_with_flag_on_validates_supplied_key() -> None:
         )
     )
     assert "m" in acked["ack_by"]
+
+
+# ── Server wiring: logging + uvicorn proxy headers ─────────────
+#
+# The policy lines above are only useful if the real server emits them, and
+# the X-Forwarded-For rules only hold if uvicorn does not rewrite the peer
+# first. Both `serve` entry points must therefore hand uvicorn a log config
+# with a root handler and proxy settings derived from KE_TRUST_PROXY.
+
+
+def _capture_uvicorn_run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    import uvicorn
+
+    seen: dict[str, Any] = {}
+
+    def fake_run(app: Any, **kwargs: Any) -> None:
+        seen["app"] = app
+        seen.update(kwargs)
+
+    monkeypatch.setattr(uvicorn, "run", fake_run)
+    return seen
+
+
+def test_uvicorn_proxy_kwargs_follow_trust_proxy_policy() -> None:
+    off = core_http.uvicorn_proxy_kwargs({})
+    assert off == {"proxy_headers": False, "forwarded_allow_ips": []}
+    on = core_http.uvicorn_proxy_kwargs({"KE_TRUST_PROXY": "1"})
+    assert on["proxy_headers"] is True
+    assert on["forwarded_allow_ips"] == ["127.0.0.0/8", "::1/128"]
+    custom = core_http.uvicorn_proxy_kwargs(
+        {"KE_TRUST_PROXY": "yes", "KE_TRUSTED_PROXIES": "100.64.0.0/10, 10.1.2.3/32"}
+    )
+    assert custom["forwarded_allow_ips"] == ["100.64.0.0/10", "10.1.2.3/32"]
+    # An empty proxy set with the flag on: nothing is trusted, nothing rewritten.
+    assert core_http.uvicorn_proxy_kwargs({"KE_TRUST_PROXY": "1", "KE_TRUSTED_PROXIES": ""}) == {
+        "proxy_headers": True,
+        "forwarded_allow_ips": [],
+    }
+
+
+def test_uvicorn_log_config_adds_root_handler_for_engine_loggers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cfg = logging_config.uvicorn_log_config()
+    assert cfg["root"]["handlers"] == ["knowledge_engine"]
+    assert cfg["loggers"]["knowledge_engine"] == {"level": "INFO", "propagate": True}
+    # uvicorn's own loggers are untouched.
+    assert cfg["loggers"]["uvicorn"]["propagate"] is False
+    assert cfg["handlers"]["knowledge_engine"]["stream"] == "ext://sys.stderr"
+    assert logging_config.uvicorn_log_config("DEBUG")["loggers"]["knowledge_engine"]["level"] == (
+        "DEBUG"
+    )
+    assert logging_config.resolve_log_level({"KE_LOG_LEVEL": " warning "}) == "WARNING"
+    with caplog.at_level(logging.WARNING, logger="knowledge_engine.core.logging_config"):
+        assert logging_config.resolve_log_level({"KE_LOG_LEVEL": "loud"}) == "INFO"
+    assert any("invalid KE_LOG_LEVEL" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.usefixtures("board_env")
+def test_serve_passes_log_config_and_proxy_policy_to_uvicorn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from knowledge_engine import cli
+    from knowledge_engine.agent_board import service
+
+    seen = _capture_uvicorn_run(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["knowledge-engine", "serve", "--port", "0"])
+    assert cli.main() == 0
+    assert seen["app"] == "knowledge_engine.app:create_app"
+    assert seen["factory"] is True
+    assert seen["log_config"]["root"]["handlers"] == ["knowledge_engine"]
+    assert seen["proxy_headers"] is False
+    assert seen["forwarded_allow_ips"] == []
+
+    monkeypatch.setenv("KE_TRUST_PROXY", "1")
+    monkeypatch.setenv("KE_TRUSTED_PROXIES", "100.64.0.0/10")
+    monkeypatch.setenv("KE_LOG_LEVEL", "debug")
+    seen = _capture_uvicorn_run(monkeypatch)
+    assert service.serve(host="127.0.0.1", port=0) == 0
+    assert seen["app"] == "knowledge_engine.agent_board.service:create_standalone_app"
+    assert seen["proxy_headers"] is True
+    assert seen["forwarded_allow_ips"] == ["100.64.0.0/10"]
+    assert seen["log_config"]["loggers"]["knowledge_engine"]["level"] == "DEBUG"
+
+
+@pytest.mark.usefixtures("board_env")
+def test_uvicorn_proxy_middleware_agrees_with_app_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run the app behind uvicorn's ProxyHeadersMiddleware exactly as `serve`
+    would configure it and check the trust gate's verdicts do not change."""
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    def served_app() -> Any:
+        kwargs = core_http.uvicorn_proxy_kwargs()
+        app: Any = create_app()
+        if kwargs["proxy_headers"]:
+            app = ProxyHeadersMiddleware(app, trusted_hosts=kwargs["forwarded_allow_ips"])
+        return app
+
+    # KE_TRUST_PROXY unset: no middleware at all, so a loopback peer naming an
+    # internet client is still judged as loopback (the documented behaviour).
+    with TestClient(served_app(), client=LOOPBACK) as client:
+        r = client.get("/board/status", headers={"X-Forwarded-For": "203.0.113.9"})
+        assert r.status_code == 200
+
+    monkeypatch.setenv("KE_TRUST_PROXY", "1")
+    with TestClient(served_app(), client=LOOPBACK) as client:
+        # Same verdicts as test_trust_proxy_picks_rightmost_untrusted_hop.
+        r = client.get("/board/status", headers={"X-Forwarded-For": "100.64.1.2, 203.0.113.9"})
+        assert r.status_code == 403
+        r = client.get("/board/status", headers={"X-Forwarded-For": "100.64.1.2, 127.0.0.1"})
+        assert r.status_code == 200
+        r = client.get("/board/status", headers={"X-Forwarded-For": "203.0.113.9, 100.64.1.2"})
+        assert r.status_code == 200
+        r = client.get("/board/status", headers={"X-Forwarded-For": "100.64.1.2, not-an-ip"})
+        assert r.status_code == 403
+    # uvicorn only trusts the configured proxies, so a non-proxy peer still
+    # cannot speak for anyone.
+    with TestClient(served_app(), client=INTERNET) as client:
+        r = client.get("/board/status", headers={"X-Forwarded-For": "127.0.0.1"})
+        assert r.status_code == 403
+
+
+_STARTUP_LOG_SCRIPT = """
+import logging.config, sys
+from fastapi.testclient import TestClient
+from knowledge_engine.app import create_app
+from knowledge_engine.core.logging_config import uvicorn_log_config
+
+logging.config.dictConfig(uvicorn_log_config())
+with TestClient(create_app(), client=("127.0.0.1", 50000)) as client:
+    assert client.get("/board/status").status_code == 200
+sys.stdout.write("done")
+"""
+
+
+@pytest.mark.usefixtures("board_env")
+def test_startup_policy_lines_reach_stderr_under_server_log_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The INFO policy lines must surface with the server's real logging
+    configuration — no caplog, no test-level overrides — which is what
+    SECURITY.md tells operators to watch for."""
+    monkeypatch.setenv("KE_BOARD_SWEEPER", "0")
+    monkeypatch.setenv("NO_COLOR", "1")
+
+    def run(level: str | None) -> subprocess.CompletedProcess[str]:
+        env = dict(os.environ)
+        env.pop("KE_LOG_LEVEL", None)
+        if level is not None:
+            env["KE_LOG_LEVEL"] = level
+        return subprocess.run(
+            [sys.executable, "-c", _STARTUP_LOG_SCRIPT],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+            check=False,
+        )
+
+    proc = run(None)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == "done"
+    assert "CORS: allow_origins=" in proc.stderr, proc.stderr
+    assert "board trust: trusted_cidrs=" in proc.stderr, proc.stderr
+    assert "knowledge_engine.server.api.board_routes:" in proc.stderr
+    assert "INFO" in proc.stderr
+
+    quiet = run("WARNING")
+    assert quiet.returncode == 0, quiet.stderr
+    assert "board trust:" not in quiet.stderr
+    assert "CORS: allow_origins=" not in quiet.stderr

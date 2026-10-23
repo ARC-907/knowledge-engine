@@ -7,10 +7,16 @@
 * :class:`BodySizeLimitMiddleware` caps a streamed request body. The
   ``Content-Length`` header is a fast path only; chunked uploads are counted
   as they arrive and aborted with ``413`` the moment they exceed the cap.
+* :func:`trust_proxy_enabled` / :func:`trusted_proxies` read the
+  ``X-Forwarded-For`` policy (``KE_TRUST_PROXY``, ``KE_TRUSTED_PROXIES``) that
+  the board's trust gate applies, and :func:`uvicorn_proxy_kwargs` turns the
+  same policy into uvicorn's ``proxy_headers`` / ``forwarded_allow_ips`` so the
+  server never rewrites the peer address behind the app's back.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -76,6 +82,77 @@ def install_cors(app: FastAPI, origins: list[str], *, env_var: str) -> list[str]
             env_var,
         )
     return origins
+
+
+# ── X-Forwarded-For policy ─────────────────────────────────────
+
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+LOOPBACK_NETS: tuple[IPNetwork, ...] = (
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+)
+
+TRUST_PROXY_ENV = "KE_TRUST_PROXY"
+TRUSTED_PROXIES_ENV = "KE_TRUSTED_PROXIES"
+
+
+def parse_cidrs(raw: str | None) -> list[IPNetwork]:
+    """Parse a comma-separated list of CIDRs. Bad entries are dropped with a
+    warning — the trust gate is a defence in depth on top of key auth, so a
+    typo costs nothing more than an over-eager 403."""
+    if raw is None or not raw.strip():
+        return []
+    out: list[IPNetwork] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            out.append(ipaddress.ip_network(chunk, strict=False))
+        except (ValueError, TypeError):
+            _logger.warning("ignoring invalid CIDR %r in trust configuration", chunk)
+            continue
+    return out
+
+
+def trust_proxy_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """``KE_TRUST_PROXY`` is truthy (``1``/``true``/``yes``/``on``)."""
+    source = os.environ if env is None else env
+    raw = source.get(TRUST_PROXY_ENV, "")
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def trusted_proxies(env: Mapping[str, str] | None = None) -> list[IPNetwork]:
+    """Addresses allowed to speak for their clients via `X-Forwarded-For`.
+
+    Defaults to loopback: the common case is a reverse proxy on the same
+    box. `KE_TRUSTED_PROXIES` (comma-separated CIDRs) REPLACES the default
+    for proxies elsewhere on the mesh. Every address listed here is trusted
+    to append `X-Forwarded-For` honestly.
+    """
+    source = os.environ if env is None else env
+    raw = source.get(TRUSTED_PROXIES_ENV)
+    if raw is not None:
+        return parse_cidrs(raw)
+    return list(LOOPBACK_NETS)
+
+
+def uvicorn_proxy_kwargs(env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """``uvicorn.run`` keyword arguments matching the app's forwarding policy.
+
+    uvicorn defaults to ``proxy_headers=True`` with loopback as the trusted
+    proxy set (or ``$FORWARDED_ALLOW_IPS``), and its ``ProxyHeadersMiddleware``
+    rewrites ``scope["client"]`` from ``X-Forwarded-For`` before the app sees
+    the request. Left alone that contradicts the documented ``KE_TRUST_PROXY``
+    semantics, so both ``serve`` entry points pass these instead: proxy
+    headers are honoured only when ``KE_TRUST_PROXY`` is on, and then only
+    from ``KE_TRUSTED_PROXIES``. ``FORWARDED_ALLOW_IPS`` is not consulted.
+    """
+    enabled = trust_proxy_enabled(env)
+    allow = [str(net) for net in trusted_proxies(env)] if enabled else []
+    return {"proxy_headers": enabled, "forwarded_allow_ips": allow}
 
 
 # ── Request body cap ───────────────────────────────────────────
@@ -198,8 +275,17 @@ __all__ = [
     "CORS_ALLOW_HEADERS",
     "CORS_ALLOW_METHODS",
     "DEFAULT_CORS_ORIGINS",
+    "LOOPBACK_NETS",
+    "TRUSTED_PROXIES_ENV",
+    "TRUST_PROXY_ENV",
     "BodySizeLimitMiddleware",
     "BodyTooLargeError",
+    "IPAddress",
+    "IPNetwork",
     "cors_origins",
     "install_cors",
+    "parse_cidrs",
+    "trust_proxy_enabled",
+    "trusted_proxies",
+    "uvicorn_proxy_kwargs",
 ]

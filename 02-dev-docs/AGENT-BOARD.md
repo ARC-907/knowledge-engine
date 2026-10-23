@@ -165,17 +165,28 @@ Routes fall into three classes:
 | `KE_BOARD_MAX_SCOPES`       | Cap on per-scope databases (default 64; `0` = unlimited). |
 | `KE_CORS_ORIGINS`           | CORS allow-list for the engine app. Default: loopback origins; `*` only when explicit. |
 | `KE_BOARD_CORS_ORIGINS`     | Same, for the standalone service.                      |
+| `KE_LOG_LEVEL`              | Level of the `knowledge_engine.*` loggers under `serve` / `board-serve` (default `INFO`). |
 
 `X-Forwarded-For` is ignored unless `KE_TRUST_PROXY=1` **and** the socket
 peer is in `KE_TRUSTED_PROXIES`. The chain is then walked from the right,
 skipping trusted proxies; the first other address is the client. A proxy
-on the same box needs no extra configuration; a proxy on the mesh needs
-its address added to `KE_TRUSTED_PROXIES`.
+on the same box needs no extra configuration beyond `KE_TRUST_PROXY=1`; a
+proxy on the mesh needs its address added to `KE_TRUSTED_PROXIES`.
+
+`knowledge-engine serve` and `board-serve` configure uvicorn from the same
+two variables (`proxy_headers` on only with `KE_TRUST_PROXY=1`,
+`forwarded_allow_ips` = `KE_TRUSTED_PROXIES`), so the server never rewrites
+the peer address — or the scheme from `X-Forwarded-Proto` — behind the
+app's back. uvicorn's own `FORWARDED_ALLOW_IPS` variable is not consulted.
+If you embed the app in another ASGI server, disable its proxy-header
+handling or configure it identically.
 
 `bootstrap-master` judges the real socket peer only (loopback), refuses any
 request carrying `X-Forwarded-For`, works once (then `409`), and logs a
 WARNING each time it is called. The effective trust policy is logged once
-at startup (`board trust: trusted_cidrs=[...] require_key_for_post=...`).
+at startup (`board trust: trusted_cidrs=[...] require_key_for_post=...`);
+`serve` / `board-serve` emit it on stderr at `INFO`, so `KE_LOG_LEVEL`
+must not be raised above `INFO` if you want to see it.
 
 Request bodies on `/board/*` are capped at 1 MiB — declared
 `Content-Length` and streamed (chunked) bodies alike — and answered with
@@ -360,8 +371,10 @@ Env-var equivalents (set before serve):
 * `KE_BOARD_SWEEPER=0` — start the engine without the sweeper thread
 * `KE_BOARD_TRUSTED_CIDRS=...` — override the trusted peer set (default:
   `127.0.0.1/32,::1/128,100.64.0.0/10`). Empty string keeps loopback only.
-* `KE_TRUST_PROXY=1` — accept `X-Forwarded-For` from a trusted proxy
+* `KE_TRUST_PROXY=1` — accept `X-Forwarded-For` from a trusted proxy (also
+  switches on uvicorn's proxy-header handling for those proxies)
 * `KE_TRUSTED_PROXIES=...` — which peers count as proxies (default: loopback)
+* `KE_LOG_LEVEL=INFO` — level of the engine's own loggers under `serve`
 * `KE_BOARD_MAX_SCOPES=64` — cap on per-scope databases
 * `KE_CORS_ORIGINS=...` — CORS allowlist for the engine app (default: loopback)
 * `KE_BOARD_CORS_ORIGINS=...` — CORS allowlist for the standalone service

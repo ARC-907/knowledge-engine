@@ -41,7 +41,9 @@ fix is the default.
 7. The first master key is minted once via `POST /board/keys/bootstrap-master`
    from loopback only; the raw key is shown once and never stored.
 8. `X-Forwarded-For` is ignored unless `KE_TRUST_PROXY=1` and the socket peer
-   is a trusted proxy (`KE_TRUSTED_PROXIES`, default loopback).
+   is a trusted proxy (`KE_TRUSTED_PROXIES`, default loopback). `serve` and
+   `board-serve` configure uvicorn's proxy-header handling from the same two
+   variables; uvicorn's `FORWARDED_ALLOW_IPS` is not consulted.
 9. Board request bodies are capped at 1 MiB; scope names are validated and
    capped in number (`KE_BOARD_MAX_SCOPES`); reads never create state.
 10. Provider API keys live only in your environment; the database stores the
@@ -65,6 +67,8 @@ fix is the default.
       fronts the engine, and add its address to `KE_TRUSTED_PROXIES` if it is
       not on the same host; never enable it on a directly exposed server.
 - [ ] Watch the startup log lines `CORS: allow_origins=...` and
-      `board trust: ...` after every configuration change.
+      `board trust: ...` on stderr after every configuration change. They
+      are `INFO` lines, emitted by `knowledge-engine serve` / `board-serve`
+      as long as `KE_LOG_LEVEL` (default `INFO`) is not raised above that.
 - [ ] Keep provider secrets in the environment or a gitignored `.env`; never
       commit them.

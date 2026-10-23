@@ -34,7 +34,11 @@ X-Forwarded-For is **opt-in** via `KE_TRUST_PROXY=1` and only honoured when
 the socket peer is itself a trusted proxy (`KE_TRUSTED_PROXIES`, default
 loopback). The chain is walked from the right: every address that is a
 trusted proxy is skipped and the first one that is not is the client. With
-the flag off the header is ignored entirely.
+the flag off the header is ignored entirely — provided the ASGI server does
+not rewrite the peer first. `knowledge-engine serve` / `board-serve` pass
+``core.http.uvicorn_proxy_kwargs()`` to uvicorn so its own proxy-headers
+middleware follows the same two env vars; an operator embedding the app in
+another server must disable (or align) that server's proxy handling.
 """
 
 from __future__ import annotations
@@ -48,13 +52,18 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
 
 from ...agent_board import keys, provider_registry as providers, schemas, scopes, store, sweeper
+from ...core.http import (
+    LOOPBACK_NETS as _LOOPBACK_NETS,
+    IPAddress,
+    IPNetwork,
+    parse_cidrs as _parse_cidrs,
+    trust_proxy_enabled as _trust_proxy_enabled,
+    trusted_proxies as _trusted_proxies,
+)
 
 _logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
-IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
 def _pop_scope(payload: dict[str, Any]) -> str | None:
@@ -77,33 +86,13 @@ _LOCALHOST_V6 = ipaddress.ip_address("::1")
 # the whole /10 as trusted means peers on the operator's private mesh
 # don't need to round-trip through key creation just to coordinate.
 _TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
-_LOOPBACK_NETS: tuple[IPNetwork, ...] = (
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("::1/128"),
-)
 
 TRUSTED_CIDRS_ENV = "KE_BOARD_TRUSTED_CIDRS"
-TRUST_PROXY_ENV = "KE_TRUST_PROXY"
-TRUSTED_PROXIES_ENV = "KE_TRUSTED_PROXIES"
 
-
-def _parse_cidrs(raw: str | None) -> list[IPNetwork]:
-    """Parse a comma-separated list of CIDRs. Bad entries are dropped with a
-    warning — the trust gate is a defence in depth on top of key auth, so a
-    typo costs nothing more than an over-eager 403."""
-    if raw is None or not raw.strip():
-        return []
-    out: list[IPNetwork] = []
-    for chunk in raw.split(","):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        try:
-            out.append(ipaddress.ip_network(chunk, strict=False))
-        except (ValueError, TypeError):
-            _logger.warning("ignoring invalid CIDR %r in trust configuration", chunk)
-            continue
-    return out
+# `_parse_cidrs`, `_trust_proxy_enabled`, `_trusted_proxies`, the two proxy
+# env names and `_LOOPBACK_NETS` live in ``core.http`` so the uvicorn entry
+# points can derive their proxy settings from the very same policy; they are
+# re-exported here under their historical names.
 
 
 def _trusted_networks() -> list[IPNetwork]:
@@ -122,25 +111,6 @@ def _trusted_networks() -> list[IPNetwork]:
         ipaddress.ip_network("::1/128"),
         _TAILSCALE_NET,
     ]
-
-
-def _trust_proxy_enabled() -> bool:
-    raw = os.environ.get(TRUST_PROXY_ENV, "")
-    return raw.strip().lower() in ("1", "true", "yes", "on")
-
-
-def _trusted_proxies() -> list[IPNetwork]:
-    """Addresses allowed to speak for their clients via `X-Forwarded-For`.
-
-    Defaults to loopback: the common case is a reverse proxy on the same
-    box. `KE_TRUSTED_PROXIES` (comma-separated CIDRs) REPLACES the default
-    for proxies elsewhere on the mesh. Every address listed here is trusted
-    to append `X-Forwarded-For` honestly.
-    """
-    raw = os.environ.get(TRUSTED_PROXIES_ENV)
-    if raw is not None:
-        return _parse_cidrs(raw)
-    return list(_LOOPBACK_NETS)
 
 
 def _parse_ip(text: str) -> IPAddress | None:
@@ -162,7 +132,14 @@ def _is_loopback(addr: IPAddress | None) -> bool:
 
 
 def _peer_address(req: Request) -> IPAddress | None:
-    """The real socket peer. Never consults `X-Forwarded-For`.
+    """The peer as the ASGI server reports it (``scope["client"]``).
+
+    This function itself never consults `X-Forwarded-For`. Whether the value
+    is the raw socket peer depends on the server: uvicorn's proxy-headers
+    middleware would rewrite it, which is why both ``serve`` entry points
+    configure uvicorn from ``core.http.uvicorn_proxy_kwargs()`` so that
+    rewriting happens only under the same `KE_TRUST_PROXY` policy as
+    :func:`_client_address`.
 
     Returns None when the server reports no usable address (e.g. a test
     transport that did not set ``scope["client"]``); such requests are

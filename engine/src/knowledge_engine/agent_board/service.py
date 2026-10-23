@@ -27,7 +27,8 @@ from typing import Any
 from fastapi import FastAPI
 
 from .. import __version__
-from ..core.http import BodySizeLimitMiddleware, cors_origins, install_cors
+from ..core.http import BodySizeLimitMiddleware, cors_origins, install_cors, uvicorn_proxy_kwargs
+from ..core.logging_config import uvicorn_log_config
 from . import sweeper as kb_sweeper
 
 _logger = logging.getLogger(__name__)
@@ -114,11 +115,16 @@ def serve(host: str = "127.0.0.1", port: int = 11437) -> int:
     except ImportError:
         sys.stderr.write("uvicorn not installed; pip install knowledge-engine\n")
         return 1
+    # Same wiring as `knowledge-engine serve`: a root handler so the board's
+    # INFO policy lines reach stderr, and uvicorn's proxy-header handling
+    # bound to KE_TRUST_PROXY / KE_TRUSTED_PROXIES instead of its own default.
     uvicorn.run(
         "knowledge_engine.agent_board.service:create_standalone_app",
         host=host,
         port=port,
         factory=True,
+        log_config=uvicorn_log_config(),
+        **uvicorn_proxy_kwargs(),
     )
     return 0
 

@@ -100,7 +100,9 @@ not enough. You **must** add a layer in front of it:
       keep the key out of the browser. Set `KE_BOARD_TRUSTED_CIDRS` to the
       networks that may read/post, and `KE_TRUST_PROXY=1` (plus
       `KE_TRUSTED_PROXIES` if the proxy is not on the same box) so the
-      board sees real client addresses behind your reverse proxy.
+      board sees real client addresses behind your reverse proxy. Without
+      `KE_TRUST_PROXY=1` the server ignores `X-Forwarded-For` and
+      `X-Forwarded-Proto` entirely, even from a proxy on the same host.
 - [ ] **Rate limiting** — apply it at the proxy to blunt abuse and scraping.
 
 The engine is open source (MIT) — if you need real auth *inside* the app rather
