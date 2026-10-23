@@ -21,10 +21,11 @@ without it the tool returns ``not_permitted`` before touching the scanner.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections import Counter
 from typing import Any
 
-from .. import git_context
+from .. import git_context, schema
 from ..models import ScanReport
 from ..scanner import (
     ingest as scanner_ingest,
@@ -32,7 +33,7 @@ from ..scanner import (
     pointer_plan as scanner_pointer_plan,
     report as scanner_report,
 )
-from ..scanner.validators import GateError
+from ..scanner.validators import GateError, preflight
 from .base import ToolContext, status_result, text_result
 
 logger = logging.getLogger(__name__)
@@ -194,67 +195,118 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
         )
 
     if name == "project_context.scanner_ingest":
-        project_fp = args.get("project_fp")
-        branch_fp = args.get("branch_fp")
-        project_conn = ctx.project_conn(project_fp)
-        if project_conn is None:
-            return status_result("unknown_project", project_fp=project_fp)
-        try:
-            stats = scanner_ingest.run(
-                ctx.root,
-                cfg,
-                project_conn,
-                ctx.registry_conn(),
-                project_fp=project_fp,  # type: ignore[arg-type]  # may be None: run() trusts callers (pre-existing gap)
-                branch_fp=branch_fp,  # type: ignore[arg-type]  # may be None: run() trusts callers (pre-existing gap)
-            )
-        except GateError as exc:
-            return status_result("not_permitted", reason=str(exc))
-        return text_result(stats)
+        return _scanner_ingest(args, ctx)
 
     if name == "project_context.scanner_plan_pointers":
-        project_fp = args.get("project_fp")
-        branch_fp = args.get("branch_fp")
         if not cfg.scanner.pointer_replacement.enabled:
             return status_result(
                 "not_permitted",
                 reason="scanner.pointer_replacement.enabled must be true",
             )
-        project_conn = ctx.project_conn(project_fp)
-        if project_conn is None:
-            return status_result("unknown_project", project_fp=project_fp)
-        plan = scanner_pointer_plan.run(
-            str(ctx.root),
-            cfg,
-            project_conn,
-            project_fp=project_fp,  # type: ignore[arg-type]  # may be None: run() trusts callers (pre-existing gap)
-            branch_fp=branch_fp,
-        )
-        return text_result(plan)
+        return _scanner_plan_pointers(args, ctx)
 
     if name == "project_context.scanner_apply_pointers":
         if not cfg.mcp.allow_mutating_tools:
             return status_result("not_permitted", reason="mcp.allow_mutating_tools must be true")
-        plan_id = args.get("plan_id")
-        if plan_id is None:
-            return status_result("invalid_args", reason="plan_id is required")
-        project_fp = args.get("project_fp")
-        branch_fp = args.get("branch_fp")
-        project_conn = ctx.project_conn(project_fp)
-        if project_conn is None:
-            return status_result("unknown_project", project_fp=project_fp)
-        # pointer_apply.run self-gates (validators.preflight + confirm) and
-        # returns its own structured {"status": ...} result; it does not raise.
-        result = scanner_pointer_apply.run(
-            str(plan_id),
-            str(ctx.root),
-            cfg,
-            project_conn,
-            project_fp=project_fp,  # type: ignore[arg-type]  # may be None: run() trusts callers (pre-existing gap)
-            branch_fp=branch_fp,
-            confirm=bool(args.get("confirm", False)),
-            registry_conn=ctx.registry_conn(),
-        )
-        return text_result(result)
+        return _scanner_apply_pointers(args, ctx)
 
     return status_result("unknown_tool", name=name)
+
+
+# ── Writing modes ──────────────────────────────────────────────────────
+
+_UNREGISTERED_ROOT = (
+    "no project_fp given and the server root is not a registered project; "
+    "call project_context.register_project first or pass project_fp"
+)
+
+
+def _target_project(
+    args: dict[str, Any], ctx: ToolContext
+) -> tuple[str, sqlite3.Connection] | dict[str, Any]:
+    """Resolve the project a writing tool acts on: ``(project_fp, project_conn)``.
+
+    An explicit ``project_fp`` must be registered; without one the server
+    root's registered project is used. The pipeline always receives a real
+    fingerprint -- never ``None``. Returns a status envelope when the
+    project cannot be resolved.
+    """
+    explicit = args.get("project_fp")
+    project_fp = str(explicit) if explicit else ctx.root_project_fp()
+    if project_fp is None:
+        return status_result("unknown_project", project_fp=None, reason=_UNREGISTERED_ROOT)
+    project_conn = ctx.project_conn(project_fp)
+    if project_conn is None:
+        return status_result("unknown_project", project_fp=project_fp)
+    return project_fp, project_conn
+
+
+def _branch_arg(args: dict[str, Any]) -> str | None:
+    value = args.get("branch_fp")
+    return str(value) if value else None
+
+
+def _scanner_ingest(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
+    try:
+        # Gate first: a disabled scanner answers not_permitted without
+        # resolving (or creating) any project database.
+        preflight(schema.MODE_INGEST, ctx.cfg)
+    except GateError as exc:
+        return status_result("not_permitted", reason=str(exc))
+    target = _target_project(args, ctx)
+    if isinstance(target, dict):
+        return target
+    project_fp, project_conn = target
+    branch_fp = _branch_arg(args)
+    if branch_fp is None:
+        return status_result("invalid_args", reason="branch_fp is required")
+    try:
+        stats = scanner_ingest.run(
+            ctx.root,
+            ctx.cfg,
+            project_conn,
+            ctx.registry_conn(),
+            project_fp=project_fp,
+            branch_fp=branch_fp,
+        )
+    except GateError as exc:
+        return status_result("not_permitted", reason=str(exc))
+    return text_result(stats)
+
+
+def _scanner_plan_pointers(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
+    target = _target_project(args, ctx)
+    if isinstance(target, dict):
+        return target
+    project_fp, project_conn = target
+    plan = scanner_pointer_plan.run(
+        str(ctx.root),
+        ctx.cfg,
+        project_conn,
+        project_fp=project_fp,
+        branch_fp=_branch_arg(args),
+    )
+    return text_result(plan)
+
+
+def _scanner_apply_pointers(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
+    plan_id = args.get("plan_id")
+    if plan_id is None:
+        return status_result("invalid_args", reason="plan_id is required")
+    target = _target_project(args, ctx)
+    if isinstance(target, dict):
+        return target
+    project_fp, project_conn = target
+    # pointer_apply.run self-gates (validators.preflight + confirm) and
+    # returns its own structured {"status": ...} result; it does not raise.
+    result = scanner_pointer_apply.run(
+        str(plan_id),
+        str(ctx.root),
+        ctx.cfg,
+        project_conn,
+        project_fp=project_fp,
+        branch_fp=_branch_arg(args),
+        confirm=bool(args.get("confirm", False)),
+        registry_conn=ctx.registry_conn(),
+    )
+    return text_result(result)

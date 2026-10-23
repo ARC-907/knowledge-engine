@@ -6,7 +6,7 @@ without external state), but they are also *recorded* in the shared registry DB
 which is the authoritative source for collision detection and manual override.
 
 This module operates exclusively on a **registry** connection (a DB to which
-``apply_migrations(conn, only_prefixes=("001_",))`` has been applied). Every
+``db.apply_registry_migrations(conn)`` has been applied). Every
 allocation, override, collision, and validation is written to the
 ``fingerprint_events`` audit table.
 """

@@ -128,3 +128,63 @@ def test_unknown_tool_returns_status(tmp_path: Path) -> None:
     payload = _payload(scanner_tools.dispatch("project_context.nope", {}, ctx))
     assert payload["status"] == "unknown_tool"
     ctx.close()
+
+
+def _enabled_cfg():
+    import dataclasses
+
+    from knowledge_engine.project_context.config import ProjectContextConfig, ScannerCfg
+
+    return dataclasses.replace(ProjectContextConfig(), scanner=ScannerCfg(enabled=True))
+
+
+def test_scanner_ingest_without_project_fp_uses_the_registered_root(tmp_path: Path) -> None:
+    from knowledge_engine.project_context import fingerprints, registry
+
+    _make_project(tmp_path)
+    cfg = _enabled_cfg()
+    ctx = ToolContext(cfg=cfg, root=tmp_path)
+    try:
+        project = registry.register_project(ctx.registry_conn(), str(tmp_path), cfg)
+        assert ctx.root_project_fp() == project["project_fp"]
+        branch_fp = fingerprints.ensure_branch(ctx.registry_conn(), project["project_fp"], "main")
+
+        payload = _payload(
+            scanner_tools.dispatch("project_context.scanner_ingest", {"branch_fp": branch_fp}, ctx)
+        )
+        assert payload["ingested"] >= 1
+        stored = ctx.project_conn(project["project_fp"])
+        assert stored is not None
+        fps = {r[0] for r in stored.execute("SELECT DISTINCT project_fp FROM project_docs")}
+        assert fps == {project["project_fp"]}  # a real fingerprint, never NULL
+    finally:
+        ctx.close()
+
+
+def test_scanner_ingest_unregistered_root_and_missing_branch(tmp_path: Path) -> None:
+    from knowledge_engine.project_context import registry
+
+    cfg = _enabled_cfg()
+    ctx = ToolContext(cfg=cfg, root=tmp_path)
+    try:
+        assert ctx.root_project_fp() is None
+        payload = _payload(
+            scanner_tools.dispatch("project_context.scanner_ingest", {"branch_fp": "br_x"}, ctx)
+        )
+        assert payload["status"] == "unknown_project"
+        assert "register_project" in payload["reason"]
+
+        registry.register_project(ctx.registry_conn(), str(tmp_path), cfg)
+        payload = _payload(scanner_tools.dispatch("project_context.scanner_ingest", {}, ctx))
+        assert payload["status"] == "invalid_args"
+
+        payload = _payload(
+            scanner_tools.dispatch(
+                "project_context.scanner_ingest",
+                {"project_fp": "proj_unknown", "branch_fp": "br_x"},
+                ctx,
+            )
+        )
+        assert payload["status"] == "unknown_project"
+    finally:
+        ctx.close()
