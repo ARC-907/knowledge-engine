@@ -150,3 +150,28 @@ jobs:
         with:
           persist-credentials: false
       - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+
+  docs:
+    name: docs (paths, links)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Runs before the environment is created so no installed package's
+      # Markdown ends up in the scan.
+      - name: Offline link check (lychee)
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --offline --no-progress --verbose './**/*.md'
+          fail: true
+          failIfEmpty: true
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.11.x"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install
+        run: uv sync --no-dev
+      - name: Module paths and relative links in the docs resolve
+        run: uv run --no-dev python scripts/check_docs_paths.py

@@ -33,14 +33,16 @@ Drop folders into the corpus subdirectories that fit:
 
 ```
 corpus/
-  libraries/     <- domain knowledge libraries (most content goes here)
-  skills/        <- skill packages (procedures an agent can follow)
-  kits/          <- reusable templates
-  capabilities/  <- tool / integration reference docs
-  governance/    <- workflow and process docs
+  libraries/     <- domain knowledge libraries (most content goes here)  -> kind "library"
+  skills/        <- skill packages (procedures an agent can follow)       -> kind "skill"
+  kits/          <- reusable workflow bundles                             -> kind "kit"
+  capabilities/  <- tool / integration reference docs                    -> kind "tool"
 ```
 
-Each top-level folder under these is one registry entry. A library is a folder
+Each top-level folder under these four is one registry entry; `bootstrap` and
+`watch` only look there. Content anywhere else under the corpus can still be
+registered by adding an entry to `registry.json` by hand (`path` is relative
+to the corpus root). A library is a folder
 with a `README.md`, a `CATALOG.md`, and numbered topic subfolders — see
 [LIBRARY-AUTHORING.md](LIBRARY-AUTHORING.md). A skill is a folder with a
 `SKILL.md` — see [SKILL-AUTHORING.md](SKILL-AUTHORING.md).
@@ -101,9 +103,11 @@ knowledge-engine serve
 ```
 
 (Prefix each command with `uv run --project engine` if the venv is not
-activated.) `KE_CORPUS_ROOT`, `KE_DATA_DIR`, and `KE_REGISTRY_PATH` default to
-the checkout's `corpus/` layout; set them before `serve` to point at an
-external corpus.
+activated.) Setting `KE_HOME` alone is enough when the external location
+follows the `corpus/registry.json` layout; otherwise set `KE_CORPUS_ROOT` and
+`KE_REGISTRY_PATH` as above. The same variables apply to `serve`, `mcp` and
+every other command, and to MCP client configs (see
+[MCP-WIRING.md](MCP-WIRING.md)).
 
 The registry file will be created at `KE_REGISTRY_PATH` on first run if it
 doesn't exist.
@@ -146,11 +150,16 @@ to your `registry.json` gives editors completion and inline errors.
 
 ## Auto-registering new folders
 
-The registry has a `lifecycle` block. If `auto_register_new_folders` is `true`
-and you run `knowledge-engine watch`, the engine watches the corpus root and
-registers folders the moment they appear — no manual `bootstrap` needed. This
-is convenient for an actively-growing corpus; leave `watch` off for a static
-one.
+`knowledge-engine watch` watches the corpus root and registers a new
+top-level folder under `libraries/`, `skills/`, `kits/` or `capabilities/` the
+moment it appears — no manual `bootstrap` needed. This is convenient for an
+actively growing corpus; leave `watch` off for a static one. It is a
+long-running command, so it logs at `KE_LOG_LEVEL` (INFO) by default.
+
+The registry also carries a `lifecycle` block (`watch_enabled`,
+`auto_register`), readable and writable through `GET` / `PATCH
+/registry/lifecycle/state` and the dashboard. In 3.0 these flags are recorded
+but not consulted by the watcher: running `watch` always auto-registers.
 
 ## Sizing expectations
 

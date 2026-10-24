@@ -3,7 +3,7 @@
 `scope` (query or body field) routes a request to a per-project /
 per-branch / per-agent physical database. Omit it (the default) and the
 request hits the shared board DB -- fully backward compatible. See
-`agent_board/scopes.py` and `docs/Reference/AGENT-BOARD.md` (Scoped databases).
+`agent_board/scopes.py` and `02-dev-docs/AGENT-BOARD.md` (Scoped databases).
 """
 
 from __future__ import annotations

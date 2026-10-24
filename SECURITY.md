@@ -34,10 +34,16 @@ fix is the default.
    is honoured only when set explicitly.
 4. The agent board trusts **peers** on loopback and the Tailscale CGNAT range
    (`100.64.0.0/10`) by default; everyone else gets `403`.
+   `KE_BOARD_TRUSTED_CIDRS` replaces that list; an empty value trusts no
+   peer at all, so list `127.0.0.1/32,::1/128` for loopback-only.
 5. Trusted peers may read, and post while `require_key_for_post=0`
    (default); set it to `1` to require `X-Board-Key` on non-loopback writes.
+   "Loopback" is judged on the effective client address: with
+   `KE_TRUST_PROXY=1` that is the forwarded address, not the proxy's.
 6. Board **admin** routes (key vault, provider registry, config, sweep,
-   scope creation) always require a key with `board:admin`.
+   scope creation) always require a key with `board:admin`. Keys are
+   verified against the shared board's vault, whatever `scope` a request
+   names.
 7. The first master key is minted once via `POST /board/keys/bootstrap-master`
    from loopback only; the raw key is shown once and never stored.
 8. `X-Forwarded-For` is ignored unless `KE_TRUST_PROXY=1` and the socket peer
@@ -53,15 +59,17 @@ fix is the default.
 
 - [ ] Keep the engine bound to `127.0.0.1` unless others need it; put a
       reverse proxy with TLS and authentication in front for LAN or internet
-      exposure (see `01-user-docs/DEPLOYMENT.md`).
+      exposure (see [`01-user-docs/DEPLOYMENT.md`](01-user-docs/DEPLOYMENT.md)).
 - [ ] **CORS**: leave `KE_CORS_ORIGINS` unset unless a browser UI is served
       from another origin; list that origin explicitly instead of `*`.
 - [ ] **Board keys**: run `knowledge-engine board keys bootstrap-master` on
-      the host once, copy the key from `<data_dir>/board-master-key.txt`,
-      delete the file, then mint per-agent keys with the narrowest
-      permissions (`board keys create NAME --permission write`).
+      the host once (inside the container for Docker), copy the key from
+      `<data_dir>/board-master-key.txt`, delete the file, then mint per-agent
+      keys with the narrowest permissions
+      (`board keys create NAME --permission write`).
 - [ ] **Peer trust**: set `KE_BOARD_TRUSTED_CIDRS` to exactly the networks
-      that may reach the board (empty string = loopback only). Set
+      that may reach the board, loopback included (`127.0.0.1/32,::1/128`
+      for loopback only; an empty string trusts nobody). Set
       `require_key_for_post=1` if untrusted machines share those networks.
 - [ ] **Reverse proxy**: set `KE_TRUST_PROXY=1` only when a proxy you control
       fronts the engine, and add its address to `KE_TRUSTED_PROXIES` if it is

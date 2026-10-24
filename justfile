@@ -28,16 +28,20 @@ fmt:
 typecheck:
     {{uv}} run mypy
 
-# Full test suite with coverage
+# Full test suite with coverage (run inside engine/ so its pytest config applies)
 test *args:
-    {{uv}} run pytest -q --cov --cov-report=term-missing {{args}}
+    {{uv}} run --directory {{engine}} pytest -q --cov --cov-report=term-missing {{args}}
 
 # Fast test loop (no coverage, randomized order, parallel)
 test-fast *args:
-    {{uv}} run pytest -q -n auto -p randomly {{args}}
+    {{uv}} run --directory {{engine}} pytest -q -n auto -p randomly {{args}}
 
 # Everything a PR must pass
-check: lint typecheck test
+check: lint typecheck test docs-check
+
+# Docs: every `knowledge_engine.*` path and relative link in the Markdown docs resolves
+docs-check:
+    {{uv}} run python scripts/check_docs_paths.py
 
 # Build sdist + wheel into engine/dist and verify metadata
 build:

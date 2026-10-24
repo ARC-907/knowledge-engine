@@ -24,7 +24,7 @@ Security posture (defensive defaults; every feature is still available):
 * Every invocation is logged at INFO (tool id, interpreter/script or
   method + URL, outcome). Refusals are logged at WARNING.
 
-Depends on `knowledge_engine.foundation.{config, db}`.
+Depends on `knowledge_engine.runtime.foundation.{config, db}`.
 """
 
 from __future__ import annotations

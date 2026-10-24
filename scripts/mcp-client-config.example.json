@@ -1,26 +1,22 @@
 {
   "mcpServers": {
     "knowledge-engine": {
-      "command": "knowledge-engine",
+      "command": "ABSOLUTE_PATH/engine/.venv/bin/knowledge-engine",
       "args": ["mcp"],
       "env": {
-        "KE_CORPUS_ROOT": "ABSOLUTE_PATH/corpus",
-        "KE_DATA_DIR": "ABSOLUTE_PATH/engine/data",
-        "KE_REGISTRY_PATH": "ABSOLUTE_PATH/corpus/registry.json"
+        "KE_HOME": "ABSOLUTE_PATH"
       }
     },
     "knowledge-engine-uvx": {
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/ARC-907/knowledge-engine#subdirectory=engine",
+        "git+https://github.com/ARC-907/knowledge-engine@v3.0.0#subdirectory=engine",
         "knowledge-engine",
         "mcp"
       ],
       "env": {
-        "KE_CORPUS_ROOT": "ABSOLUTE_PATH/corpus",
-        "KE_DATA_DIR": "ABSOLUTE_PATH/engine/data",
-        "KE_REGISTRY_PATH": "ABSOLUTE_PATH/corpus/registry.json"
+        "KE_HOME": "ABSOLUTE_PATH"
       }
     }
   }
