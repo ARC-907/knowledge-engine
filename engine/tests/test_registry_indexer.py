@@ -208,6 +208,67 @@ def test_register_corpus_folders_counts_sorted_and_single_write(
     assert changed == [1]
 
 
+def test_watcher_follows_lifecycle_flags_set_by_another_process(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from knowledge_engine.core import watcher
+
+    config = _config(tmp_path)
+    watching = Registry(config.registry_path)  # the `watch` process
+    server = Registry(config.registry_path)  # the HTTP server, same file
+    assert watcher.lifecycle_allows_auto_register(watching)
+
+    server.set_lifecycle(auto_register=False)
+    (config.corpus_root / "skills" / "first").mkdir(parents=True)
+    with caplog.at_level(logging.INFO, logger="knowledge_engine.core.watcher"):
+        added = watcher.handle_new_folder(config, watching, "skills/first")
+    assert added == 0
+    assert watching.get("skill-first") is None
+    assert "lifecycle flags are off" in caplog.text
+
+    server.set_lifecycle(auto_register=True, watch_enabled=False)
+    assert watcher.handle_new_folder(config, watching, "skills/first") == 0
+
+    server.set_lifecycle(watch_enabled=True)
+    changed: list[int] = []
+    added = watcher.handle_new_folder(config, watching, "skills/first", lambda: changed.append(1))
+    assert added == 1
+    assert changed == [1]
+    # The server's copy sees the entry the watcher wrote, and the flags survived.
+    server.reload()
+    assert server.get("skill-first") is not None
+    assert server.lifecycle() == {"watch_enabled": True, "auto_register": True}
+
+
+def test_watcher_survives_a_failing_registration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from knowledge_engine.core import watcher
+
+    config = _config(tmp_path)
+    registry = Registry(config.registry_path)
+
+    def boom(*_args: Any, **_kwargs: Any) -> int:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(watcher, "auto_register", boom)
+    assert watcher.handle_new_folder(config, registry, "skills/x") == 0
+    assert "auto-registering after skills/x failed" in caplog.text
+
+
+def test_watcher_keeps_last_flags_when_the_registry_file_breaks(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from knowledge_engine.core import watcher
+
+    config = _config(tmp_path)
+    registry = Registry(config.registry_path)
+    registry.set_lifecycle(auto_register=False)
+    config.registry_path.write_text("{not json", encoding="utf-8")
+    assert watcher.lifecycle_allows_auto_register(registry) is False
+    assert "using the last loaded lifecycle flags" in caplog.text
+
+
 # ── Indexer ──────────────────────────────────────────────────────────
 
 

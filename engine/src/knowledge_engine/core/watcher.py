@@ -1,7 +1,9 @@
 """Optional watchdog: auto-register new corpus folders while `knowledge-engine watch` runs.
 
-The registry's lifecycle flags (`watch_enabled`, `auto_register`) are recorded and
-exposed over HTTP but not consulted here; starting the watcher is the opt-in.
+The registry's lifecycle flags (`watch_enabled`, `auto_register`, both on by
+default; `PATCH /registry/lifecycle/state` changes them) are read from
+`registry.json` on every folder event, so a running watcher follows changes made
+by the server: with either flag off, new folders are logged and left alone.
 
 Soft-coupled: if `watchdog` package not installed, raises at startup.
 """
@@ -96,6 +98,42 @@ def auto_register(
     return added
 
 
+def lifecycle_allows_auto_register(registry: Registry) -> bool:
+    """True when the registry's ``watch_enabled`` and ``auto_register`` flags are on.
+
+    Re-reads ``registry.json`` first so flags (and entries) changed by another
+    process are seen; an unreadable or invalid file keeps the last loaded state
+    (the registry logs why).
+    """
+    try:
+        registry.reload()
+    except (OSError, ValueError):
+        log.warning("registry reload failed; using the last loaded lifecycle flags")
+    flags = registry.lifecycle()
+    return bool(flags.get("watch_enabled", True)) and bool(flags.get("auto_register", True))
+
+
+def handle_new_folder(
+    config: Config,
+    registry: Registry,
+    path: str,
+    on_change: Callable[[], None] | None = None,
+) -> int:
+    """React to a folder created under the corpus; returns the entries added.
+
+    Honours the lifecycle flags and never raises: the watcher thread must
+    survive one bad event (the failure is logged).
+    """
+    if not lifecycle_allows_auto_register(registry):
+        log.info("new folder %s not registered: lifecycle flags are off", path)
+        return 0
+    try:
+        return auto_register(config, registry, on_change)
+    except Exception:
+        log.exception("auto-registering after %s failed", path)
+        return 0
+
+
 def start_watcher(
     config: Config, registry: Registry, on_change: Callable[[], None] | None = None
 ) -> BaseObserver:
@@ -110,7 +148,7 @@ def start_watcher(
     class Handler(FileSystemEventHandler):
         def on_created(self, event: DirCreatedEvent | FileCreatedEvent) -> None:
             if event.is_directory:
-                auto_register(config, registry, on_change)
+                handle_new_folder(config, registry, str(event.src_path), on_change)
 
     observer = Observer()
     for sub in CORPUS_FOLDER_TO_KIND:

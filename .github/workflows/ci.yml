@@ -175,3 +175,9 @@ jobs:
         run: uv sync --no-dev
       - name: Module paths and relative links in the docs resolve
         run: uv run --no-dev python scripts/check_docs_paths.py
+      - name: Generated CONFIGURATION.md is current
+        run: |
+          set -euo pipefail
+          uv run --no-dev python -m knowledge_engine.core.settings --markdown > "$RUNNER_TEMP/CONFIGURATION.md"
+          diff -u 01-user-docs/CONFIGURATION.md "$RUNNER_TEMP/CONFIGURATION.md" \
+            || { echo "::error::01-user-docs/CONFIGURATION.md is stale; regenerate it (see CONTRIBUTING.md)"; exit 1; }

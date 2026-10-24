@@ -32,7 +32,8 @@ upgrading.
   uv, 7-day cooldown), CODEOWNERS, issue forms, PR template.
 - `docs` CI job: `scripts/check_docs_paths.py` verifies that every
   `knowledge_engine.*` path and every relative link in the Markdown docs
-  resolves; an offline `lychee` link check.
+  resolves (with its own tests); an offline `lychee` link check; a check that
+  the generated `01-user-docs/CONFIGURATION.md` is current.
 - Container support: multi-stage `Dockerfile` (uv builder →
   `python:3.12-slim-bookworm`, non-root UID 10001, `/data` volume, port 9210,
   `/health` healthcheck), `.dockerignore`, and `compose.yaml` (loopback-only
@@ -317,9 +318,22 @@ upgrading.
   `02-dev-docs/RESEARCH-LOG.md`.
 - `ping` is not part of MCP protocol 2026-07-28 (SDK behaviour); use
   `knowledge-engine mcp --selftest` as the health check.
+- MCP `search` accepts `limit` 1–100, the same bound as `GET /search`; a larger
+  value is an `isError` result naming the bound.
+- The standalone board's `/health` adds `"status": "ok"` (the engine's shape)
+  next to the existing `"ok": true`.
+- The per-thread pipeline/board connection cache holds up to 96 databases
+  (was 32), so the sweeper keeps every scope open under the default
+  `KE_BOARD_MAX_SCOPES` of 64.
+- `[project.urls].Changelog` points at the root `CHANGELOG.md`.
 
 ### Fixed
 
+- `knowledge-engine watch` honours the registry's lifecycle flags
+  (`watch_enabled`, `auto_register`): it re-reads `registry.json` on every new
+  folder, so `PATCH /registry/lifecycle/state` takes effect in a running
+  watcher; with either flag off new folders are logged and not registered. A
+  failing registration is logged and no longer stops the watcher thread.
 - With no `KE_*` set, the corpus resolved to the nonexistent `engine/corpus`.
 - `/ui` was never mounted (wrong path) and the dashboard was missing from
   wheels.

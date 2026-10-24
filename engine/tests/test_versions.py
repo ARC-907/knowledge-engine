@@ -70,4 +70,8 @@ def test_standalone_board_health_reports_distribution_version() -> None:
     from knowledge_engine.agent_board.service import create_standalone_app
 
     with TestClient(create_standalone_app()) as client:
-        assert client.get("/health").json()["version"] == DIST_VERSION
+        body = client.get("/health").json()
+    assert body["version"] == DIST_VERSION
+    # Same health shape as the engine's /health, plus the historical "ok" flag.
+    assert body["status"] == "ok"
+    assert body["ok"] is True

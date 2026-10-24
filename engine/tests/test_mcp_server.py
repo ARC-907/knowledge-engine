@@ -303,6 +303,7 @@ def test_bad_arguments_are_error_results_and_server_keeps_serving(ke_env: Path) 
             await client.call_tool("search", {}),
             await client.call_tool("search", {"query": "x", "kind": "bogus"}),
             await client.call_tool("search", {"query": "x", "limit": 0}),
+            await client.call_tool("search", {"query": "x", "limit": 101}),
             await client.call_tool("registry_toggle", {"entry_id": "x"}),
             await client.call_tool("no_such_tool", {}),
             await client.call_tool("project_context.search", {"query": 5}),
@@ -310,14 +311,15 @@ def test_bad_arguments_are_error_results_and_server_keeps_serving(ke_env: Path) 
         ]
 
     *failures, healthy = _with_client(server, calls)
-    assert [result.is_error for result in failures] == [True] * 6
+    assert [result.is_error for result in failures] == [True] * 7
     texts = [_text(result) for result in failures]
     assert "query" in texts[0]
     assert "kind" in texts[1]
-    assert "limit must be a positive integer" in texts[2]
-    assert "enabled" in texts[3]
-    assert "no_such_tool" in texts[4]
-    assert "invalid argument 'query'" in texts[5]
+    assert "limit must be between 1 and 100" in texts[2]
+    assert "limit must be between 1 and 100" in texts[3]
+    assert "enabled" in texts[4]
+    assert "no_such_tool" in texts[5]
+    assert "invalid argument 'query'" in texts[6]
     assert not healthy.is_error
     assert json.loads(_text(healthy)) == []
 

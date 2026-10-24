@@ -122,7 +122,12 @@ def create_standalone_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "service": "ke-agent-board-standalone", "version": __version__}
+        return {
+            "status": "ok",
+            "ok": True,
+            "service": "ke-agent-board-standalone",
+            "version": __version__,
+        }
 
     return app
 

@@ -33,7 +33,7 @@ from ..core.config import Config
 from ..core.registry import EntryKind, Registry, RegistryValidationError
 from ..retrieval.embeddings.errors import EmbeddingError
 from ..retrieval.fts5 import Indexer
-from ..retrieval.hybrid import DEFAULT_MODE, HybridSearcher, SearchMode
+from ..retrieval.hybrid import DEFAULT_MODE, MAX_SEARCH_LIMIT, HybridSearcher, SearchMode
 from .http import transport_security
 from .options import add_arguments, resolve_http_options
 from .toolkit import DispatchFn, register_group, tool_errors
@@ -173,8 +173,8 @@ def _register_base_tools(
     ) -> CallToolResult:
         """Full-text search across enabled libraries, skills, kits, and tools in the corpus."""
         with tool_errors("search"):
-            if limit < 1:
-                raise ValueError("limit must be a positive integer")
+            if not 1 <= limit <= MAX_SEARCH_LIMIT:
+                raise ValueError(f"limit must be between 1 and {MAX_SEARCH_LIMIT}")
             try:
                 hits = searcher.search(query, mode=mode, limit=limit, kind=kind)
             except EmbeddingError as exc:
