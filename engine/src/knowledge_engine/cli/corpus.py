@@ -198,10 +198,17 @@ def cmd_bootstrap(_args: argparse.Namespace, _parser: argparse.ArgumentParser) -
 
 
 def cmd_watch(_args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
-    from ..core.watcher import auto_register, start_watcher
+    from ..core.watcher import auto_register, lifecycle_allows_auto_register, start_watcher
 
     config, registry = open_registry()
-    added = auto_register(config, registry)
+    if lifecycle_allows_auto_register(registry):
+        added = auto_register(config, registry)
+    else:
+        added = 0
+        _logger.warning(
+            "lifecycle flags are off (watch_enabled/auto_register); new folders are logged, "
+            "not registered, until they are turned on"
+        )
     _print_json({"initial_added": added})
     observer = start_watcher(config, registry)
     print("Watching... Ctrl+C to stop.", file=sys.stderr)

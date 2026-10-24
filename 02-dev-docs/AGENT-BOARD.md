@@ -357,7 +357,7 @@ Windows watchdog (auto-restarts its own child if the service dies; see
 pwsh -NoProfile -File scripts\agent-board\board-watchdog.ps1 -Port 11437
 ```
 
-The standalone app exposes only `/board/*` and `/health` — no `/search`,
+The standalone app exposes only `/board/*` and `/health` (`{"status": "ok", "ok": true, "service", "version"}`, the engine's shape plus the historical `ok` flag) — no `/search`,
 `/registry`, or dashboard.
 
 ## Configuration knobs

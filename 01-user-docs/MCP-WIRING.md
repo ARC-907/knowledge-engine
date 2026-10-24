@@ -17,7 +17,7 @@ tools:
 
 | Tool | What it does |
 | --- | --- |
-| `search` | Search enabled libraries / skills / kits / tools. Args: `query` (required), `limit` (≥ 1, default 10), `kind`, `mode` (`fts` default; `vector` / `hybrid` need the [embedding index](EMBEDDINGS.md)). Omit `kind` for all kinds (an empty string is rejected). |
+| `search` | Search enabled libraries / skills / kits / tools. Args: `query` (required), `limit` (1–100, default 10, the same bound as `GET /search`), `kind`, `mode` (`fts` default; `vector` / `hybrid` need the [embedding index](EMBEDDINGS.md)). Omit `kind` for all kinds (an empty string is rejected). |
 | `registry_list` | List registry entries. Args: `kind`, `enabled_only`. |
 | `registry_toggle` | Enable / disable an entry. Args: `entry_id`, `enabled`. |
 | `registry_get` | Fetch one registry entry. Args: `entry_id`. |

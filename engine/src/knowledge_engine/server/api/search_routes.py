@@ -6,14 +6,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from ...retrieval.hybrid import DEFAULT_MODE, SearchMode
+from ...retrieval.hybrid import DEFAULT_MODE, MAX_SEARCH_LIMIT, SearchMode
 from ..deps import IndexerDep, SearcherDep
 from ..schemas import EmbeddingErrorResponse, ReindexResponse, SearchHit, SearchResponse
 
 router = APIRouter()
-
-#: Upper bound of ``limit`` on ``GET /search``.
-MAX_SEARCH_LIMIT = 100
 
 _EMBEDDING_ERRORS: dict[int | str, dict[str, object]] = {
     409: {

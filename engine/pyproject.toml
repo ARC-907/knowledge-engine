@@ -48,7 +48,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/ARC-907/knowledge-engine"
 Documentation = "https://github.com/ARC-907/knowledge-engine/tree/main/01-user-docs"
-Changelog = "https://github.com/ARC-907/knowledge-engine/blob/main/02-dev-docs/CHANGELOG.md"
+Changelog = "https://github.com/ARC-907/knowledge-engine/blob/main/CHANGELOG.md"
 Issues = "https://github.com/ARC-907/knowledge-engine/issues"
 Source = "https://github.com/ARC-907/knowledge-engine"
 

@@ -42,6 +42,8 @@ SearchMode = Literal["fts", "vector", "hybrid"]
 #: Accepted ``mode`` values, default first.
 SEARCH_MODES: tuple[SearchMode, ...] = get_args(SearchMode)
 DEFAULT_MODE: SearchMode = "fts"
+#: Upper bound of ``limit`` for every search surface (HTTP, MCP).
+MAX_SEARCH_LIMIT = 100
 #: The RRF constant: larger values flatten the advantage of top ranks.
 DEFAULT_RRF_K = 60
 #: Candidates taken from each ranking before fusing (at least this many).
@@ -251,6 +253,7 @@ class HybridSearcher:
 __all__ = [
     "DEFAULT_MODE",
     "DEFAULT_RRF_K",
+    "MAX_SEARCH_LIMIT",
     "SEARCH_MODES",
     "EntryResolver",
     "HybridSearcher",

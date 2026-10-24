@@ -157,9 +157,12 @@ actively growing corpus; leave `watch` off for a static one. It is a
 long-running command, so it logs at `KE_LOG_LEVEL` (INFO) by default.
 
 The registry also carries a `lifecycle` block (`watch_enabled`,
-`auto_register`), readable and writable through `GET` / `PATCH
-/registry/lifecycle/state` and the dashboard. In 3.0 these flags are recorded
-but not consulted by the watcher: running `watch` always auto-registers.
+`auto_register`, both on by default), readable and writable through `GET` /
+`PATCH /registry/lifecycle/state` and the dashboard. A running `watch` re-reads
+`registry.json` on every new folder, so a change made through the server takes
+effect immediately: with either flag off, new folders are logged and left
+unregistered until the flag is turned back on (`bootstrap` still registers
+everything on demand).
 
 ## Sizing expectations
 

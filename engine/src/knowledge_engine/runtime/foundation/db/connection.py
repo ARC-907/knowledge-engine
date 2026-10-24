@@ -49,9 +49,11 @@ PIPELINE_DB_FILENAME = "pipeline.db"
 
 #: Most pipeline/scope databases one thread keeps open at once. The board
 #: sweeper visits the default DB plus every scope (``KE_BOARD_MAX_SCOPES``,
-#: default 64) from one thread; beyond this bound the least recently used
-#: connection is closed and transparently reopened on next use.
-MAX_CONNECTIONS_PER_THREAD = 32
+#: default 64) from one thread, so the bound leaves room for all of them plus
+#: the pipeline DB; beyond it the least recently used connection is closed and
+#: transparently reopened on next use (no caller holds a connection across
+#: databases, so an eviction never closes a handle in use).
+MAX_CONNECTIONS_PER_THREAD = 96
 
 _scope_db_path: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "ke_scope_db_path", default=None
