@@ -8,7 +8,7 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 
 ## [Unreleased]
 
-## [3.0.0] — 2026-10-23
+## [3.0.0] — 2026-10-24
 
 The 3.0 release modernises the whole project: Python 3.12+, `uv` and
 hatchling, a CI/release pipeline, the official MCP Python SDK, typed settings,

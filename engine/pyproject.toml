@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "knowledge-engine"
-version = "3.0.0.dev0"
+version = "3.0.0"
 description = "Self-hosted, MCP-native knowledge engine: registry, SQLite FTS5 search, FastAPI dashboard, MCP server."
 readme = "README.md"
 requires-python = ">=3.12"
