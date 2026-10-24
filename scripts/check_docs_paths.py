@@ -92,7 +92,7 @@ def _is_module(dotted: str) -> bool:
 
 def check_file(path: Path, cache: dict[str, bool]) -> list[str]:
     problems: list[str] = []
-    rel = path.relative_to(ROOT).as_posix()
+    rel = path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
     check_dotted = path.name not in DOTTED_PATH_EXEMPT
     in_fence = False
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
