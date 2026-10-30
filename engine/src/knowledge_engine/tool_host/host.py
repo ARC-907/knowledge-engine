@@ -1012,6 +1012,8 @@ def run_bounded(
                 proc.wait(timeout=POLL_INTERVAL_SECONDS)
                 break
             except subprocess.TimeoutExpired:
+                # Still running after one poll interval: fall through to the
+                # overflow, cancellation and deadline checks below.
                 pass
             if out_over.is_set():
                 break
