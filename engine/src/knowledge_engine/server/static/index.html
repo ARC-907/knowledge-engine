@@ -114,6 +114,267 @@
     </template>
   </section>
 
+  <!-- ════════════════════════ Knowledge tab ════════════════════════ -->
+  <!-- Scoped search (POST /knowledge/search), exact-revision open and
+       citation export. Every value from the corpus is rendered with x-text. -->
+  <section id="panel-knowledge" role="tabpanel" aria-labelledby="tab-knowledge" tabindex="0"
+    x-show="tab === 'knowledge'" x-cloak>
+    <p x-show="kn.unavailable" x-cloak role="status" id="kn-unavailable"
+      class="mb-4 bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200 rounded p-3 text-sm"
+      x-text="kn.unavailable"></p>
+
+    <form x-show="!kn.unavailable && kn.workspaces.length" x-cloak @submit.prevent="knowledgeSearch()"
+      role="search" aria-label="Scoped knowledge search" class="mb-4 space-y-3 text-sm">
+      <div class="flex gap-2">
+        <label for="kn-query" class="sr-only">Search query</label>
+        <input id="kn-query" type="search" x-model="kn.query" autocomplete="off"
+          placeholder="Search within the selected scope..."
+          class="flex-1 min-w-0 bg-panel border border-edge rounded px-3 py-2 focus:border-sky-500">
+        <button type="submit" :disabled="kn.busy" :aria-busy="kn.busy ? 'true' : 'false'"
+          class="bg-sky-600 hover:bg-sky-500 disabled:opacity-60 text-white px-4 py-2 rounded">Search</button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div>
+          <label for="kn-workspace" class="block text-xs text-muted mb-1">Workspace</label>
+          <select id="kn-workspace" x-model="kn.workspace" @change="loadWorkspaceScope()"
+            class="w-full bg-panel border border-edge rounded px-2 py-1">
+            <template x-for="w in kn.workspaces" :key="w.workspace_id">
+              <option :value="w.workspace_id" x-text="w.display_name + ' (' + w.workspace_id + ')'"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label for="kn-project" class="block text-xs text-muted mb-1">Project</label>
+          <select id="kn-project" x-model="kn.project"
+            class="w-full bg-panel border border-edge rounded px-2 py-1">
+            <option value="">(whole workspace)</option>
+            <template x-for="p in kn.projects" :key="p.project_id">
+              <option :value="p.project_id" x-text="p.display_name + ' (' + p.project_id + ')'"></option>
+            </template>
+          </select>
+          <label class="flex items-center gap-1 mt-1 text-xs text-muted" x-show="kn.project">
+            <input id="kn-include-workspace" type="checkbox" x-model="kn.includeWorkspace">
+            also records outside any project
+          </label>
+        </div>
+        <div>
+          <label for="kn-mode" class="block text-xs text-muted mb-1">Mode</label>
+          <select id="kn-mode" x-model="kn.mode" class="w-full bg-panel border border-edge rounded px-2 py-1">
+            <option value="fts">fts (keyword)</option>
+            <option value="vector">vector (embeddings)</option>
+            <option value="hybrid">hybrid (fused)</option>
+          </select>
+        </div>
+        <div>
+          <label for="kn-limit" class="block text-xs text-muted mb-1">Hits (1–100)</label>
+          <input id="kn-limit" type="number" min="1" max="100" x-model.number="kn.limit"
+            class="w-full bg-panel border border-edge rounded px-2 py-1">
+        </div>
+      </div>
+
+      <details class="bg-panel border border-edge rounded">
+        <summary class="px-3 py-2 cursor-pointer select-none">
+          Filters
+          <span class="text-xs text-muted">(nothing ticked: the scope profile decides; values in one group are ORed, groups are ANDed)</span>
+        </summary>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-3">
+          <fieldset>
+            <legend class="text-xs text-muted mb-1">Sources</legend>
+            <p x-show="!kn.sources.length" class="text-xs text-faint">No sources.</p>
+            <template x-for="s in kn.sources" :key="s.source_id">
+              <label class="flex items-center gap-1">
+                <input type="checkbox" :value="s.source_id" x-model="kn.sourceIds">
+                <span x-text="s.display_name"></span>
+                <span class="text-xs text-faint" x-text="'(' + s.kind + ')'"></span>
+              </label>
+            </template>
+          </fieldset>
+          <fieldset>
+            <legend class="text-xs text-muted mb-1">Collections</legend>
+            <p x-show="!kn.collections.length" class="text-xs text-faint">No collections.</p>
+            <template x-for="c in kn.collections" :key="c.collection_id">
+              <label class="flex items-center gap-1">
+                <input type="checkbox" :value="c.collection_id" x-model="kn.collectionIds">
+                <span x-text="c.display_name"></span>
+                <span class="text-xs text-faint" x-text="c.project_id ? '(project ' + projectName(c.project_id) + ')' : '(workspace)'"></span>
+              </label>
+            </template>
+          </fieldset>
+          <fieldset>
+            <legend class="text-xs text-muted mb-1">Research types</legend>
+            <template x-for="t in researchTypeOptions" :key="t">
+              <label class="flex items-center gap-1">
+                <input type="checkbox" :value="t" x-model="kn.researchTypes">
+                <span x-text="t"></span>
+              </label>
+            </template>
+          </fieldset>
+          <div>
+            <label for="kn-tags" class="block text-xs text-muted mb-1">Tags (comma-separated; all must match)</label>
+            <input id="kn-tags" x-model="kn.tags" autocomplete="off" placeholder="e.g. climate, 2024"
+              class="w-full bg-canvas border border-edge rounded px-2 py-1">
+            <p class="text-xs text-faint mt-2">Curation status is record metadata; the search broker does not filter on it.</p>
+          </div>
+        </div>
+      </details>
+    </form>
+
+    <p class="sr-only" aria-live="polite" x-text="kn.status"></p>
+    <p x-show="kn.error" x-cloak role="alert" id="kn-error"
+      class="mb-4 bg-rose-50 border border-rose-300 text-rose-900 dark:bg-rose-950 dark:border-rose-800 dark:text-rose-200 rounded p-3 text-sm"
+      x-text="kn.error"></p>
+
+    <template x-if="kn.envelope">
+      <div class="mb-6">
+        <div x-show="kn.envelope.partial" role="alert" id="kn-partial"
+          class="mb-3 bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200 rounded p-3 text-sm">
+          <strong>Partial result:</strong> some sources did not answer; their hits are missing.
+        </div>
+        <ul class="flex flex-wrap gap-2 mb-3 text-xs list-none p-0" aria-label="Source status">
+          <template x-for="st in kn.envelope.source_status" :key="st.source_id">
+            <li class="source-status border rounded px-2 py-1"
+              :data-state="st.state"
+              :class="st.state === 'ok' ? 'border-emerald-300 text-emerald-800 dark:border-emerald-800 dark:text-emerald-300' : 'border-amber-400 text-amber-900 dark:border-amber-700 dark:text-amber-200'">
+              <span x-text="st.source_id"></span>:
+              <strong x-text="st.state"></strong>
+              <span x-text="'· ' + st.hit_count + ' hit' + (st.hit_count === 1 ? '' : 's')"></span>
+              <span x-show="st.error" x-text="st.error ? '· ' + st.error.code + ': ' + st.error.message : ''"></span>
+            </li>
+          </template>
+        </ul>
+        <ul x-show="kn.envelope.warnings.length" class="mb-3 text-xs text-amber-800 dark:text-amber-300 list-disc list-inside" aria-label="Warnings">
+          <template x-for="(w, i) in kn.envelope.warnings" :key="i">
+            <li x-text="w"></li>
+          </template>
+        </ul>
+        <p x-show="!kn.envelope.hits.length" class="text-sm text-muted">No hits in this scope.</p>
+        <ul class="space-y-2 list-none p-0" aria-label="Knowledge search results">
+          <template x-for="h in kn.envelope.hits" :key="h.source_id + '/' + h.record_id">
+            <li class="knowledge-hit bg-panel border border-edge rounded p-3" :data-record="h.record_id">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 class="font-medium" x-text="h.title || h.record_id"></h3>
+                <button type="button" @click="openHit(h)"
+                  :aria-label="'Open ' + (h.title || h.record_id)"
+                  class="text-xs border border-edge rounded px-2 py-1 hover:bg-panel-2">Open</button>
+              </div>
+              <div class="text-xs text-faint mt-1 flex flex-wrap gap-x-3">
+                <span>source: <span class="hit-source" x-text="h.source_id"></span></span>
+                <span>type: <span x-text="h.research_type"></span></span>
+                <span>scope: <span class="hit-project" x-text="projectName(h.scope.project_id)"></span></span>
+                <span>collections: <span class="hit-collections" x-text="h.collection_ids.length ? h.collection_ids.map((c) => collectionName(c)).join(', ') : 'none'"></span></span>
+                <span>locator: <span x-text="locatorSummary(h.locator)"></span></span>
+              </div>
+              <p class="text-sm mt-2 whitespace-pre-line"><template x-for="(part, i) in excerptParts(h.excerpt)" :key="i"><span><template x-if="part.mark"><mark class="bg-amber-200 text-fg dark:bg-amber-700 rounded px-0.5" x-text="part.text"></mark></template><template x-if="!part.mark"><span x-text="part.text"></span></template></span></template></p>
+            </li>
+          </template>
+        </ul>
+      </div>
+    </template>
+
+    <p x-show="kn.openError" x-cloak role="alert" id="kn-open-error"
+      class="mb-4 bg-rose-50 border border-rose-300 text-rose-900 dark:bg-rose-950 dark:border-rose-800 dark:text-rose-200 rounded p-3 text-sm"
+      x-text="kn.openError"></p>
+
+    <!-- Opened record or cited evidence: the exact revision and its verification state. -->
+    <template x-if="kn.opened">
+      <section id="kn-opened" aria-labelledby="kn-opened-title" class="mb-6 bg-panel border border-edge rounded p-4 text-sm">
+        <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
+          <h2 id="kn-opened-title" tabindex="-1" class="font-semibold text-base"
+            x-text="(kn.opened.via === 'citation' ? 'Cited evidence: ' : 'Opened: ') + kn.opened.title"></h2>
+          <button type="button" @click="kn.opened = null; kn.cite = null" class="text-xs border border-edge rounded px-2 py-1 hover:bg-panel-2">Close</button>
+        </div>
+        <div id="kn-verification" class="verification border-l-4 pl-3 py-1 mb-3"
+          :data-verification="kn.opened.result.verification"
+          :class="{
+            'border-emerald-500': kn.opened.result.verification === 'verified',
+            'border-amber-500': kn.opened.result.verification === 'stale',
+            'border-rose-500': ['unavailable', 'ambiguous', 'unsupported'].includes(kn.opened.result.verification),
+          }">
+          <p class="font-medium">
+            <span class="sr-only">Verification state:</span>
+            <span class="verification-label" x-text="verificationLabel(kn.opened.result.verification)"></span>
+          </p>
+          <p class="text-xs text-muted" x-text="verificationText(kn.opened.result.verification)"></p>
+          <p class="text-xs text-muted" x-show="kn.opened.reason" x-text="'Reason: ' + (kn.opened.reason || '')"></p>
+        </div>
+        <dl class="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs mb-3">
+          <dt class="text-muted">Source</dt><dd class="break-all" x-text="kn.opened.result.source_id"></dd>
+          <dt class="text-muted">Record</dt><dd class="break-all" x-text="kn.opened.result.record_id"></dd>
+          <dt class="text-muted">Revision</dt><dd class="break-all" id="kn-opened-revision" x-text="kn.opened.result.revision_id"></dd>
+          <template x-if="kn.opened.currentRevision && kn.opened.currentRevision !== kn.opened.result.revision_id">
+            <dt class="text-muted">Current revision</dt>
+          </template>
+          <template x-if="kn.opened.currentRevision && kn.opened.currentRevision !== kn.opened.result.revision_id">
+            <dd class="break-all" x-text="kn.opened.currentRevision"></dd>
+          </template>
+          <dt class="text-muted">Locator</dt><dd x-text="locatorSummary(kn.opened.result.locator)"></dd>
+          <dt class="text-muted">Media type</dt><dd x-text="kn.opened.result.media_type"></dd>
+          <dt class="text-muted">Digest</dt><dd class="break-all" x-text="kn.opened.result.digest || '—'"></dd>
+          <dt class="text-muted">Scope</dt><dd x-text="kn.opened.result.scope.workspace_id + ' / ' + projectName(kn.opened.result.scope.project_id)"></dd>
+        </dl>
+        <template x-if="typeof kn.opened.result.content === 'string'">
+          <div>
+            <h3 class="text-xs text-muted mb-1">Content of this revision</h3>
+            <pre id="kn-content" class="bg-canvas border border-edge rounded p-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs"
+              x-text="kn.opened.result.content"></pre>
+          </div>
+        </template>
+        <p x-show="kn.opened.notice" class="text-xs text-faint mt-2" x-text="kn.opened.notice"></p>
+
+        <div x-show="canCite()" class="mt-3 flex flex-wrap gap-2">
+          <button type="button" id="kn-cite-document" @click="citeOpened(false)"
+            class="bg-violet-700 hover:bg-violet-600 text-white px-3 py-1 rounded text-xs">Cite this revision</button>
+          <button type="button" id="kn-cite-selection" @click="citeOpened(true)"
+            class="bg-panel-2 hover:bg-edge border border-edge px-3 py-1 rounded text-xs">Cite selected text as a quotation</button>
+        </div>
+        <p x-show="kn.citeError" role="alert" class="mt-2 text-xs text-rose-700 dark:text-rose-300" x-text="kn.citeError"></p>
+        <p class="sr-only" aria-live="polite" x-text="kn.citeStatus"></p>
+
+        <template x-if="kn.cite">
+          <div id="kn-citation" class="mt-4 border-t border-edge pt-3">
+            <h3 class="font-medium mb-1">Citation</h3>
+            <ul class="text-xs mb-2 list-none p-0 space-y-1">
+              <template x-for="c in kn.cite.claims" :key="c.claim_id">
+                <li class="claim" :data-status="c.status">
+                  <strong x-text="c.kind + ': ' + c.status"></strong>
+                  <template x-for="(ev, i) in c.evidence" :key="i">
+                    <span class="ml-2">
+                      evidence <span x-text="ev.evidence_id || ev.revision_id"></span>
+                      — <span class="evidence-state" x-text="ev.verification || (ev.error ? ev.error.code : 'unresolved')"></span>
+                      <button type="button" x-show="ev.evidence_id || ev.revision_id" @click="openEvidence(ev)"
+                        class="ml-1 underline text-sky-700 dark:text-sky-300">open</button>
+                    </span>
+                  </template>
+                  <template x-for="(issue, i) in c.issues" :key="'i' + i">
+                    <span class="block text-amber-800 dark:text-amber-300" x-text="issue"></span>
+                  </template>
+                </li>
+              </template>
+            </ul>
+            <p class="text-xs text-faint mb-2" x-text="kn.cite.notice"></p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-xs text-muted">Markdown</h4>
+                  <button type="button" @click="copyText(kn.cite.markdown || '')" class="text-xs border border-edge rounded px-2 py-0.5">Copy Markdown</button>
+                </div>
+                <pre id="kn-citation-markdown" class="bg-canvas border border-edge rounded p-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs" x-text="kn.cite.markdown || ''"></pre>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-xs text-muted">CSL-JSON</h4>
+                  <button type="button" @click="copyText(cslText())" class="text-xs border border-edge rounded px-2 py-0.5">Copy CSL-JSON</button>
+                </div>
+                <pre id="kn-citation-csl" class="bg-canvas border border-edge rounded p-2 max-h-64 overflow-auto text-xs" x-text="cslText()"></pre>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+    </template>
+  </section>
+
   <!-- ════════════════════════ Registry tab ════════════════════════ -->
   <section id="panel-registry" role="tabpanel" aria-labelledby="tab-registry" tabindex="0"
     x-show="tab === 'registry'" x-cloak>
@@ -287,6 +548,85 @@
       </template>
     </ul>
     <p x-show="!board.messages.length" class="text-faint text-sm">(no messages)</p>
+  </section>
+
+  <!-- ════════════════════════ Modules tab ════════════════════════ -->
+  <!-- Read-only status of operator-registered modules. /modules requires a
+       board admin key (X-Board-Key, set in the Config tab). -->
+  <section id="panel-modules" role="tabpanel" aria-labelledby="tab-modules" tabindex="0"
+    x-show="tab === 'modules'" x-cloak>
+    <div class="flex flex-wrap items-center gap-2 mb-4 text-sm">
+      <p class="text-muted m-0">Modules are registered, configured and enabled with <code class="bg-panel-2 px-1 rounded">knowledge-engine module</code>; this view shows their state.</p>
+      <button type="button" @click="loadModules()" class="ml-auto bg-panel-2 hover:bg-edge border border-edge px-3 py-1 rounded">Refresh modules</button>
+    </div>
+    <p class="sr-only" aria-live="polite" x-text="mods.status"></p>
+
+    <p x-show="mods.state === 'needs-key'" x-cloak role="status" id="mods-needs-key"
+      class="bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200 rounded p-3 text-sm">
+      Module status needs a board admin key. Set one in the Config tab.
+    </p>
+    <p x-show="mods.state === 'denied'" x-cloak role="status"
+      class="bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200 rounded p-3 text-sm">
+      The stored key is not a board admin key, or this browser is not a trusted peer.
+    </p>
+    <p x-show="mods.state === 'unavailable' || mods.state === 'error'" x-cloak role="status"
+      class="bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-200 rounded p-3 text-sm"
+      x-text="mods.state === 'unavailable' ? 'Modules are not available on this server (' + mods.error + ').' : 'Could not load modules: ' + mods.error"></p>
+
+    <template x-if="mods.state === 'ok'">
+      <div>
+        <p x-show="!mods.list.length" class="text-sm text-muted">No modules registered.</p>
+        <div class="overflow-x-auto" x-show="mods.list.length">
+          <table class="w-full text-sm" id="modules-table">
+            <caption class="sr-only">Registered modules and their state</caption>
+            <thead class="text-left text-faint border-b border-edge">
+              <tr>
+                <th scope="col" class="py-2">Module</th><th scope="col">State</th><th scope="col">Detail</th>
+                <th scope="col">Transport</th><th scope="col">Tools</th><th scope="col">Active</th><th scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="m in mods.list" :key="m.module_id">
+                <tr class="module-row border-b border-edge-soft align-top" :data-module="m.module_id" :data-state="m.state">
+                  <td class="py-2">
+                    <div class="font-medium" x-text="m.module_id"></div>
+                    <div class="text-xs text-faint" x-text="'v' + m.version + (m.description ? ' · ' + m.description : '')"></div>
+                  </td>
+                  <td class="py-2">
+                    <span class="module-state inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium border"
+                      :class="{
+                        'border-emerald-400 text-emerald-800 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800': m.state === 'ready',
+                        'border-amber-500 text-amber-900 bg-amber-100 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-600': m.state === 'degraded',
+                        'border-rose-500 text-rose-900 bg-rose-100 dark:bg-rose-950 dark:text-rose-200 dark:border-rose-600': m.state === 'failed',
+                        'border-edge text-muted': !['ready', 'degraded', 'failed'].includes(m.state),
+                      }">
+                      <span aria-hidden="true" x-text="moduleStateIcon(m.state)"></span>
+                      <span x-text="moduleStateLabel(m.state)"></span>
+                    </span>
+                  </td>
+                  <td class="py-2 text-xs text-muted break-words max-w-xs" x-text="m.state_detail || '—'"></td>
+                  <td class="py-2 text-xs" x-text="m.transport"></td>
+                  <td class="py-2 text-xs" x-text="(m.tools || []).map((t) => t.name).join(', ') || '—'"></td>
+                  <td class="py-2 text-xs" x-text="m.active_calls"></td>
+                  <td class="py-2">
+                    <button type="button" x-show="m.enabled" @click="probeModule(m)" :disabled="mods.probing === m.module_id"
+                      :aria-label="'Check health of ' + m.module_id"
+                      class="text-xs border border-edge rounded px-2 py-1 hover:bg-panel-2 disabled:opacity-60">Check health</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="text-sm font-medium mt-6 mb-2">Jobs (default workspace)</h3>
+        <p x-show="!mods.jobs.length" class="text-xs text-muted">No jobs.</p>
+        <ul x-show="mods.jobs.length" class="text-xs space-y-1 list-none p-0">
+          <template x-for="j in mods.jobs" :key="j.job_id">
+            <li><span x-text="j.job_id"></span> · <span x-text="j.module_id + '.' + j.tool"></span> · <strong x-text="j.state"></strong></li>
+          </template>
+        </ul>
+      </div>
+    </template>
   </section>
 
   <!-- ════════════════════════ Config tab ════════════════════════ -->
