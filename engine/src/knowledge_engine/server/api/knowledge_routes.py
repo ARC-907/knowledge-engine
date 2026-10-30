@@ -8,19 +8,33 @@ the same JSON. Failures are typed
 ``{"detail": message, "type": code, "error": {"code", "message", "details",
 "retryable"}}`` with the code's HTTP status. The legacy ``/search`` route is
 unchanged by this surface.
+
+``POST /knowledge/search`` and ``GET``/``POST /knowledge/open`` bind the
+retrieval broker (:mod:`knowledge_engine.knowledge.broker`) through the same
+request models as the ``knowledge.search`` / ``knowledge.open`` MCP tools and
+``knowledge-engine knowledge search|open``
+(:mod:`knowledge_engine.knowledge.broker_api`).
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from ...knowledge.broker_api import (
+    KnowledgeSearchEnvelope,
+    OpenRequest,
+    SearchRequest,
+    run_open,
+    run_search,
+)
 from ...knowledge.contracts import (
     Collection,
     Description,
     DisplayName,
+    OpenResult,
     Project,
     ScopeProfile,
     SourceRecord,
@@ -32,6 +46,7 @@ from ...knowledge.service import (
     KnowledgeStatus,
     MembershipResult,
     ProfileList,
+    ProjectContextLink,
     ProjectList,
     RecordPage,
     RecordQueryInput,
@@ -42,7 +57,7 @@ from ...knowledge.service import (
     invoke,
 )
 from ...knowledge.store import MAX_PAGE
-from ..deps import KnowledgeDep
+from ..deps import BrokerDep, KnowledgeDep
 
 router = APIRouter()
 
@@ -66,6 +81,13 @@ class CollectionBody(_Body):
 
 class MembersBody(_Body):
     records: list[RecordRefIn] = Field(min_length=1, max_length=MAX_PAGE)
+
+
+class ProjectContextLinkBody(_Body):
+    root: str = Field(description="Absolute path of the project-context project root.")
+    project_fp: str | None = Field(
+        default=None, description="Project fingerprint; defaults to the one registered for root."
+    )
 
 
 def _drop_none(data: dict[str, Any]) -> dict[str, Any]:
@@ -169,6 +191,82 @@ def set_profile(
 ) -> dict[str, Any]:
     profile = {**payload, "workspace_id": workspace_id, "profile_id": profile_id}
     return invoke(service, "profile_set", {"profile": profile})
+
+
+@router.put(
+    "/workspaces/{workspace_id}/project-context/links/{project_id}",
+    response_model=ProjectContextLink,
+)
+def link_project_context(
+    workspace_id: str, project_id: str, payload: ProjectContextLinkBody, service: KnowledgeDep
+) -> dict[str, Any]:
+    args = {
+        "workspace_id": workspace_id,
+        "project_id": project_id,
+        **_drop_none(payload.model_dump()),
+    }
+    return invoke(service, "project_context_link", args)
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/project-context/links/{project_id}",
+    response_model=ProjectContextLink,
+)
+def unlink_project_context(
+    workspace_id: str, project_id: str, service: KnowledgeDep
+) -> dict[str, Any]:
+    args = {"workspace_id": workspace_id, "project_id": project_id}
+    return invoke(service, "project_context_unlink", args)
+
+
+# ── retrieval broker ─────────────────────────────────────────────────
+
+
+@router.post("/search", response_model=KnowledgeSearchEnvelope)
+def broker_search(payload: SearchRequest, broker: BrokerDep) -> dict[str, Any]:
+    """Scoped search across the workspace's sources (see KNOWLEDGE-SEARCH.md)."""
+    return run_search(broker, payload.model_dump())
+
+
+@router.post("/open", response_model=OpenResult)
+def broker_open(payload: OpenRequest, broker: BrokerDep) -> dict[str, Any]:
+    """Open one in-scope record at an exact revision (the current one when omitted)."""
+    return run_open(broker, payload.model_dump(mode="json", exclude_none=True))
+
+
+@router.get("/open", response_model=OpenResult)
+def broker_open_get(
+    broker: BrokerDep,
+    workspace_id: Annotated[str, Query(description="Workspace of the scope.")],
+    source_id: str,
+    record_id: str,
+    revision_id: Annotated[
+        str | None, Query(description="Exact revision; omit for the current one.")
+    ] = None,
+    project_id: str | None = None,
+    profile_id: str | None = None,
+    include_workspace: bool = False,
+) -> dict[str, Any]:
+    """``POST /knowledge/open`` with the scope in query parameters (no locator)."""
+    context = _drop_none(
+        {
+            "workspace_id": workspace_id,
+            "project_id": project_id,
+            "profile_id": profile_id,
+            "include_workspace": include_workspace or None,
+        }
+    )
+    return run_open(
+        broker,
+        _drop_none(
+            {
+                "context": context,
+                "source_id": source_id,
+                "record_id": record_id,
+                "revision_id": revision_id,
+            }
+        ),
+    )
 
 
 __all__ = ["router"]

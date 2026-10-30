@@ -1888,6 +1888,467 @@
         "type": "object"
       },
       "name": "knowledge_profile_set"
+    },
+    {
+      "description": "Link a project to the project-context store at a root on this host, so the retrieval broker searches that project's documentation (source project_context:<workspace_id>). Only linked project-context projects are searchable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "project_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "root": {
+            "description": "Absolute path of the project-context project root on this host.",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Root",
+            "type": "string"
+          },
+          "project_fp": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Project fingerprint (proj_...); defaults to the one registered for root.",
+            "title": "Project Fp"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "project_id",
+          "root"
+        ],
+        "title": "ProjectContextLinkInput",
+        "type": "object"
+      },
+      "name": "knowledge_project_context_link"
+    },
+    {
+      "description": "Remove a project's project-context link; its documentation stops being searchable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "project_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "project_id"
+        ],
+        "title": "ProjectContextUnlinkInput",
+        "type": "object"
+      },
+      "name": "knowledge_project_context_unlink"
+    }
+  ],
+  "knowledge_broker": [
+    {
+      "description": "Scoped search across the knowledge sources of a workspace (corpus, linked project context). context.workspace_id is required; omitted selections use the profile; unknown ids are errors. Returns hits with source/record/revision identity, the effective scope and per-source status; partial=true when a source failed. Does not change the legacy `search` tool.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "One broker search: the query text and its query context.",
+        "properties": {
+          "query": {
+            "description": "FTS5 query text (vector/hybrid: natural language).",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext: workspace_id is required; project_id, profile_id, source_ids, collection_ids, research_types, tags, include_workspace, mode, limit, timeout_ms and byte_budget are optional (see the knowledge contracts).",
+            "title": "Context",
+            "type": "object"
+          }
+        },
+        "required": [
+          "query",
+          "context"
+        ],
+        "title": "SearchRequest",
+        "type": "object"
+      },
+      "name": "knowledge.search"
+    },
+    {
+      "description": "Open one record of the scope at an exact revision (from a search hit; omit revision_id for the current one). Reports verification: verified, unsupported (revision not stored), unavailable.",
+      "inputSchema": {
+        "$defs": {
+          "BoundingBox": {
+            "additionalProperties": false,
+            "description": "A rectangle in PDF points, origin at the bottom-left of the page.",
+            "properties": {
+              "x0": {
+                "title": "X0",
+                "type": "number"
+              },
+              "y0": {
+                "title": "Y0",
+                "type": "number"
+              },
+              "x1": {
+                "title": "X1",
+                "type": "number"
+              },
+              "y1": {
+                "title": "Y1",
+                "type": "number"
+              }
+            },
+            "required": [
+              "x0",
+              "y0",
+              "x1",
+              "y1"
+            ],
+            "title": "BoundingBox",
+            "type": "object"
+          },
+          "CodeLocator": {
+            "additionalProperties": false,
+            "description": "Code in a repository at an exact commit, or at a snapshot digest when dirty.\n\nExactly one of ``commit`` and ``snapshot_digest`` is set: a dirty working\ntree is never represented as a clean commit. Lines are 1-based with an\nexclusive ``end_line``.",
+            "properties": {
+              "kind": {
+                "const": "code",
+                "default": "code",
+                "title": "Kind",
+                "type": "string"
+              },
+              "repository_id": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Repository Id",
+                "type": "string"
+              },
+              "commit": {
+                "anyOf": [
+                  {
+                    "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Commit"
+              },
+              "snapshot_digest": {
+                "anyOf": [
+                  {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Snapshot Digest"
+              },
+              "path": {
+                "description": "Repository-relative POSIX path.",
+                "maxLength": 1024,
+                "minLength": 1,
+                "title": "Path",
+                "type": "string"
+              },
+              "symbol": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Qualified symbol name.",
+                "title": "Symbol"
+              },
+              "start_line": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Start Line"
+              },
+              "end_line": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "End Line"
+              }
+            },
+            "required": [
+              "repository_id",
+              "path"
+            ],
+            "title": "CodeLocator",
+            "type": "object"
+          },
+          "PdfLocator": {
+            "additionalProperties": false,
+            "description": "A 1-based PDF page, optionally narrowed to a bounding box.",
+            "properties": {
+              "kind": {
+                "const": "pdf",
+                "default": "pdf",
+                "title": "Kind",
+                "type": "string"
+              },
+              "page": {
+                "description": "1-based page number.",
+                "minimum": 1,
+                "title": "Page",
+                "type": "integer"
+              },
+              "bbox": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/BoundingBox"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "page"
+            ],
+            "title": "PdfLocator",
+            "type": "object"
+          },
+          "TextLocator": {
+            "additionalProperties": false,
+            "description": "A span of a text revision: UTF-8 byte offsets, half-open ``[start_byte, end_byte)``.",
+            "properties": {
+              "kind": {
+                "const": "text",
+                "default": "text",
+                "title": "Kind",
+                "type": "string"
+              },
+              "heading": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Nearest heading text, informational only.",
+                "title": "Heading"
+              },
+              "start_byte": {
+                "description": "Inclusive UTF-8 byte offset into the revision.",
+                "minimum": 0,
+                "title": "Start Byte",
+                "type": "integer"
+              },
+              "end_byte": {
+                "description": "Exclusive UTF-8 byte offset into the revision.",
+                "minimum": 0,
+                "title": "End Byte",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "start_byte",
+              "end_byte"
+            ],
+            "title": "TextLocator",
+            "type": "object"
+          },
+          "TranscriptLocator": {
+            "additionalProperties": false,
+            "description": "A transcript segment: milliseconds, half-open ``[start_ms, end_ms)``.",
+            "properties": {
+              "kind": {
+                "const": "transcript",
+                "default": "transcript",
+                "title": "Kind",
+                "type": "string"
+              },
+              "start_ms": {
+                "minimum": 0,
+                "title": "Start Ms",
+                "type": "integer"
+              },
+              "end_ms": {
+                "minimum": 0,
+                "title": "End Ms",
+                "type": "integer"
+              },
+              "speaker": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Only when known.",
+                "title": "Speaker"
+              }
+            },
+            "required": [
+              "start_ms",
+              "end_ms"
+            ],
+            "title": "TranscriptLocator",
+            "type": "object"
+          },
+          "UnsupportedLocator": {
+            "additionalProperties": false,
+            "description": "No usable position could be recovered; never replaced by an invented one.",
+            "properties": {
+              "kind": {
+                "const": "unsupported",
+                "default": "unsupported",
+                "title": "Kind",
+                "type": "string"
+              },
+              "reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "title": "UnsupportedLocator",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Open one record of the scope at a revision (the current one when omitted).",
+        "properties": {
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext; the record must be in its scope.",
+            "title": "Context",
+            "type": "object"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "pattern": "^rev_[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The exact revision (from a search hit); omit for the current.",
+            "title": "Revision Id"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "code": "#/$defs/CodeLocator",
+                    "pdf": "#/$defs/PdfLocator",
+                    "text": "#/$defs/TextLocator",
+                    "transcript": "#/$defs/TranscriptLocator",
+                    "unsupported": "#/$defs/UnsupportedLocator"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/TextLocator"
+                  },
+                  {
+                    "$ref": "#/$defs/PdfLocator"
+                  },
+                  {
+                    "$ref": "#/$defs/TranscriptLocator"
+                  },
+                  {
+                    "$ref": "#/$defs/CodeLocator"
+                  },
+                  {
+                    "$ref": "#/$defs/UnsupportedLocator"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional text locator to echo.",
+            "title": "Locator"
+          }
+        },
+        "required": [
+          "context",
+          "source_id",
+          "record_id"
+        ],
+        "title": "OpenRequest",
+        "type": "object"
+      },
+      "name": "knowledge.open"
     }
   ]
 }

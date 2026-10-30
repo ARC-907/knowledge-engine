@@ -58,6 +58,9 @@ enables or disables one (disabled entries drop out of the index on the next rein
 - `project_context.*` and `board_*` tools are present when those subsystems are enabled.
 - `knowledge_*` tools administer scoped-knowledge metadata (workspaces, projects, \
 collections, classification); they do not change `search`.
+- `knowledge.search` / `knowledge.open` are the scoped retrieval broker: search a \
+workspace's sources (corpus, linked project context) with explicit scope, and open \
+a hit's exact revision. They do not change `search`.
 Tool results are JSON text."""
 
 
@@ -116,10 +119,22 @@ def load_knowledge_group() -> ToolGroup:
     return ToolGroup("knowledge", schemas, dispatch, context)
 
 
+def load_knowledge_broker_group() -> ToolGroup:
+    """``knowledge.search`` / ``knowledge.open`` (the retrieval broker), unless disabled."""
+    from ..core.settings import Settings  # noqa: PLC0415 - read when the server is built
+    from ..knowledge.broker_mcp import collect_tools  # noqa: PLC0415 - optional subsystem
+
+    if not Settings().knowledge_enabled:
+        raise GroupDisabledError("disabled by KE_KNOWLEDGE_ENABLED=0")
+    schemas, dispatch, context = collect_tools()
+    return ToolGroup("knowledge_broker", schemas, dispatch, context)
+
+
 GROUP_LOADERS: tuple[tuple[str, Callable[[], ToolGroup]], ...] = (
     ("project_context", load_project_context_group),
     ("agent_board", load_agent_board_group),
     ("knowledge", load_knowledge_group),
+    ("knowledge_broker", load_knowledge_broker_group),
 )
 
 
@@ -379,14 +394,15 @@ def _shutdown(registry: Registry, indexer: Indexer) -> None:
 
 
 def close_knowledge_stores() -> None:
-    """Close the stores the ``knowledge_*`` tools opened (only if that group was loaded)."""
-    module = sys.modules.get("knowledge_engine.knowledge.mcp_tools")
-    if module is None:
-        return
-    try:
-        module.close_all()
-    except Exception:
-        logger.exception("closing the knowledge stores failed")
+    """Close the stores the ``knowledge_*`` and ``knowledge.*`` tools opened (if loaded)."""
+    for name in ("knowledge_engine.knowledge.mcp_tools", "knowledge_engine.knowledge.broker_mcp"):
+        module = sys.modules.get(name)
+        if module is None:
+            continue
+        try:
+            module.close_all()
+        except Exception:
+            logger.exception("closing the knowledge stores of %s failed", name)
 
 
 def _serve(args: argparse.Namespace, server: MCPServer[Any]) -> int:
