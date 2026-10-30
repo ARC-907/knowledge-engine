@@ -18,6 +18,17 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 
 ### Fixed
 
+- Nested registry entries are attributed consistently in every search mode
+  ([#39](https://github.com/ARC-907/knowledge-engine/issues/39),
+  [ADR 0005](02-dev-docs/adr/0005-nested-entry-ownership.md)): the deepest
+  enabled entry containing a file owns it, a disabled nested entry falls back
+  to its enclosing entry, and a `kind` filter applies to the owner. FTS
+  indexing no longer stores a nested file under every enclosing entry, so
+  `fts` and `hybrid` searches no longer return the same file twice, and a
+  filtered `vector` search no longer re-attributes a nested file to its
+  parent. **Compatibility:** with nested entries, a file is now returned only
+  under its owning entry and `reindex` counts it once; run
+  `knowledge-engine reindex` after upgrading.
 - The dashboard browser tests built their FTS index through `app.state`, which
   only exists inside the app lifespan since 3.0, so they errored before
   reaching the browser; they now build the index the way `reindex` does.

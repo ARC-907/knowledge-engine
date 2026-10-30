@@ -13,6 +13,7 @@ from typing import Any
 from ..core.config import Config
 from ..core.registry import Registry
 from ..core.util.sqlite import connect as sqlite_connect, transaction
+from .ownership import EntryOwnership
 
 INDEX_FILENAME = "index.db"
 TEXT_SUFFIXES = {".md", ".txt", ".rst"}
@@ -151,18 +152,32 @@ class Indexer:
                 yield path
 
     def _collect(self) -> tuple[list[tuple[str, str, str, str]], dict[str, int]]:
-        """Walk the enabled entries and read every indexable file (no lock held)."""
+        """Walk the enabled entries and read every indexable file (no lock held).
+
+        Each file is indexed once, under the entry that owns it
+        (:mod:`.ownership`): a file inside a nested enabled entry is skipped
+        while walking the enclosing one.
+        """
         counts = {"entries": 0, "files": 0, "missing": 0}
         rows: list[tuple[str, str, str, str]] = []
-        for entry in self.registry.list(enabled_only=True):
+        entries = self.registry.list(enabled_only=True)
+        ownership = EntryOwnership(entries)
+        seen: set[str] = set()
+        for entry in entries:
             counts["entries"] += 1
             for path in self._entry_files(entry, counts):
+                rel = path.relative_to(self.config.corpus_root).as_posix()
+                owner = ownership.owner(rel)
+                if owner is not None and owner.get("id") != entry["id"]:
+                    continue  # indexed under the nested entry that owns it
+                if rel in seen:
+                    continue  # two entries with the same path: the first one wins
+                seen.add(rel)
                 try:
                     text = path.read_text(encoding="utf-8", errors="ignore")
                 except OSError as exc:
                     _logger.debug("skipping unreadable %s: %s", path, exc)
                     continue
-                rel = path.relative_to(self.config.corpus_root).as_posix()
                 rows.append((entry["id"], entry["kind"], rel, text))
                 counts["files"] += 1
         return rows, counts

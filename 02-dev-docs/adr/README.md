@@ -11,3 +11,4 @@ both ways.
 | [0002](0002-default-paths.md) | Default paths from `KE_HOME`, runtime data under `.knowledge-engine/data` | Accepted |
 | [0003](0003-board-auth-model.md) | Agent board authentication model | Accepted |
 | [0004](0004-merge-train.md) | Deliver large changes as a merge train of stacked PRs with a local gate | Accepted |
+| [0005](0005-nested-entry-ownership.md) | Nested registry entries: the deepest enabled entry owns a file | Accepted |

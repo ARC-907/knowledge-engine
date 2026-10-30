@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Literal, get_args
 from ..core.registry import Registry
 from .embeddings.errors import EmbeddingUnavailableError
 from .fts5 import Indexer, SearchResults
+from .ownership import EntryOwnership
 
 if TYPE_CHECKING:
     from .embeddings.index import CorpusEmbeddingIndex, VectorHit
@@ -95,34 +96,23 @@ def excerpt(text: str, limit: int = EXCERPT_CHARS) -> str:
 
 
 class EntryResolver:
-    """Map corpus-relative file paths to the enabled registry entry that contains them.
+    """Map corpus-relative file paths to the enabled registry entry that owns them.
 
-    The longest matching entry path wins (nested entries). ``kind`` restricts
-    the candidates to one entry kind.
+    Ownership follows :mod:`.ownership` (the deepest enabled entry containing
+    the file), exactly as FTS indexing attributes files. ``kind`` then keeps
+    only files whose *owner* has that kind; it never re-attributes a file to
+    an enclosing entry of the requested kind.
     """
 
     def __init__(self, entries: Sequence[dict[str, Any]], kind: str | None = None) -> None:
-        prefixes: list[tuple[str, dict[str, Any]]] = []
-        for entry in entries:
-            if kind and entry.get("kind") != kind:
-                continue
-            raw = str(entry.get("path") or "").replace("\\", "/").strip("/")
-            if raw:
-                prefixes.append((raw, entry))
-        prefixes.sort(key=lambda item: len(item[0]), reverse=True)
-        self._prefixes = prefixes
-        self._cache: dict[str, dict[str, Any] | None] = {}
+        self._ownership = EntryOwnership(entries)
+        self._kind = kind
 
     def resolve(self, rel_path: str) -> dict[str, Any] | None:
-        if rel_path in self._cache:
-            return self._cache[rel_path]
-        found: dict[str, Any] | None = None
-        for prefix, entry in self._prefixes:
-            if rel_path == prefix or rel_path.startswith(prefix + "/"):
-                found = entry
-                break
-        self._cache[rel_path] = found
-        return found
+        owner = self._ownership.owner(rel_path)
+        if owner is None or (self._kind and owner.get("kind") != self._kind):
+            return None
+        return owner
 
     def accepts(self, rel_path: str) -> bool:
         return self.resolve(rel_path) is not None
