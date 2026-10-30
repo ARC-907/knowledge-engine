@@ -677,7 +677,8 @@ def test_project_context_open_and_revisions(linked: World) -> None:
     assert hit.revision_id is not None
     opened = linked.broker.open(linked.ctx(project_id="alpha"), PC, hit.record_id, hit.revision_id)
     assert opened.verification == VerificationState.VERIFIED and opened.content == BODY
-    assert linked.broker.open(linked.ctx(), PC, hit.record_id).revision_id == hit.revision_id
+    latest = linked.broker.open(linked.ctx(), PC, hit.record_id)
+    assert latest.revision_id == hit.revision_id
     with pytest.raises(UnknownScopeError):
         linked.broker.open(linked.ctx(project_id="beta"), PC, hit.record_id)
     with pytest.raises(UnknownScopeError):
