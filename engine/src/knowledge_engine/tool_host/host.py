@@ -39,6 +39,7 @@ import mimetypes
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import threading
@@ -856,6 +857,8 @@ def _urlopen(req: urllib_request.Request, timeout: float) -> Any:
 
 #: Seconds between SIGTERM and SIGKILL when a process group is stopped.
 KILL_GRACE_SECONDS = 1.0
+#: Upper bound for ``taskkill /T`` when stopping a process tree on Windows.
+TASKKILL_TIMEOUT_SECONDS = 10.0
 #: How often :func:`run_bounded` checks its deadline and cancellation hooks.
 POLL_INTERVAL_SECONDS = 0.05
 _READ_CHUNK = 65536
@@ -899,9 +902,35 @@ def resolve_script_argv(argv: Sequence[str], working_dir: str | Path) -> list[st
     return [args[0], str(checked), *args[2:]]
 
 
+def _taskkill_tree(pid: int) -> bool:
+    """Windows: terminate ``pid`` and its descendants with ``taskkill /T /F``."""
+    system_root = os.environ.get("SYSTEMROOT", r"C:\Windows")
+    exe = shutil.which("taskkill") or str(Path(system_root) / "System32" / "taskkill.exe")
+    try:
+        done = subprocess.run(  # noqa: S603 - fixed argv, numeric pid
+            [exe, "/T", "/F", "/PID", str(int(pid))],
+            capture_output=True,
+            timeout=TASKKILL_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("taskkill of process tree %s failed: %s", pid, exc)
+        return False
+    if done.returncode != 0:
+        logger.debug("taskkill /T /PID %s exited %s", pid, done.returncode)
+    return done.returncode == 0
+
+
 def _kill_group(proc: subprocess.Popen[bytes]) -> None:
-    """Stop ``proc`` and every process in its group (POSIX), else the process itself."""
+    """Stop ``proc`` and every process it started.
+
+    POSIX: SIGTERM, then SIGKILL, to its process group. Windows: ``taskkill
+    /T /F`` on its process tree (a process started in its own process group
+    has no console signal we could send without reaching the host too), then
+    ``TerminateProcess`` on the leader if anything is left.
+    """
     if os.name == "nt":  # pragma: no cover - exercised on Windows only
+        _taskkill_tree(proc.pid)
         with contextlib.suppress(OSError):
             proc.kill()
         return

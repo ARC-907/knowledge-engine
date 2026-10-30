@@ -165,13 +165,31 @@ def process_alive(pid: int) -> bool:
         except OSError:
             return False
         return stat.rsplit(")", 1)[1].split()[0] not in {"Z", "X"}
+    if sys.platform == "win32":
+        return _windows_process_alive(pid)
     import os
 
     try:
-        os.kill(pid, 0)
+        os.kill(pid, 0)  # POSIX only: on Windows signal 0 is CTRL_C_EVENT
     except OSError:
         return False
     return True
+
+
+def _windows_process_alive(pid: int) -> bool:
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    try:
+        code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return False
+        return code.value == 259  # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 @pytest.fixture

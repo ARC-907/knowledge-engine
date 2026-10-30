@@ -45,6 +45,12 @@ with lasting effect also get an [ADR](adr/README.md); defects get a row in the
     project.
   - The CLI opens `knowledge.db` only when a call ingests, so module commands
     that never ingest create no database.
+  - Windows CI found two defects in the module runtime (B-026, B-027). One of
+    them was in a test helper: `os.kill(pid, 0)` is a harmless probe on POSIX
+    but sends Ctrl+C on Windows, which ended the test run partway with a
+    `KeyboardInterrupt`. Cancelling now stops the whole process tree on Windows
+    too (`taskkill /T /F`), so the same test covers both platforms instead of
+    being skipped on one.
 - **Serena compatibility probe.** Installed `serena-agent==2.1.0` in an
   isolated environment and drove it over stdio with the MCP SDK client
   (protocol `2026-07-28`). Findings that shape the adapter:

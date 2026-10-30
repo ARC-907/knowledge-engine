@@ -16,7 +16,8 @@ import json
 import sys
 import urllib.request
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 MAX_BYTES = 2 * 1024 * 1024
 MEDIA_TYPES = {".html": "text/html", ".htm": "text/html", ".md": "text/markdown", ".txt": "text/plain"}
@@ -28,7 +29,8 @@ def fail(code: str, message: str) -> None:
 
 
 def from_fixture(url: str, settings: dict) -> tuple[bytes, str, dict]:
-    raw_path = unquote(urlsplit(url).path)
+    # url2pathname maps "/D:/dir/x" to "D:\\dir\\x" on Windows and unquotes.
+    raw_path = url2pathname(urlsplit(url).path)
     module_dir = Path.cwd().resolve()
     candidate = Path(raw_path)
     if not candidate.is_absolute():
