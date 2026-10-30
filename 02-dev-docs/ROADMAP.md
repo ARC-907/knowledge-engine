@@ -62,7 +62,7 @@ user-visible changes under `[Unreleased]` in the [CHANGELOG](../CHANGELOG.md).
 | 2 | #40 browser CI job | Merged in [#42](https://github.com/ARC-907/knowledge-engine/pull/42) |
 | 3 | P0 + P1 contracts and metadata store | Merged in [#43](https://github.com/ARC-907/knowledge-engine/pull/43) |
 | 4 | P2 retrieval broker and bindings ([ADR 0011](adr/0011-retrieval-broker-fusion-and-adapters.md)) | Merged in [#45](https://github.com/ARC-907/knowledge-engine/pull/45) |
-| 5 | P3 + P4 evidence and citations | In progress |
+| 5 | P3 + P4 evidence and citations ([ADR 0012](adr/0012-evidence-store-and-ingestion.md), [ADR 0013](adr/0013-citation-identity-and-export.md)) | Implemented; PR in review |
 | 6 | P5 + P6 modules, reference utilities, ingestion | In progress |
 | 7 | T1 tooling, observability and self-indexing | Next |
 | 8 | P7 Serena adapter (compatibility probe of Serena 2.1.0 done) | After 4–6 |

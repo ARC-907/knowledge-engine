@@ -23,6 +23,14 @@ with lasting effect also get an [ADR](adr/README.md); defects get a row in the
   versioned contracts; `knowledge.db` holds workspaces, projects, collections
   and classification; `knowledge migrate` backfills the corpus with a backup
   and checkpoints. Adapters receive the resolved scope (ADR 0006).
+- **Evidence and citations (P3/P4).** `knowledge.db` schema 2 stores immutable
+  revisions, aliases, spans, derivations and tombstones; `knowledge snapshot`
+  records the corpus. Built in parallel with the broker on the pre-squash P0
+  base and rebased once P2 merged. Integration choice: the broker's corpus
+  open falls back to the evidence store only when the file exists with other
+  content, so a deletion still reads `unavailable` (ADR 0012). Review found
+  B-025: `migrate` and `snapshot` derived record ids separately; they now
+  share one allocator.
 - **Serena compatibility probe.** Installed `serena-agent==2.1.0` in an
   isolated environment and drove it over stdio with the MCP SDK client
   (protocol `2026-07-28`). Findings that shape the adapter:

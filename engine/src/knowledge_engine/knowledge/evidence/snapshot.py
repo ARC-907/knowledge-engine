@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..backfill import CORPUS_SOURCE_ID, corpus_record_id, scan_corpus
+from ..backfill import CORPUS_SOURCE_ID, allocate_record_id, scan_corpus
 from ..errors import KnowledgeError, UnknownScopeError
 from .extract import MEDIA_TEXT, SUFFIX_MEDIA
 from .store import EvidenceStore, IngestRequest
@@ -87,17 +87,6 @@ def _heads(evidence: EvidenceStore) -> dict[str, _RecordHead]:
         )
         for row in rows
     }
-
-
-def _allocate_id(path: str, taken: set[str]) -> str:
-    """The corpus record id of ``path``; a suffix when a renamed record already holds it."""
-    record_id = corpus_record_id(path)
-    attempt = 1
-    while record_id in taken:
-        attempt += 1
-        record_id = corpus_record_id(f"{path}\x00{attempt}")
-    taken.add(record_id)
-    return record_id
 
 
 def snapshot(
@@ -210,7 +199,7 @@ def snapshot(
     # Renames first: a new file may reuse a path a renamed record is leaving.
     work: list[tuple[str, str]] = sorted((new, rid) for _, new, rid in renames)
     work += sorted([*first, *edited, *restored])
-    work += [(rel, _allocate_id(rel, taken)) for rel in sorted(fresh)]
+    work += [(rel, allocate_record_id(rel, taken)) for rel in sorted(fresh)]
     titles = {rel: item.title for rel, item in scan.files.items()}
     for rel, record_id in work:
         state = files[rel]

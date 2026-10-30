@@ -132,9 +132,8 @@ def test_snapshot_records_revisions_idempotently(
     again = _snap(evidence, corpus)
     assert again["revisions_created"] == 0 and again["unchanged"] == 4
     assert evidence.stats()["revisions"] == 4
-    assert evidence.record_state(CORPUS_SOURCE_ID, GUIDE_ID).current_revision_id == (
-        state.current_revision_id
-    )
+    reread = evidence.record_state(CORPUS_SOURCE_ID, GUIDE_ID)
+    assert reread.current_revision_id == state.current_revision_id
 
 
 def test_identical_bytes_in_two_records_stay_two_revisions(
@@ -198,7 +197,8 @@ def test_deletion_leaves_a_tombstone_and_citations_unavailable(
     (corpus["root"] / "libs/a/guide.md").unlink()
     dry = _snap(evidence, corpus)  # without --delete-missing nothing is deleted
     assert dry["missing"] == 1 and dry["deleted"] == 0
-    assert open_span(evidence, CTX, evidence_id).verification == VerificationState.VERIFIED
+    before_delete = open_span(evidence, CTX, evidence_id)
+    assert before_delete.verification == VerificationState.VERIFIED
     report = _snap(evidence, corpus, delete_missing=True)
     assert report["deleted"] == 1
     res = open_span(evidence, CTX, evidence_id)
@@ -258,6 +258,41 @@ def test_rename_keeps_identity_through_an_alias(
     assert later["new_records"] == 1
     matches = evidence.find_records(CORPUS_SOURCE_ID, "libs/a/guide.md")
     assert len(matches) == 2 and GUIDE_ID in matches  # path + alias: ambiguous by path
+
+
+def test_migrate_registers_a_new_file_at_a_renamed_path(
+    corpus: dict[str, Path], evidence: EvidenceStore
+) -> None:
+    """B-025: the renamed record keeps the id derived from the old path."""
+    _snap(evidence, corpus)
+    root = corpus["root"]
+    (root / "libs/a/guide.md").rename(root / "libs/a/handbook.md")
+    _snap(evidence, corpus)
+    (root / "libs/a/guide.md").write_text("# New guide\n", encoding="utf-8")
+
+    report = backfill.apply(
+        corpus_root=root,
+        registry_path=corpus["registry"],
+        db_path=corpus["db"],
+        workspace_id="default",
+    )
+    assert report["created"] == 1
+    assert report["reconciliation"]["reconciled"] is True
+    keys = evidence.store.record_keys(CORPUS_SOURCE_ID)
+    assert keys["libs/a/handbook.md"] == GUIDE_ID
+    assert keys["libs/a/guide.md"] not in (GUIDE_ID, None)
+    # Rerunning is idempotent and a later snapshot agrees with the migrate.
+    again = backfill.apply(
+        corpus_root=root,
+        registry_path=corpus["registry"],
+        db_path=corpus["db"],
+        workspace_id="default",
+    )
+    assert again["created"] == 0 and again["reconciliation"]["reconciled"] is True
+    later = _snap(evidence, corpus)
+    assert later["new_records"] == 0
+    after = evidence.store.record_keys(CORPUS_SOURCE_ID)
+    assert after == keys
 
 
 def test_ambiguous_renames_are_not_guessed(
@@ -450,7 +485,8 @@ def test_api_rename_records_an_alias(lab: EvidenceStore) -> None:
     lab.ingest(_req())
     record = lab.rename("module:papers", "paper-1", "papers/renamed.md")
     assert record.logical_path == "papers/renamed.md" and record.aliases == ("papers/one.md",)
-    assert lab.ingest(_req(logical_path="papers/renamed.md")).renamed_from is None
+    receipt = lab.ingest(_req(logical_path="papers/renamed.md"))
+    assert receipt.renamed_from is None
     with pytest.raises(InvalidInputError):
         lab.rename("module:papers", "paper-1", "/abs")
 

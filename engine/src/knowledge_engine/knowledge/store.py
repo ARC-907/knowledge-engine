@@ -853,6 +853,16 @@ class KnowledgeStore:
             created += cur.rowcount
         return created, len(records) - created
 
+    def record_ids(self, source_id: str) -> set[str]:
+        """Every record id of one source, with or without a logical path."""
+        with self._reading() as conn:
+            if not _has_table(conn, "records"):
+                return set()
+            rows = conn.execute(
+                "SELECT record_id FROM records WHERE source_id = ?", (source_id,)
+            ).fetchall()
+        return {str(row["record_id"]) for row in rows}
+
     def record_keys(self, source_id: str) -> dict[str, str]:
         """``{logical_path: record_id}`` of one source (paths only)."""
         with self._reading() as conn:

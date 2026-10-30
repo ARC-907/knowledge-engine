@@ -273,5 +273,7 @@ def test_code_locator_must_name_the_record_path(lab: EvidenceStore) -> None:
             locator=locator,
         ).verification
 
-    assert open_path("pkg/mod.py") == VerificationState.VERIFIED
-    assert open_path("pkg/elsewhere.py") == VerificationState.UNSUPPORTED
+    same_path = open_path("pkg/mod.py")
+    other_path = open_path("pkg/elsewhere.py")
+    assert same_path == VerificationState.VERIFIED
+    assert other_path == VerificationState.UNSUPPORTED

@@ -70,6 +70,22 @@ def corpus_record_id(logical_path: str) -> str:
     return "file-" + hashlib.sha256(logical_path.encode("utf-8")).hexdigest()[:32]
 
 
+def allocate_record_id(logical_path: str, taken: set[str]) -> str:
+    """The record id for a new record at ``logical_path``, unique within ``taken``.
+
+    A renamed record keeps the id derived from its old path (ADR 0012), so a
+    new file at that old path needs a different one: a deterministic suffix is
+    mixed in until the id is free. The chosen id is added to ``taken``.
+    """
+    record_id = corpus_record_id(logical_path)
+    attempt = 1
+    while record_id in taken:
+        attempt += 1
+        record_id = corpus_record_id(f"{logical_path}\x00{attempt}")
+    taken.add(record_id)
+    return record_id
+
+
 @dataclass
 class CorpusFile:
     """One indexable corpus file and the registry entries that reach it."""
@@ -381,9 +397,13 @@ def apply(
                 if max_batches is not None and batches >= max_batches:
                     break
                 chunk = pending[start : start + batch_size]
+                # Known paths keep their record; a new path never reuses a held id (B-025).
+                known = store.record_keys(CORPUS_SOURCE_ID)
+                taken = store.record_ids(CORPUS_SOURCE_ID)
                 rows = [
                     NewRecord(
-                        record_id=corpus_record_id(item.logical_path),
+                        record_id=known.get(item.logical_path)
+                        or allocate_record_id(item.logical_path, taken),
                         logical_path=item.logical_path,
                         title=item.title,
                     )
@@ -442,6 +462,7 @@ __all__ = [
     "DEFAULT_BATCH_SIZE",
     "CorpusFile",
     "CorpusScan",
+    "allocate_record_id",
     "apply",
     "backup",
     "corpus_record_id",

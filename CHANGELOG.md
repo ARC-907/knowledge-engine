@@ -88,6 +88,11 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   (citation identity and export); operator guide `01-user-docs/CITATIONS.md`.
   Snapshots (`openapi.json`, `mcp_tools.json`, `cli_help.txt`) extended for the
   added surface only.
+- The retrieval broker's `knowledge open` / `knowledge.open` / `POST
+  /knowledge/open` now serve a corpus revision recorded by `knowledge
+  snapshot` after the file changed (`stale`, with the cited bytes) instead of
+  `unsupported`; unrecorded revisions are still refused and the newer file is
+  never substituted.
 
 - **Retrieval broker (P2, #35).** Scoped search and open across a workspace's
   sources, one service behind three bindings: `POST /knowledge/search`,
@@ -129,6 +134,10 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 - The dashboard browser tests built their FTS index through `app.state`, which
   only exists inside the app lifespan since 3.0, so they errored before
   reaching the browser; they now build the index the way `reindex` does.
+- `knowledge migrate` silently skipped a new file created at the old path of a
+  record that `knowledge snapshot` had detected as renamed (the derived record
+  id was already held by the renamed record); it now allocates a distinct id,
+  the same one `snapshot` would choose.
 
 ## [3.0.0] — 2026-10-24
 

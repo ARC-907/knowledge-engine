@@ -48,11 +48,20 @@ the corpus maps onto records over edits, renames and deletions.
   becomes an alias, id unchanged); anything ambiguous is new + missing, never
   guessed. Missing files are deleted only with `--delete-missing` and never
   while a registry entry's content is missing. A new file at a renamed
-  record's old path gets a suffixed corpus record id.
+  record's old path gets a suffixed corpus record id; `knowledge migrate`
+  uses the same allocator (`backfill.allocate_record_id`), so both commands
+  agree on the new record.
 - **Open.** `open_evidence` (`knowledge_engine.knowledge.evidence.resolve`) is
-  the exact-revision open the retrieval broker calls: scope recheck, exact
-  revision, digest and span verification; it never follows to the latest
-  revision.
+  the exact-revision open: scope recheck, exact revision, digest and span
+  verification; it never follows to the latest revision. The retrieval
+  broker's corpus adapter (ADR 0011) calls it when the requested revision is
+  no longer the file's current content: a recorded revision is served from
+  its retained bytes (`verified` while it is the store's current revision,
+  `stale` after a newer one was recorded); a revision never recorded stays
+  `unsupported`; a deleted file stays `unavailable` (the store cannot tell
+  whether the deletion is final until `--delete-missing` runs).
+  `POST /knowledge/evidence/open` remains the route for evidence ids and
+  non-text locators.
 
 ## Consequences
 
