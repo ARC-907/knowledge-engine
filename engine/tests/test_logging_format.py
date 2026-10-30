@@ -141,23 +141,34 @@ def test_uvicorn_log_config_json_and_file(tmp_path: Path) -> None:
     assert "log_file" in cfg["loggers"]["uvicorn.access"]["handlers"]
 
     # The dict is accepted by logging.config and produces JSON lines in the file.
-    root = logging.getLogger()
-    saved_handlers, saved_level = list(root.handlers), root.level
+    # dictConfig mutates process-wide loggers: snapshot every one it touches
+    # and restore it, closing only the handlers it created.
+    names = ["", *cfg["loggers"]]
+    saved = {
+        name: (
+            list(logging.getLogger(name).handlers),
+            logging.getLogger(name).level,
+            logging.getLogger(name).propagate,
+            logging.getLogger(name).disabled,
+        )
+        for name in names
+    }
     try:
         logging.config.dictConfig(cfg)
         logging.getLogger("uvicorn.error").info("Started server process")
         logging.getLogger("knowledge_engine.server").info("CORS: allow_origins=[]")
     finally:
-        for handler in list(root.handlers):
-            root.removeHandler(handler)
-            handler.close()
-        for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
-            for handler in list(logging.getLogger(name).handlers):
-                logging.getLogger(name).removeHandler(handler)
-                handler.close()
-        for handler in saved_handlers:
-            root.addHandler(handler)
-        root.setLevel(saved_level)
+        for name, (handlers, level, propagate, disabled) in saved.items():
+            target = logging.getLogger(name)
+            for handler in list(target.handlers):
+                target.removeHandler(handler)
+                if handler not in handlers:
+                    handler.close()
+            for handler in handlers:
+                target.addHandler(handler)
+            target.setLevel(level)
+            target.propagate = propagate
+            target.disabled = disabled
     lines = [json.loads(x) for x in log_file.read_text("utf-8").splitlines()]
     assert {x["logger"] for x in lines} >= {"uvicorn.error", "knowledge_engine.server"}
 
