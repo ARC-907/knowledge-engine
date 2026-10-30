@@ -1,0 +1,5 @@
+# Serena's per-machine state; only project.yml is shared.
+cache/
+memories/
+logs/
+project.local.yml

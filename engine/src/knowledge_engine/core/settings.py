@@ -63,6 +63,8 @@ MASK = "********"
 
 #: Values accepted by ``KE_EMBED_PROVIDER`` (and ``--provider`` of the embeddings CLI).
 EMBED_PROVIDERS = ("ollama", "remote", "fake")
+#: Values of ``KE_LOG_FORMAT``.
+LOG_FORMATS = ("text", "json")
 
 # Section keys, in the order the generated reference lists them.
 SECTIONS: dict[str, str] = {
@@ -188,6 +190,22 @@ class Settings(BaseSettings):
         "`-v`/`-q` override it. One-shot commands log at WARNING.",
         section="server",
         read_by="core.logging_config, mcp.server",
+    )
+    log_format: str = _env(
+        "KE_LOG_FORMAT",
+        "text",
+        "Log record format of the CLI and the servers: `text` (human-readable lines) or "
+        "`json` (one JSON object per line, for log shippers such as Grafana Alloy/Loki).",
+        section="server",
+        read_by="core.logging_config",
+    )
+    log_file: str = _env(
+        "KE_LOG_FILE",
+        "",
+        "Also write log records to this file (size-rotated: 10 MiB x 5 backups), in "
+        "KE_LOG_FORMAT. Empty: stderr only.",
+        section="server",
+        read_by="core.logging_config",
     )
     mcp_http: EnvBool = _env(
         "KE_MCP_HTTP",
@@ -585,6 +603,23 @@ class Settings(BaseSettings):
     def _blank_is_unset(cls, value: Any) -> Any:
         if isinstance(value, str) and not value.strip():
             return None
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("log_format", mode="before")
+    @classmethod
+    def _normalise_log_format(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        text = value.strip().lower()
+        if not text:
+            return "text"
+        if text not in LOG_FORMATS:
+            raise ValueError(f"unknown log format {value!r}")
+        return text
+
+    @field_validator("log_file", mode="before")
+    @classmethod
+    def _strip_log_file(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
 
     @field_validator("log_level", mode="before")

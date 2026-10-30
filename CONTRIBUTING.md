@@ -25,6 +25,11 @@ or through the `just` recipes from the repository root.
 Node 22+ is needed only to rebuild the dashboard stylesheet
 (`just ui-css`, see [THEMING.md](01-user-docs/THEMING.md)).
 
+[02-dev-docs/DEV-TOOLING.md](02-dev-docs/DEV-TOOLING.md) covers the tools around
+the code: Nox sessions that mirror every CI job (`uvx nox`), JSON logs shipped
+to a local Loki and Grafana, Serena for symbol navigation, and a search index of
+this repository's docs built with a local embedding model.
+
 ## The gate
 
 Every pull request must pass the same checks CI runs. Locally:

@@ -74,6 +74,22 @@ ui-css:
 ui-test *args:
     cd {{engine}} && KE_UI_TESTS=1 uv run --group ui pytest -q -m ui tests/ui {{args}}
 
+# Every CI check through Nox (lint, typecheck, tests on 3.12-3.14, docs); args select sessions
+nox *args:
+    uvx nox {{args}}
+
+# Index this repository's docs with a local Ollama model (see 02-dev-docs/DEV-TOOLING.md)
+self-index *args:
+    uvx nox -s self_index -- {{args}}
+
+# Serena MCP server for this checkout (`just serena --check` for a health check)
+serena *args:
+    uvx nox -s serena -- {{args}}
+
+# Loki + Alloy + Grafana for the engine's JSON logs (args go to docker compose)
+observability *args="up -d":
+    docker compose -f deploy/observability/compose.yaml {{args}}
+
 # Re-download and SHA-384-verify vendored dashboard assets (Alpine.js)
 vendor:
     {{uv}} run python scripts/vendor.py

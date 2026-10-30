@@ -37,6 +37,29 @@ with lasting effect also get an [ADR](adr/README.md); defects get a row in the
     `find_referencing_symbols` return JSON text with 0-based inclusive lines.
   - Package license metadata: GPL-3.0-or-later. Serena stays an operator
     install and is never bundled.
+- **P2 broker merged (#45).** CodeQL flagged a test `assert` wrapping a call
+  with side effects; the call now runs before the assertion.
+- **T1 tooling.** JSON log lines (`KE_LOG_FORMAT`, `KE_LOG_FILE`) feed a
+  Loki/Alloy/Grafana stack under `deploy/observability`. Verified end to end
+  here: the engine wrote JSON lines, Alloy shipped them with `level` and
+  `component` labels, and every dashboard panel query returned data through
+  Grafana's data-source proxy. Two dashboard bugs were found that way and fixed
+  before commit: the HTTP-status panel parsed the raw JSON line instead of the
+  message, and the component count summed over time steps. Findings:
+  - uvicorn attaches an ANSI-coloured `color_message` to some records; the
+    JSON formatter drops it.
+  - Headless Chromium in this container reports the locale `en-US@posix`, which
+    Grafana's bootstrap rejects; screenshots need an explicit browser locale.
+  - `alloy fmt` uses tabs; the repository's `.editorconfig` now says so for
+    `*.alloy`, and CI enforces the canonical form.
+  - A CPU-only Ollama embeds `bge-m3` at about 1.6 s per chunk, so the
+    engine's default batch of 32 hits the 60 s request timeout. The self-index
+    script sends 8 per request; the embeddings guide now says to lower
+    `KE_EMBED_BATCH` on such hosts. A full build of the repository's docs (43
+    files) took about 9 minutes on four cores.
+  - Serena 2.1.0 started on this repository with `.serena/project.yml`
+    (tool interface forced) and answered `get_symbols_overview`, `find_symbol`
+    and `find_referencing_symbols` for `EntryOwnership` in about 12 seconds.
 - **Local infrastructure.** Docker works in the development container; Docker
   Hub rate-limits anonymous pulls, so images come through the
   `mirror.gcr.io` mirror. Containers that need the outbound proxy run with host

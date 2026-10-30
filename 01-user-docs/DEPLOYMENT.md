@@ -279,6 +279,23 @@ the default `serve --host 0.0.0.0` command already tells the mount about the
 bind address; set `KE_MCP_ALLOWED_HOSTS` to the hostnames the reverse proxy
 forwards, otherwise `/mcp` accepts any `Host` and logs a warning at startup.
 
+## Logs
+
+The servers log to stderr. Two settings make the output easy to collect
+(see [CONFIGURATION.md](CONFIGURATION.md)):
+
+- `KE_LOG_FORMAT=json`: one JSON object per line (`ts`, `level`, `logger`,
+  `message`, plus the exception text when there is one), including uvicorn's
+  access log.
+- `KE_LOG_FILE=/path/engine.jsonl`: also write to a size-rotated file
+  (10 MiB, 5 backups).
+
+`deploy/observability/` is a ready Compose stack with Loki, Grafana Alloy
+(tailing the log file) and Grafana with a log dashboard; see
+[DEV-TOOLING.md](../02-dev-docs/DEV-TOOLING.md#observability-loki-alloy-and-grafana).
+It is sized for one machine; for a shared deployment, point Alloy at your
+existing Loki.
+
 ## Upgrades
 
 Knowledge-Engine is distributed as a repository and as GitHub Releases. To
