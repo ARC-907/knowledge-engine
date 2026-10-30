@@ -54,6 +54,40 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 - Snapshots extended for the added surface only (`openapi.json`,
   `mcp_tools.json`, `cli_help.txt`); legacy `/search`, MCP `search` and CLI
   `search` are unchanged.
+- **Evidence and citations (P3/P4, #36).** Evidence store in `knowledge.db`
+  (schema version 2, migration `002_evidence.sql`): immutable content-addressed
+  revisions with retained bytes (or digest + external locator + reason),
+  record aliases, typed evidence spans, derivation lineage, tombstones,
+  idempotent ingestion (`EvidenceStore.ingest`: idempotency key + inputs, one
+  transaction) and an outbox for cross-store index work.
+- `knowledge-engine knowledge snapshot --dry-run|--apply [--delete-missing]`
+  records the corpus files as revisions: edits create revisions, renames keep
+  the record id and add an alias, deletions follow `KE_EVIDENCE_ON_DELETE`
+  (`tombstone` or `purge`) and are skipped while registry content is missing.
+- Typed locator extraction: Markdown heading sections and plain-text spans
+  (UTF-8 byte offsets), transcript segments (milliseconds, speaker), Python
+  code symbols (commit or dirty-snapshot digest, 1-based exclusive lines);
+  PDF positions are reported `unsupported` (no extractor is bundled).
+- Exact-revision open (`knowledge_engine.knowledge.evidence.resolve.open_evidence`,
+  the function the retrieval broker calls): scope recheck, digest and span
+  verification, `verified` / `stale` / `unavailable` / `ambiguous` /
+  `unsupported`; never follows to the latest revision.
+- Citation validation and export: claim-to-evidence maps with exact quotation
+  matching, quotations kept apart from paraphrases, unresolved/unsupported
+  claims reported (explicitly not proof of entailment), deterministic Markdown
+  references and CSL-JSON deduplicated by evidence identity, scope rechecked
+  on export.
+- Surfaces: `POST /knowledge/evidence/open`, `GET
+  /knowledge/records/{source_id}/{record_id}/revisions`, `POST
+  /knowledge/citations/validate|export`; MCP `knowledge_evidence_open`,
+  `knowledge_evidence_revisions`, `knowledge_cite_validate`,
+  `knowledge_cite_export`; CLI `knowledge evidence open|revisions|delete` and
+  `knowledge cite validate|export`. `knowledge status` reports evidence counts.
+- Settings `KE_EVIDENCE_ON_DELETE`, `KE_EVIDENCE_RETENTION`,
+  `KE_EVIDENCE_MAX_BYTES`; ADRs 0012 (evidence store and ingestion) and 0013
+  (citation identity and export); operator guide `01-user-docs/CITATIONS.md`.
+  Snapshots (`openapi.json`, `mcp_tools.json`, `cli_help.txt`) extended for the
+  added surface only.
 
 - **Retrieval broker (P2, #35).** Scoped search and open across a workspace's
   sources, one service behind three bindings: `POST /knowledge/search`,
