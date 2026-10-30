@@ -44,6 +44,7 @@ from ..core.util.sqlite import (
 )
 from .contracts import (
     MAX_SELECTION,
+    Bibliographic,
     Collection,
     CollectionId,
     CurationStatus,
@@ -56,6 +57,8 @@ from .contracts import (
     RecordId,
     RecordScope,
     ResearchType,
+    RetentionMode,
+    RightsInfo,
     ScopeProfile,
     Source,
     SourceId,
@@ -313,6 +316,22 @@ class KnowledgeStore:
                 self._conn.rollback()
                 raise
             self._conn.commit()
+
+    @contextmanager
+    def read_transaction(self) -> Iterator[sqlite3.Connection]:
+        """A consistent read snapshot for sibling repositories (the evidence store)."""
+        with self._reading() as conn:
+            yield conn
+
+    @contextmanager
+    def write_transaction(self) -> Iterator[sqlite3.Connection]:
+        """One write transaction for sibling repositories; rolled back on any error."""
+        with self._writing() as conn:
+            yield conn
+
+    def guarded(self, fn: Callable[[], _T]) -> _T:
+        """Run ``fn`` translating SQLite failures into typed knowledge errors."""
+        return self._guard(fn)
 
     def _check_open(self) -> None:
         if self._closed:
@@ -947,9 +966,32 @@ class KnowledgeStore:
                 flat,
             ):
                 members.setdefault((m[0], m[1]), []).append(m[2])
+        aliases: dict[tuple[str, str], list[str]] = {}
+        if rows and _has_table(conn, "record_aliases"):
+            for chunk in _chunks(rows, 200):
+                keys = [(row["source_id"], row["record_id"]) for row in chunk]
+                clause = " OR ".join("(source_id = ? AND record_id = ?)" for _ in keys)
+                flat = [part for key in keys for part in key]
+                for a in conn.execute(
+                    f"SELECT source_id, record_id, alias FROM record_aliases WHERE {clause}"
+                    " ORDER BY alias",
+                    flat,
+                ):
+                    aliases.setdefault((a[0], a[1]), []).append(a[2])
         out: list[SourceRecord] = []
         for row in rows:
             key = (row["source_id"], row["record_id"])
+            columns = set(row.keys())
+            extra: dict[str, Any] = {}
+            if "retention" in columns:  # schema >= 2 (evidence store)
+                extra["rights"] = RightsInfo(
+                    license=row["license"],
+                    retention=RetentionMode(row["retention"]),
+                    notes=row["rights_notes"],
+                )
+                extra["bibliographic"] = Bibliographic.model_validate_json(
+                    row["bibliographic_json"] or "{}"
+                )
             out.append(
                 SourceRecord(
                     source_id=row["source_id"],
@@ -964,9 +1006,21 @@ class KnowledgeStore:
                     curation_status=CurationStatus(row["curation_status"]),
                     tags=tuple(tags.get(key, ())),
                     collection_ids=tuple(members.get(key, ())),
+                    aliases=tuple(aliases.get(key, ())),
+                    **extra,
                 )
             )
         return out
+
+    def records_with_labels(
+        self, conn: sqlite3.Connection, rows: Sequence[sqlite3.Row]
+    ) -> list[SourceRecord]:
+        """:class:`SourceRecord` models of ``records`` rows joined with ``workspace_id``."""
+        return self._records_with_labels(conn, rows)
+
+    def record_row(self, conn: sqlite3.Connection, source_id: str, record_id: str) -> sqlite3.Row:
+        """The ``records`` row (plus ``workspace_id``) of a record, or ``unknown_scope``."""
+        return self._record_row(conn, RecordRef.parse((source_id, record_id)))
 
     # ── profiles ─────────────────────────────────────────────────
 

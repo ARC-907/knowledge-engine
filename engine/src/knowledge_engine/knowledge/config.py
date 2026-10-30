@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .contracts import RetentionMode
+from .evidence.policy import EvidencePolicy
 from .store import KNOWLEDGE_DB_FILENAME
 
 if TYPE_CHECKING:
@@ -23,6 +25,7 @@ class KnowledgeConfig:
     registry_path: Path
     data_dir: Path
     enabled: bool = True
+    evidence: EvidencePolicy = field(default_factory=EvidencePolicy)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> KnowledgeConfig:
@@ -39,6 +42,11 @@ class KnowledgeConfig:
             registry_path=paths.registry_path,
             data_dir=paths.data_dir,
             enabled=settings.knowledge_enabled,
+            evidence=EvidencePolicy(
+                default_retention=RetentionMode(settings.evidence_retention),
+                on_delete="purge" if settings.evidence_on_delete == "purge" else "tombstone",
+                max_bytes=settings.evidence_max_bytes,
+            ),
         )
 
     @classmethod
