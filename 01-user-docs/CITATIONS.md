@@ -86,6 +86,10 @@ and answers:
 | `ambiguous` | The locator matches several positions (e.g. a symbol defined twice) | no |
 | `unsupported` | No usable locator (PDF, range outside the revision, binary media) | no |
 
+The dashboard's Knowledge tab opens records and evidence and exports
+citations of a whole revision or a selected quotation
+([DASHBOARD.md](DASHBOARD.md#knowledge-opening-records-and-citing-them)).
+
 ## Validating claims and exporting citations
 
 A request is a claim-to-evidence map in one scope:

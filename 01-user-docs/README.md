@@ -17,6 +17,7 @@ work down; each guide is self-contained.
 | [MODULES.md](MODULES.md) | Register, configure and run executable utilities (modules) through CLI, HTTP and MCP; author your own. |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Run the engine beyond your laptop — service, LAN, Docker, hardening, backups, upgrades. |
 | [CONFIGURATION.md](CONFIGURATION.md) | Look up every environment variable, its type and default (generated from the code). |
+| [DASHBOARD.md](DASHBOARD.md) | Use the browser dashboard: search, scoped knowledge, citations, module status. |
 | [THEMING.md](THEMING.md) | Restyle or rebuild the dashboard. |
 | [FAQ.md](FAQ.md) | Quick answers to the common questions. |
 

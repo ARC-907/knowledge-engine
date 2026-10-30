@@ -8,7 +8,8 @@ collections and classification described in
 first.
 
 The legacy `/search` route, the MCP `search` tool and `knowledge-engine
-search` are unchanged and do not use the broker.
+search` are unchanged and do not use the broker. The dashboard's Knowledge
+tab is a browser front end to these routes ([DASHBOARD.md](DASHBOARD.md)).
 
 | Surface | Search | Open |
 | --- | --- | --- |
