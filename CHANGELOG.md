@@ -55,6 +55,30 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   `mcp_tools.json`, `cli_help.txt`); legacy `/search`, MCP `search` and CLI
   `search` are unchanged.
 
+- **Retrieval broker (P2, #35).** Scoped search and open across a workspace's
+  sources, one service behind three bindings: `POST /knowledge/search`,
+  `GET`/`POST /knowledge/open`, the MCP tools `knowledge.search` /
+  `knowledge.open`, and `knowledge-engine knowledge search|open` (JSON). Filters
+  (project, collections, research types, tags) apply before each source's
+  limit; sources run concurrently under the request deadline (`timeout_ms`)
+  with per-source candidate and byte caps; per-source rankings are fused by
+  reciprocal rank with an identity tie-break (deterministic) and native
+  BM25/cosine scores kept as provenance; multi-collection records appear once.
+  A failing optional source gives `partial: true` with a typed source status;
+  when every selected source fails (including `vector` without an index) the
+  request fails with `unavailable` instead of returning an empty list. Hits
+  carry content-addressed revision ids; open serves that exact revision
+  (`verified`) or reports `unsupported`/`unavailable`, never the latest instead.
+  Adapters: the corpus (FTS and embedding indexes, filtered before the cut;
+  `EntryOwnership` attribution) and linked project-context stores (new
+  `knowledge project-context link|unlink`, `PUT`/`DELETE
+  /knowledge/workspaces/{id}/project-context/links/{project_id}`,
+  `knowledge_project_context_link|unlink` MCP tools); the board is not a
+  search source. Guide: `01-user-docs/KNOWLEDGE-SEARCH.md`; decisions:
+  [ADR 0011](02-dev-docs/adr/0011-retrieval-broker-fusion-and-adapters.md).
+  Snapshots `openapi.json`, `mcp_tools.json` and `cli_help.txt` gain the new
+  surface; legacy `/search`, MCP `search` and CLI `search` are unchanged.
+
 ### Fixed
 
 - Nested registry entries are attributed consistently in every search mode

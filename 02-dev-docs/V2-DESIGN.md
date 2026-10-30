@@ -98,7 +98,12 @@ The contract names below are implemented in this branch as versioned Pydantic
 models in `knowledge_engine.knowledge.contracts` (schema version 1, JSON Schema
 pinned in `engine/tests/snapshots/knowledge_contracts.json`), with the error
 codes in `knowledge_engine.knowledge.errors` and the protocol in
-`knowledge_engine.knowledge.adapter`. The broker itself (P2) is not.
+`knowledge_engine.knowledge.adapter`. The broker (P2) is implemented in this
+branch as `knowledge_engine.knowledge.broker` with the adapters in
+`knowledge_engine.knowledge.sources` and the HTTP/CLI/MCP bindings described in
+[KNOWLEDGE-SEARCH.md](../01-user-docs/KNOWLEDGE-SEARCH.md); its implementation
+choices (candidate caps, fusion tie-break, filter push-down, search-time
+revision ids, project-context links) are [ADR 0011](adr/0011-retrieval-broker-fusion-and-adapters.md).
 
 - QueryContext: schema_version, workspace_id, optional project_id,
   selected source_ids/collection_ids/research_types/tags, include_workspace,

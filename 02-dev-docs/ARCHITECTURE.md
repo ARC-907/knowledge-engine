@@ -54,12 +54,20 @@ surface over several source-owned systems:
 | Foundation | Shared substrate: SQLite backbone, queues, worker registry, tool records, board config | `runtime/foundation/` and the optional `runtime/pipeline/` modules |
 | Execution adapter | Execution delegated to an external or sandboxed agent runtime | `runtime/sandbox/` factory hook (`get_sandbox()`); bring your own executor |
 | Scoped-knowledge metadata | Workspaces, projects, sources, collections, record classification (V2 P0/P1) | `/knowledge/*`, `knowledge_*` MCP tools, `knowledge-engine knowledge ...`; no effect on `/search` |
+| Retrieval broker | Scoped search/open across the corpus and linked project context (V2 P2) | `POST /knowledge/search`, `/knowledge/open`, `knowledge.search` / `knowledge.open` MCP tools, `knowledge-engine knowledge search\|open` |
 
-The versioned contracts a future retrieval broker will use (query context,
-hits, envelopes, source status, locators, typed errors, the `SourceAdapter`
-protocol) live in `knowledge_engine.knowledge`; the scope rules are ADR 0006
-and the identity rules ADR 0007 (see [`adr/`](adr/README.md)).
-A future retrieval broker should normalise and govern these existing surfaces.
+The versioned contracts (query context, hits, envelopes, source status,
+locators, typed errors, the `SourceAdapter` protocol) live in
+`knowledge_engine.knowledge`; the scope rules are ADR 0006 and the identity
+rules ADR 0007 (see [`adr/`](adr/README.md)). The retrieval broker
+(`knowledge_engine.knowledge.broker`, ADR 0011) resolves the scope from one
+`knowledge.db` snapshot, runs one adapter per selected source
+(`knowledge_engine.knowledge.sources`: the corpus FTS/embedding indexes and
+linked project-context stores; the board is not a source) concurrently under
+the request deadline, rechecks visibility, deduplicates and fuses the
+per-source rankings by reciprocal rank. Operator guide:
+[`01-user-docs/KNOWLEDGE-SEARCH.md`](../01-user-docs/KNOWLEDGE-SEARCH.md).
+The broker normalises and governs these existing surfaces.
 It should not flatten all stores into one database. Each source keeps
 ownership of its full/original content and exposes allowed open modes through
 adapters.
@@ -96,7 +104,9 @@ engine/                            the engine (code layer): pyproject.toml, uv.l
                                    identity helpers), errors.py (stable codes), adapter.py (SourceAdapter protocol),
                                    scope.py (scope resolution + reference filter), store.py + migrations/ (knowledge.db),
                                    backfill.py (`knowledge migrate`), service.py (admin operation catalog), mcp_tools.py,
-                                   config.py
+                                   config.py; broker.py (retrieval broker), broker_api.py (request models shared by
+                                   HTTP/MCP/CLI), broker_mcp.py (`knowledge.search`/`knowledge.open`), sources/
+                                   (corpus and project-context adapters, default adapter factory)
     runtime/                       foundation/ (config.py YAML + .env loader; db/ versioned SQLite backbone, schema/001–008_*.sql),
                                    pipeline/ (queue, message_board, worker_registry, task_classifier), sandbox/ (NoopSandbox hook)
   tests/                           pytest suite; snapshots/ (cli_help.txt, openapi.json, mcp_tools.json,
@@ -179,6 +189,9 @@ The FastAPI app (`knowledge_engine.app:create_app`) serves the routes below;
 | `/knowledge/records/{source_id}/{record_id}` | PATCH | Research type, curation status, tags, project |
 | `/knowledge/records/query` | POST | Records in a scope (`QueryContext` semantics, ADR 0006) |
 | `/knowledge/workspaces/{workspace_id}/profiles`, `…/profiles/{profile_id}` | GET / PUT | Scope profiles |
+| `/knowledge/workspaces/{workspace_id}/project-context/links/{project_id}` | PUT / DELETE | Link / unlink a project to a project-context store |
+| `/knowledge/search` | POST | Retrieval broker: scoped search across sources (`SearchEnvelope`) |
+| `/knowledge/open` | GET / POST | Retrieval broker: open an in-scope record at an exact revision (`OpenResult`) |
 | `/mcp` | * | MCP streamable HTTP, only with `KE_MCP_HTTP=1` |
 | `/ui/` | GET | The dashboard |
 | `/docs` | GET | OpenAPI / Swagger UI (provided by FastAPI) |
@@ -247,14 +260,20 @@ schema); a group that is disabled or fails to initialise is logged and skipped.
   of bodies, `board_status`, `board_channels`, `board_message_types`), scope
   (`board_scopes`), search (`board_search`), sweep (`board_sweep_now`).
 
-- **knowledge** (`knowledge/mcp_tools.py`, 14 tools, unless
+- **knowledge** (`knowledge/mcp_tools.py`, 16 tools, unless
   `KE_KNOWLEDGE_ENABLED=0`): one `knowledge_<operation>` tool per entry of the
   admin operation catalog in `knowledge/service.py` (`status`,
   `workspace_list`/`_create`, `project_list`/`_create`, `source_list`,
   `collection_list`/`_create`/`_add`/`_remove`, `record_classify`,
-  `record_query`, `profile_list`/`_set`), the same operations as the
-  `/knowledge` routes and the `knowledge` CLI. The store opens on the first
-  call; typed failures are `isError` results carrying `{"error": {...}}`.
+  `record_query`, `profile_list`/`_set`, `project_context_link`/`_unlink`), the
+  same operations as the `/knowledge` routes and the `knowledge` CLI. The store
+  opens on the first call; typed failures are `isError` results carrying
+  `{"error": {...}}`.
+- **knowledge_broker** (`knowledge/broker_mcp.py`, 2 tools, unless
+  `KE_KNOWLEDGE_ENABLED=0`): `knowledge.search` and `knowledge.open`, the same
+  request models and JSON as `POST /knowledge/search` / `/knowledge/open` and
+  `knowledge search|open`. The broker (its own registry, FTS index, embedding
+  index and `knowledge.db` handles) opens on the first call.
 
 When you add a new corpus surface, expose it through MCP — the MCP tool list
 is what an AI assistant sees, so anything not on it is invisible to agents.

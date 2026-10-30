@@ -53,6 +53,11 @@ typed errors, adapter protocol and ADRs 0006–0010
 `knowledge migrate` dry run, backup and resumable backfill plus the
 `/knowledge`, `knowledge_*` MCP and `knowledge` CLI admin surface. The ownership
 decision is [ADR 0005](adr/0005-nested-entry-ownership.md) from R0.
+P2 is implemented on the `train/v2-p2-broker` branch (stacked on P0/P1): the
+retrieval broker, the corpus and project-context adapters and the
+`/knowledge/search`, `/knowledge/open`, `knowledge.search`/`knowledge.open` MCP
+and `knowledge search|open` CLI bindings
+([ADR 0011](adr/0011-retrieval-broker-fusion-and-adapters.md)).
 
 P0 and R0 may proceed together, but P0 cannot close without the ownership
 decision. After P1, retrieval and evidence work can proceed independently.
