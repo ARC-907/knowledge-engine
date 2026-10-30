@@ -20,8 +20,12 @@ Every path is attributed to its owning registry entry with
 :class:`~knowledge_engine.retrieval.ownership.EntryOwnership` (ADR 0005); a
 file no enabled entry owns is not searchable. A hit's ``revision_id`` is the
 content-addressed id of the file's current bytes (ADR 0007); ``open`` serves
-exactly that revision and reports ``unsupported`` for any other, because the
-corpus keeps no older revisions yet.
+exactly that revision. Any other revision is looked up in the evidence store
+(ADR 0012) when the backend has one: a revision recorded by
+``knowledge snapshot`` is served from its retained bytes (``verified`` while it
+is current in the store, ``stale`` once a newer one was recorded); a revision
+the store never recorded is reported ``unsupported``. The newer file is never
+substituted, and a deleted file stays ``unavailable``.
 """
 
 from __future__ import annotations
@@ -57,6 +61,7 @@ from ..contracts import (
     SourceStatus,
 )
 from ..errors import IncompatibleError, KnowledgeError, UnavailableError, UnknownScopeError
+from ..scope import DEFAULT_PROFILE_ID
 from ..store import ScopeSnapshot, SnapshotRecord
 from ._common import MAX_EXCERPT_CHARS, MAX_REVISION_BYTES, clip, open_result, revision_of
 
@@ -64,6 +69,7 @@ if TYPE_CHECKING:
     from ...core.registry import Registry
     from ...retrieval.embeddings.index import CorpusEmbeddingIndex
     from ...retrieval.fts5 import Indexer
+    from ..evidence.store import EvidenceStore
 
 _logger = logging.getLogger(__name__)
 
@@ -80,6 +86,10 @@ class CorpusBackend:
     corpus_root: Path
     embeddings: CorpusEmbeddingIndex | None = None
     embeddings_error: str | None = None
+    #: Revisions recorded by ``knowledge snapshot``; serves revisions the file no longer has.
+    evidence: EvidenceStore | None = None
+    #: Profile applied when the evidence store rechecks the caller's scope.
+    profile: str = DEFAULT_PROFILE_ID
 
 
 def _embedding_failure(exc: EmbeddingError) -> KnowledgeError:
@@ -284,6 +294,11 @@ class CorpusAdapter:
     ) -> OpenResult:
         record = self._record(record_id)
         path = str(record.logical_path)
+        data = self._read(path)
+        if data is not None and revision_of(self._source_id, record_id, data)[0] != revision_id:
+            recorded = self._open_recorded(context, record_id, revision_id, locator)
+            if recorded is not None:
+                return recorded
         owner = EntryResolver(self.backend.registry.list(enabled_only=True)).resolve(path)
         return open_result(
             source_id=self._source_id,
@@ -291,10 +306,40 @@ class CorpusAdapter:
             requested=revision_id,
             scope=RecordScope(workspace_id=scope.workspace_id, project_id=record.view.project_id),
             media_type=MEDIA_TYPES.get(Path(path).suffix.lower(), "text/plain"),
-            data=self._read(path),
+            data=data,
             locator=locator,
             provenance_id=clip(f"entry:{owner.get('id', '')}", 200) if owner else None,
         )
+
+    def _open_recorded(
+        self, context: QueryContext, record_id: str, revision_id: str, locator: Locator | None
+    ) -> OpenResult | None:
+        """``revision_id`` from the evidence store, or ``None`` when it was never recorded."""
+        evidence = self.backend.evidence
+        if evidence is None:
+            return None
+        from ..evidence.resolve import open_evidence  # noqa: PLC0415 - optional subsystem
+
+        try:
+            resolution = open_evidence(
+                evidence,
+                context,
+                source_id=self._source_id,
+                record_id=record_id,
+                revision_id=revision_id,
+                locator=locator,
+                configured_profile=self.backend.profile,
+            )
+        except UnknownScopeError:
+            return None  # the record or this revision was never snapshotted
+        _logger.debug(
+            "served %s/%s@%s from the evidence store (%s)",
+            self._source_id,
+            record_id,
+            revision_id,
+            resolution.verification.value,
+        )
+        return resolution.result
 
 
 __all__ = ["MEDIA_TYPES", "CorpusAdapter", "CorpusBackend"]

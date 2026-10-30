@@ -235,6 +235,7 @@ def _open_knowledge(app: FastAPI, settings: Settings) -> None:
             embeddings=getattr(app.state, "embeddings", None),
             embeddings_error=getattr(app.state, "embeddings_error", None),
             profile=config.profile,
+            evidence_policy=config.evidence,
         )
     except Exception:
         _logger.exception("retrieval broker could not be built; /knowledge/search will answer 503")

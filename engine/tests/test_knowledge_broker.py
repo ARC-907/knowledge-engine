@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -472,7 +472,6 @@ def test_every_selected_source_failing_is_unavailable_not_empty(world: World) ->
 
 
 def test_vector_without_an_index_is_an_error_never_fts(world: World) -> None:
-    from dataclasses import replace
 
     world.rebuild_broker(replace(world.backend, embeddings=None, embeddings_error="not configured"))
     with pytest.raises(UnavailableError) as exc:
@@ -764,3 +763,50 @@ def test_unknown_source_config_is_unknown_scope(world: World) -> None:
         world.store.source_config("corpus:absent")
     with pytest.raises(UnknownScopeError):
         world.store.set_source_config("corpus:absent", {})
+
+
+def test_open_serves_recorded_revisions_from_the_evidence_store(world: World) -> None:
+    from knowledge_engine.knowledge.evidence.snapshot import snapshot
+    from knowledge_engine.knowledge.evidence.store import EvidenceStore
+
+    evidence = EvidenceStore(world.store)
+    world.rebuild_broker(replace(world.backend, evidence=evidence))
+    owl = world.corpus / "libs/b/owl.md"
+    original = owl.read_text(encoding="utf-8")
+
+    def record() -> None:
+        snapshot(
+            evidence,
+            corpus_root=world.corpus,
+            registry_path=world.corpus / "registry.json",
+            apply=True,
+        )
+
+    record()
+    first = world.broker.search(world.ctx(), "owls").hits[0]
+    assert first.revision_id is not None
+
+    owl.write_text("# Owls\n\nOwls hunt mice at night.\n", encoding="utf-8")
+    # The file changed but no newer revision was recorded: the store still calls it current.
+    current = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, first.record_id, first.revision_id)
+    assert current.verification == VerificationState.VERIFIED
+    assert current.content == original
+
+    record()
+    stale = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, first.record_id, first.revision_id)
+    assert stale.verification == VerificationState.STALE
+    assert stale.content == original and stale.revision_id == first.revision_id
+    with pytest.raises(UnknownScopeError):
+        world.broker.open(world.ctx(project_id="beta"), CORPUS_SOURCE_ID, first.record_id)
+
+    # A revision the store never recorded is still refused, never replaced by the file.
+    owl.write_text("# Owls\n\nThird version.\n", encoding="utf-8")
+    third = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, first.record_id)
+    assert third.verification == VerificationState.VERIFIED
+    owl.write_text("# Owls\n\nFourth version.\n", encoding="utf-8")
+    never = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, first.record_id, third.revision_id)
+    assert never.verification == VerificationState.UNSUPPORTED and never.content is None
+
+    owl.unlink()
+    gone = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, first.record_id, first.revision_id)
+    assert gone.verification == VerificationState.UNAVAILABLE and gone.content is None
