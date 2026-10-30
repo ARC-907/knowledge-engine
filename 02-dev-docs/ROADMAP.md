@@ -20,7 +20,7 @@ the [ADRs](adr/README.md).
 | Item | State |
 | --- | --- |
 | Code and docs for 3.0.0 and the V2 roadmap | Merged on `main` |
-| Package version | `3.1.0` (`engine/pyproject.toml`), release commit prepared in V2 P9 |
+| Package version | `3.1.0` (`engine/pyproject.toml`), release commit merged in [#51](https://github.com/ARC-907/knowledge-engine/pull/51) |
 | `v3.0.0` / `v3.1.0` tags and GitHub Releases | **Not published** (held by the maintainer) |
 | Test suite | 1629 passed, 8 opt-in tests skipped (browser and live Serena; both run in their own CI job or locally) on the P9 candidate |
 | CI | Green on every V2 slice (Linux 3.12–3.14 required, macOS/Windows advisory, browser, tooling, CodeQL, zizmor, docs) |
@@ -68,7 +68,7 @@ user-visible changes under `[Unreleased]` in the [CHANGELOG](../CHANGELOG.md).
 | 7 | T1 tooling, observability and self-indexing ([DEV-TOOLING.md](DEV-TOOLING.md)) | Merged in [#46](https://github.com/ARC-907/knowledge-engine/pull/46) |
 | 8 | P7 Serena adapter ([ADR 0016](adr/0016-serena-read-only-adapter.md), [SERENA.md](../01-user-docs/SERENA.md)) | Merged in [#50](https://github.com/ARC-907/knowledge-engine/pull/50) |
 | 9 | P8 dashboard ([DASHBOARD.md](../01-user-docs/DASHBOARD.md)) | Merged in [#49](https://github.com/ARC-907/knowledge-engine/pull/49) |
-| 10 | P9 qualification: clean-install run, module-evidence search fix (B-030), [UPGRADING.md](../01-user-docs/UPGRADING.md), 3.1.0 release commit | Implemented; PR in review |
+| 10 | P9 qualification: clean-install run, module-evidence search fix (B-030), [UPGRADING.md](../01-user-docs/UPGRADING.md), 3.1.0 release commit | Merged in [#51](https://github.com/ARC-907/knowledge-engine/pull/51) |
 
 Publishing (tag `v3.0.0` or later, GitHub Release, repository settings) stays a
 maintainer decision and is not part of this plan. Remaining maintainer
@@ -103,9 +103,9 @@ merge):
 | --- | --- | --- |
 | Scope stays explicit; projects never broaden | [#43](https://github.com/ARC-907/knowledge-engine/pull/43), [#45](https://github.com/ARC-907/knowledge-engine/pull/45) | Two-project fixtures with identical names and text (`test_knowledge_broker.py`) |
 | Exact source and revision in search/open/citations | [#45](https://github.com/ARC-907/knowledge-engine/pull/45), [#47](https://github.com/ARC-907/knowledge-engine/pull/47) | Edit/rename/delete resolution fixtures; golden Markdown and CSL-JSON |
-| Two utilities through the shared surface, with ingestion and provenance | [#48](https://github.com/ARC-907/knowledge-engine/pull/48), V2 P9 | Reference modules over CLI/HTTP/MCP; artifacts ingested, searched and opened as evidence (`test_evidence_ingestion.py`, `test_evidence_source_adapter.py`) |
+| Two utilities through the shared surface, with ingestion and provenance | [#48](https://github.com/ARC-907/knowledge-engine/pull/48), [#51](https://github.com/ARC-907/knowledge-engine/pull/51) | Reference modules over CLI/HTTP/MCP; artifacts ingested, searched and opened as evidence (`test_evidence_ingestion.py`, `test_evidence_source_adapter.py`) |
 | Pinned optional Serena; corpus works without it | [#50](https://github.com/ARC-907/knowledge-engine/pull/50) | Fake-Serena suite in CI; live run against serena-agent 2.1.0 |
-| Migration, restart, rollback, compatibility, docs | [#43](https://github.com/ARC-907/knowledge-engine/pull/43), [#49](https://github.com/ARC-907/knowledge-engine/pull/49), V2 P9 | Legacy `search` byte-identical; additive-only snapshots; clean-install run of the whole V2 flow; [UPGRADING.md](../01-user-docs/UPGRADING.md) |
+| Migration, restart, rollback, compatibility, docs | [#43](https://github.com/ARC-907/knowledge-engine/pull/43), [#49](https://github.com/ARC-907/knowledge-engine/pull/49), [#51](https://github.com/ARC-907/knowledge-engine/pull/51) | Legacy `search` byte-identical; additive-only snapshots; clean-install run of the whole V2 flow; [UPGRADING.md](../01-user-docs/UPGRADING.md) |
 
 ### Risks and deferred work
 
