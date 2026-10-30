@@ -47,6 +47,13 @@ compatibility/deprecation process and an explicit version decision.
 | P8 | Dashboard: scope/collection/type filters, evidence navigation and module status | P2, P4, P5 | Browser smoke exercises filtering, citation open and degraded module state | [#40](https://github.com/ARC-907/knowledge-engine/issues/40) |
 | P9 | Release qualification: docs, migration guide, clean install and compatibility matrix | P4, P6, P7, P8 | All relevant gates in V2-DESIGN pass on the exact candidate | Linked implementation issues |
 
+P0 and P1 are implemented on the `train/v2-p0-contracts` branch: the contracts,
+typed errors, adapter protocol and ADRs 0006–0010
+(`knowledge_engine.knowledge`), and the `knowledge.db` metadata store with the
+`knowledge migrate` dry run, backup and resumable backfill plus the
+`/knowledge`, `knowledge_*` MCP and `knowledge` CLI admin surface. The ownership
+decision is [ADR 0005](adr/0005-nested-entry-ownership.md) from R0.
+
 P0 and R0 may proceed together, but P0 cannot close without the ownership
 decision. After P1, retrieval and evidence work can proceed independently.
 P5 can proceed once P0 is settled. Browser CI enablement in #40 is independent

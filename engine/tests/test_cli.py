@@ -46,6 +46,28 @@ COMMANDS: list[list[str]] = [
     ["embeddings", "build"],
     ["embeddings", "search"],
     ["embeddings", "status"],
+    ["knowledge"],
+    ["knowledge", "migrate"],
+    ["knowledge", "status"],
+    ["knowledge", "workspace"],
+    ["knowledge", "workspace", "list"],
+    ["knowledge", "workspace", "create"],
+    ["knowledge", "project"],
+    ["knowledge", "project", "list"],
+    ["knowledge", "project", "create"],
+    ["knowledge", "source"],
+    ["knowledge", "source", "list"],
+    ["knowledge", "collection"],
+    ["knowledge", "collection", "list"],
+    ["knowledge", "collection", "create"],
+    ["knowledge", "collection", "add"],
+    ["knowledge", "collection", "remove"],
+    ["knowledge", "record"],
+    ["knowledge", "record", "list"],
+    ["knowledge", "record", "classify"],
+    ["knowledge", "profile"],
+    ["knowledge", "profile", "list"],
+    ["knowledge", "profile", "set"],
     ["serve"],
     ["project-context"],
     ["board"],
@@ -99,6 +121,21 @@ def test_every_command_is_routed() -> None:
         (["embeddings", "build"], []),
         (["embeddings", "search"], ["q"]),
         (["embeddings", "status"], []),
+        (["knowledge", "migrate"], ["--dry-run"]),
+        (["knowledge", "status"], []),
+        (["knowledge", "workspace", "list"], []),
+        (["knowledge", "workspace", "create"], ["Name"]),
+        (["knowledge", "project", "list"], ["ws"]),
+        (["knowledge", "project", "create"], ["ws", "Name"]),
+        (["knowledge", "source", "list"], ["ws"]),
+        (["knowledge", "collection", "list"], ["ws"]),
+        (["knowledge", "collection", "create"], ["ws", "Name"]),
+        (["knowledge", "collection", "add"], ["c", "--record", "corpus:base", "r"]),
+        (["knowledge", "collection", "remove"], ["c", "--record", "corpus:base", "r"]),
+        (["knowledge", "record", "list"], []),
+        (["knowledge", "record", "classify"], ["corpus:base", "r"]),
+        (["knowledge", "profile", "list"], ["ws"]),
+        (["knowledge", "profile", "set"], ["ws", "p"]),
         (["serve"], []),
         (["project-context"], ["info"]),
         (["board"], ["status"]),
@@ -116,6 +153,10 @@ def test_cli_choice_constants_match_their_sources() -> None:
 
     assert set(cli.SEARCH_MODES) == set(SEARCH_MODES)
     assert set(cli.EMBED_PROVIDERS) == set(EMBED_PROVIDERS)
+    from knowledge_engine.knowledge.contracts import CurationStatus, ResearchType
+
+    assert tuple(item.value for item in ResearchType) == cli.RESEARCH_TYPES
+    assert tuple(item.value for item in CurationStatus) == cli.CURATION_STATUSES
 
 
 def test_importing_the_cli_is_lazy() -> None:

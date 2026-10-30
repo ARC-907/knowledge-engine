@@ -24,6 +24,275 @@
         "title": "AckIn",
         "type": "object"
       },
+      "Bibliographic": {
+        "additionalProperties": false,
+        "description": "Recorded bibliographic metadata. Unknown fields stay absent, never invented.",
+        "properties": {
+          "authors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "container_title": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Container Title"
+          },
+          "identifiers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "e.g. {'doi': ..., 'isbn': ...}",
+            "title": "Identifiers",
+            "type": "object"
+          },
+          "published": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO 8601 date or partial date as recorded.",
+            "title": "Published"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          }
+        },
+        "title": "Bibliographic",
+        "type": "object"
+      },
+      "ClassificationPatch": {
+        "additionalProperties": false,
+        "description": "The HTTP body of a classification change (the record comes from the path).",
+        "properties": {
+          "add_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Add Tags",
+            "type": "array"
+          },
+          "clear_project": {
+            "default": false,
+            "title": "Clear Project",
+            "type": "boolean"
+          },
+          "curation_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Assign to this project.",
+            "title": "Project Id"
+          },
+          "remove_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remove Tags",
+            "type": "array"
+          },
+          "research_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Replace the tag set.",
+            "title": "Tags"
+          }
+        },
+        "title": "ClassificationPatch",
+        "type": "object"
+      },
+      "Collection": {
+        "additionalProperties": false,
+        "description": "A curated grouping with many-to-many membership; organization, not permission.",
+        "properties": {
+          "collection_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "member_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "workspace_id",
+          "display_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Collection",
+        "type": "object"
+      },
+      "CollectionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "collection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Generated when omitted.",
+            "title": "Collection Id"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "CollectionBody",
+        "type": "object"
+      },
+      "CollectionList": {
+        "properties": {
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/Collection"
+            },
+            "title": "Collections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "collections"
+        ],
+        "title": "CollectionList",
+        "type": "object"
+      },
       "ConfigPatchIn": {
         "additionalProperties": true,
         "description": "``PATCH /board/config`` body: any subset of the board config fields.",
@@ -88,6 +357,121 @@
           }
         },
         "title": "ConfigPatchIn",
+        "type": "object"
+      },
+      "CurationStatus": {
+        "description": "Review maturity. Never inferred from model output.",
+        "enum": [
+          "unclassified",
+          "inbox",
+          "reviewed",
+          "archived"
+        ],
+        "title": "CurationStatus",
+        "type": "string"
+      },
+      "EffectiveScope": {
+        "additionalProperties": false,
+        "description": "The resolved scope a request actually ran with (returned to the caller).",
+        "properties": {
+          "collection_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None: no collection constraint.",
+            "title": "Collection Ids"
+          },
+          "empty": {
+            "default": false,
+            "description": "An explicit empty selection: nothing can match.",
+            "title": "Empty",
+            "type": "boolean"
+          },
+          "from_profile": {
+            "default": [],
+            "description": "Dimensions taken from the profile because the query omitted them.",
+            "items": {
+              "type": "string"
+            },
+            "title": "From Profile",
+            "type": "array"
+          },
+          "include_workspace": {
+            "default": false,
+            "title": "Include Workspace",
+            "type": "boolean"
+          },
+          "profile_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "research_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ResearchType"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None: no research-type constraint.",
+            "title": "Research Types"
+          },
+          "source_ids": {
+            "description": "Concrete sources searched (sorted).",
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+              "type": "string"
+            },
+            "title": "Source Ids",
+            "type": "array"
+          },
+          "tags": {
+            "default": [],
+            "description": "Every tag must be present (AND).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "profile_id",
+          "source_ids"
+        ],
+        "title": "EffectiveScope",
         "type": "object"
       },
       "EmbeddingErrorResponse": {
@@ -399,6 +783,56 @@
         "title": "KeyCreateIn",
         "type": "object"
       },
+      "KnowledgeStatus": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/StatusCounts"
+          },
+          "last_backfill": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backfill"
+          },
+          "latest_schema_version": {
+            "title": "Latest Schema Version",
+            "type": "integer"
+          },
+          "records_by_curation_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Records By Curation Status",
+            "type": "object"
+          },
+          "records_by_research_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Records By Research Type",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "latest_schema_version",
+          "counts",
+          "records_by_research_type",
+          "records_by_curation_status"
+        ],
+        "title": "KnowledgeStatus",
+        "type": "object"
+      },
       "LifecycleIn": {
         "properties": {
           "auto_register": {
@@ -443,6 +877,53 @@
           }
         },
         "title": "LifecycleState",
+        "type": "object"
+      },
+      "MembersBody": {
+        "additionalProperties": false,
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/RecordRefIn"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "MembersBody",
+        "type": "object"
+      },
+      "MembershipResult": {
+        "properties": {
+          "added": {
+            "default": 0,
+            "title": "Added",
+            "type": "integer"
+          },
+          "collection_id": {
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "removed": {
+            "default": 0,
+            "title": "Removed",
+            "type": "integer"
+          },
+          "unchanged": {
+            "default": 0,
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "collection_id"
+        ],
+        "title": "MembershipResult",
         "type": "object"
       },
       "MessageIn": {
@@ -594,6 +1075,126 @@
         "title": "PermissionGrantIn",
         "type": "object"
       },
+      "ProfileList": {
+        "properties": {
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/ScopeProfile"
+            },
+            "title": "Profiles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profiles"
+        ],
+        "title": "ProfileList",
+        "type": "object"
+      },
+      "Project": {
+        "additionalProperties": false,
+        "description": "An optional narrower context. Display names are not unique; the id is the identity.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "project_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "workspace_id",
+          "display_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Project",
+        "type": "object"
+      },
+      "ProjectBody": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Generated when omitted.",
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "ProjectBody",
+        "type": "object"
+      },
+      "ProjectList": {
+        "properties": {
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects"
+        ],
+        "title": "ProjectList",
+        "type": "object"
+      },
       "ProviderBindingIn": {
         "additionalProperties": true,
         "description": "``POST /board/providers`` body: bind a provider to the env var holding its secret.",
@@ -630,6 +1231,119 @@
           "provider"
         ],
         "title": "ProviderBindingIn",
+        "type": "object"
+      },
+      "RecordPage": {
+        "properties": {
+          "effective_scope": {
+            "$ref": "#/components/schemas/EffectiveScope"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "effective_scope",
+          "records",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "RecordPage",
+        "type": "object"
+      },
+      "RecordQueryInput": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext (workspace_id required; see the knowledge contracts).",
+            "title": "Context",
+            "type": "object"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "context"
+        ],
+        "title": "RecordQueryInput",
+        "type": "object"
+      },
+      "RecordRefIn": {
+        "additionalProperties": false,
+        "properties": {
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "record_id"
+        ],
+        "title": "RecordRefIn",
+        "type": "object"
+      },
+      "RecordScope": {
+        "additionalProperties": false,
+        "description": "Where a record lives: its workspace and optional project.",
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "RecordScope",
         "type": "object"
       },
       "RegistryCounts": {
@@ -769,6 +1483,155 @@
         "title": "RemovedResponse",
         "type": "object"
       },
+      "ResearchType": {
+        "description": "Controlled content classification. Unknown values fail validation.",
+        "enum": [
+          "reference",
+          "paper",
+          "article",
+          "transcript",
+          "code",
+          "note",
+          "dataset",
+          "synthesis",
+          "other"
+        ],
+        "title": "ResearchType",
+        "type": "string"
+      },
+      "RetentionMode": {
+        "description": "What the owning store may keep of a record's bytes (ADR 0008).",
+        "enum": [
+          "retain",
+          "digest_only",
+          "tombstone"
+        ],
+        "title": "RetentionMode",
+        "type": "string"
+      },
+      "RightsInfo": {
+        "additionalProperties": false,
+        "description": "Rights and retention metadata as recorded by the operator or the source.",
+        "properties": {
+          "license": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/RetentionMode",
+            "default": "retain"
+          }
+        },
+        "title": "RightsInfo",
+        "type": "object"
+      },
+      "ScopeProfile": {
+        "additionalProperties": false,
+        "description": "A named default selection used for every dimension a query omits.",
+        "properties": {
+          "collection_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Ids"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "profile_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "research_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ResearchType"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Types"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ids"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "profile_id"
+        ],
+        "title": "ScopeProfile",
+        "type": "object"
+      },
       "SearchHit": {
         "properties": {
           "entry_id": {
@@ -891,6 +1754,219 @@
         "title": "SearchResponse",
         "type": "object"
       },
+      "Source": {
+        "additionalProperties": false,
+        "description": "A system that owns records (the base corpus, project context, an external MCP ...).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "workspace_id",
+          "kind",
+          "display_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Source",
+        "type": "object"
+      },
+      "SourceList": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "title": "SourceList",
+        "type": "object"
+      },
+      "SourceRecord": {
+        "additionalProperties": false,
+        "description": "A record owned by one source. Identity: ``(source_id, record_id)``.",
+        "properties": {
+          "aliases": {
+            "default": [],
+            "description": "Former logical paths / URIs.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "bibliographic": {
+            "$ref": "#/components/schemas/Bibliographic"
+          },
+          "canonical_uri": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Uri"
+          },
+          "collection_ids": {
+            "default": [],
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            "title": "Collection Ids",
+            "type": "array"
+          },
+          "curation_status": {
+            "$ref": "#/components/schemas/CurationStatus",
+            "default": "unclassified"
+          },
+          "logical_path": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source-relative POSIX path.",
+            "title": "Logical Path"
+          },
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "research_type": {
+            "$ref": "#/components/schemas/ResearchType",
+            "default": "other"
+          },
+          "rights": {
+            "$ref": "#/components/schemas/RightsInfo"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RecordScope"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "record_id",
+          "scope"
+        ],
+        "title": "SourceRecord",
+        "type": "object"
+      },
+      "StatusCounts": {
+        "properties": {
+          "collection_memberships": {
+            "title": "Collection Memberships",
+            "type": "integer"
+          },
+          "collections": {
+            "title": "Collections",
+            "type": "integer"
+          },
+          "projects": {
+            "title": "Projects",
+            "type": "integer"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "sources": {
+            "title": "Sources",
+            "type": "integer"
+          },
+          "workspaces": {
+            "title": "Workspaces",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workspaces",
+          "projects",
+          "sources",
+          "collections",
+          "records",
+          "collection_memberships"
+        ],
+        "title": "StatusCounts",
+        "type": "object"
+      },
       "ToggleIn": {
         "properties": {
           "enabled": {
@@ -942,6 +2018,105 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "Workspace": {
+        "additionalProperties": false,
+        "description": "An explicit knowledge boundary. The id is stable; the display name may change.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "display_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Workspace",
+        "type": "object"
+      },
+      "WorkspaceCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Generated when omitted.",
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "WorkspaceCreate",
+        "type": "object"
+      },
+      "WorkspaceList": {
+        "properties": {
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/Workspace"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "workspaces"
+        ],
+        "title": "WorkspaceList",
         "type": "object"
       }
     }
@@ -2585,6 +3760,641 @@
           }
         },
         "summary": "Info"
+      }
+    },
+    "/knowledge/collections/{collection_id}/members": {
+      "post": {
+        "operationId": "add_members_knowledge_collections__collection_id__members_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembersBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Members",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/collections/{collection_id}/members/remove": {
+      "post": {
+        "operationId": "remove_members_knowledge_collections__collection_id__members_remove_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembersBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Members",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/records/query": {
+      "post": {
+        "operationId": "query_records_knowledge_records_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordQueryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Query Records",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/records/{source_id}/{record_id}": {
+      "patch": {
+        "operationId": "classify_record_knowledge_records__source_id___record_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Classify Record",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/status": {
+      "get": {
+        "operationId": "status_knowledge_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/workspaces": {
+      "get": {
+        "operationId": "list_workspaces_knowledge_workspaces_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Workspaces",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "post": {
+        "operationId": "create_workspace_knowledge_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Workspace",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/workspaces/{workspace_id}/collections": {
+      "get": {
+        "operationId": "list_collections_knowledge_workspaces__workspace_id__collections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Collections",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "post": {
+        "operationId": "create_collection_knowledge_workspaces__workspace_id__collections_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Collection",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/workspaces/{workspace_id}/profiles": {
+      "get": {
+        "operationId": "list_profiles_knowledge_workspaces__workspace_id__profiles_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Profiles",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/workspaces/{workspace_id}/profiles/{profile_id}": {
+      "put": {
+        "operationId": "set_profile_knowledge_workspaces__workspace_id__profiles__profile_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "description": "ScopeProfile selections",
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Profile",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/workspaces/{workspace_id}/projects": {
+      "get": {
+        "operationId": "list_projects_knowledge_workspaces__workspace_id__projects_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "post": {
+        "operationId": "create_project_knowledge_workspaces__workspace_id__projects_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/workspaces/{workspace_id}/sources": {
+      "get": {
+        "operationId": "list_sources_knowledge_workspaces__workspace_id__sources_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sources",
+        "tags": [
+          "knowledge"
+        ]
       }
     },
     "/registry": {

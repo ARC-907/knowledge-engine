@@ -177,6 +177,11 @@ are built in; `GET /generate/providers` lists them in selection order:
 - **The board and pipeline databases are state.** `<KE_DATA_DIR>/pipeline.db`
   (shared board, keys, pipeline tables) and `<KE_DATA_DIR>/board-scopes/*.db`
   hold messages and the key vault; back them up if you rely on the board.
+- **The knowledge metadata is state.** `<KE_DATA_DIR>/knowledge.db`
+  (`KE_KNOWLEDGE_DB`) holds workspaces, projects, collections and your
+  classification of records; it cannot be rebuilt from the corpus. Back it up;
+  `knowledge-engine knowledge migrate --apply` also takes a backup before it
+  writes ([SCOPED-KNOWLEDGE.md](SCOPED-KNOWLEDGE.md)).
 - `corpus/registry.json` *is* worth backing up — it records what is enabled.
   It is small and lives with the corpus.
 

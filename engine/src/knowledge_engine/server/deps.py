@@ -16,6 +16,7 @@ from ..core.config import Config
 from ..core.registry import Registry
 from ..core.settings import Settings
 from ..generation import ProviderRegistry
+from ..knowledge.service import KnowledgeService
 from ..retrieval.embeddings.index import CorpusEmbeddingIndex
 from ..retrieval.fts5 import Indexer
 from ..retrieval.hybrid import HybridSearcher
@@ -67,22 +68,33 @@ def get_searcher(request: Request) -> HybridSearcher:
     return HybridSearcher(indexer, registry, embeddings, embeddings_error=error)
 
 
+def get_knowledge(request: Request) -> KnowledgeService:
+    """The scoped-knowledge admin service (``/knowledge``); 503 when the store is not open."""
+    service: KnowledgeService | None = getattr(request.app.state, "knowledge", None)
+    if service is None:
+        raise HTTPException(503, "knowledge store unavailable")
+    return service
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 ConfigDep = Annotated[Config, Depends(get_config)]
 RegistryDep = Annotated[Registry, Depends(get_registry)]
 IndexerDep = Annotated[Indexer, Depends(get_indexer)]
 ProvidersDep = Annotated[ProviderRegistry, Depends(get_providers)]
 SearcherDep = Annotated[HybridSearcher, Depends(get_searcher)]
+KnowledgeDep = Annotated[KnowledgeService, Depends(get_knowledge)]
 
 __all__ = [
     "ConfigDep",
     "IndexerDep",
+    "KnowledgeDep",
     "ProvidersDep",
     "RegistryDep",
     "SearcherDep",
     "SettingsDep",
     "get_config",
     "get_indexer",
+    "get_knowledge",
     "get_providers",
     "get_registry",
     "get_searcher",

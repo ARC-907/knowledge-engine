@@ -94,7 +94,11 @@ enforce that boundary in every adapter and evidence-open operation.
 
 ### Query and adapter contracts
 
-Proposed contract names below are design labels, not existing Python modules.
+The contract names below are implemented in this branch as versioned Pydantic
+models in `knowledge_engine.knowledge.contracts` (schema version 1, JSON Schema
+pinned in `engine/tests/snapshots/knowledge_contracts.json`), with the error
+codes in `knowledge_engine.knowledge.errors` and the protocol in
+`knowledge_engine.knowledge.adapter`. The broker itself (P2) is not.
 
 - QueryContext: schema_version, workspace_id, optional project_id,
   selected source_ids/collection_ids/research_types/tags, include_workspace,
@@ -332,6 +336,11 @@ justify relabelling upstream code as MIT.
 
 ## Migration, rollout and rollback
 
+Steps 1–4 for the scoped-knowledge metadata are implemented in this branch by
+`knowledge-engine knowledge migrate --dry-run|--apply` (module
+`knowledge_engine.knowledge.backfill`; operator guide in
+[SCOPED-KNOWLEDGE.md](../01-user-docs/SCOPED-KNOWLEDGE.md)).
+
 1. Capture schema/index generations and a backup of authoritative stores.
 2. Run a read-only dry-run reporting record counts, scope assignments, duplicate
    identity risks, unknown metadata and required disk space.
@@ -378,6 +387,12 @@ Choose explicit acceptance budgets before comparing candidates; do not claim
 an ANN backend is necessary without measured constraints.
 
 ## Decisions to close during the contract PR
+
+Implemented in this branch: default legacy/workspace inclusion and filter
+semantics (ADR 0006), record/revision identity and locator units (ADR 0007),
+retention/tombstones (ADR 0008), module catalog persistence/restart (ADR 0009)
+and the deferral of the exact Serena mapping (ADR 0010); nested entry
+ownership is [ADR 0005](adr/0005-nested-entry-ownership.md) from the R0 slice. See [adr/](adr/README.md).
 
 Record these as proposed ADRs before implementation depends on them: nested
 entry ownership versus membership; default legacy/workspace inclusion; canonical

@@ -1,9 +1,9 @@
 ### knowledge-engine --help
 usage: knowledge-engine [-h] [-v | -q]
-                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,serve,project-context,board,board-serve} ...
+                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve} ...
 
 positional arguments:
-  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,serve,project-context,board,board-serve}
+  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve}
     info                Print configuration and counts
     bootstrap           Walk corpus/ and register every folder as an entry
     capabilities        Print runtime capability and retrieval-surface
@@ -17,6 +17,8 @@ positional arguments:
     search              Search the index
     embeddings          Corpus embedding index for vector / hybrid search
                         (build, search, status)
+    knowledge           Scoped-knowledge metadata: migrate the corpus, status,
+                        workspaces, projects, collections, classification
     serve               Run the FastAPI server (uvicorn)
     project-context     Project-specific documentation subsystem
     board               Agent Board (post/read/search/ack/sweep/keys)
@@ -187,6 +189,282 @@ options:
   --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
   --db DB               index database (default: $KE_EMBEDDINGS_DB or
                         <data_dir>/embeddings.db)
+### knowledge-engine knowledge --help
+usage: knowledge-engine knowledge [-h]
+                                  {migrate,status,workspace,project,source,collection,record,profile} ...
+
+positional arguments:
+  {migrate,status,workspace,project,source,collection,record,profile}
+    migrate             Register the existing corpus in knowledge.db (dry run,
+                        or backup + resumable apply)
+    status              Workspace/project/collection/source/record counts
+    workspace           List or create workspaces
+    project             List or create projects
+    source              List record-owning sources
+    collection          List, create and edit collections
+    record              List and classify records
+    profile             List or set scope profiles
+
+options:
+  -h, --help            show this help message and exit
+### knowledge-engine knowledge migrate --help
+usage: knowledge-engine knowledge migrate [-h] (--dry-run | --apply)
+                                          [--backup-dir BACKUP_DIR]
+                                          [--batch-size BATCH_SIZE]
+                                          [--max-batches MAX_BATCHES]
+
+options:
+  -h, --help            show this help message and exit
+  --dry-run             report what --apply would do; write nothing
+  --apply               back up, then register in resumable batches
+  --backup-dir BACKUP_DIR
+                        backup location (default: <data_dir>/backups)
+  --batch-size BATCH_SIZE
+                        records per batch (500)
+  --max-batches MAX_BATCHES
+                        stop after N batches; a later --apply resumes from the
+                        checkpoint
+### knowledge-engine knowledge status --help
+usage: knowledge-engine knowledge status [-h]
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine knowledge workspace --help
+usage: knowledge-engine knowledge workspace [-h] {list,create} ...
+
+positional arguments:
+  {list,create}
+    list         List workspaces
+    create       Create a workspace
+
+options:
+  -h, --help     show this help message and exit
+### knowledge-engine knowledge workspace list --help
+usage: knowledge-engine knowledge workspace list [-h]
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine knowledge workspace create --help
+usage: knowledge-engine knowledge workspace create [-h] [--id ID]
+                                                   [--description DESCRIPTION]
+                                                   name
+
+positional arguments:
+  name                  display name
+
+options:
+  -h, --help            show this help message and exit
+  --id ID               workspace id (generated when omitted)
+  --description DESCRIPTION
+### knowledge-engine knowledge project --help
+usage: knowledge-engine knowledge project [-h] {list,create} ...
+
+positional arguments:
+  {list,create}
+    list         List the projects of a workspace
+    create       Create a project (names may repeat)
+
+options:
+  -h, --help     show this help message and exit
+### knowledge-engine knowledge project list --help
+usage: knowledge-engine knowledge project list [-h] workspace_id
+
+positional arguments:
+  workspace_id
+
+options:
+  -h, --help    show this help message and exit
+### knowledge-engine knowledge project create --help
+usage: knowledge-engine knowledge project create [-h] [--id ID]
+                                                 [--description DESCRIPTION]
+                                                 workspace_id name
+
+positional arguments:
+  workspace_id
+  name                  display name
+
+options:
+  -h, --help            show this help message and exit
+  --id ID               project id (generated when omitted)
+  --description DESCRIPTION
+### knowledge-engine knowledge source --help
+usage: knowledge-engine knowledge source [-h] {list} ...
+
+positional arguments:
+  {list}
+    list      List the sources of a workspace
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine knowledge source list --help
+usage: knowledge-engine knowledge source list [-h] workspace_id
+
+positional arguments:
+  workspace_id
+
+options:
+  -h, --help    show this help message and exit
+### knowledge-engine knowledge collection --help
+usage: knowledge-engine knowledge collection [-h] {list,create,add,remove} ...
+
+positional arguments:
+  {list,create,add,remove}
+    list                List the collections of a workspace
+    create              Create a collection
+    add                 Add records to a collection
+    remove              Remove records from a collection
+
+options:
+  -h, --help            show this help message and exit
+### knowledge-engine knowledge collection list --help
+usage: knowledge-engine knowledge collection list [-h] [--project PROJECT]
+                                                  workspace_id
+
+positional arguments:
+  workspace_id
+
+options:
+  -h, --help         show this help message and exit
+  --project PROJECT  only this project's collections
+### knowledge-engine knowledge collection create --help
+usage: knowledge-engine knowledge collection create [-h] [--id ID]
+                                                    [--project PROJECT]
+                                                    [--description DESCRIPTION]
+                                                    workspace_id name
+
+positional arguments:
+  workspace_id
+  name                  display name
+
+options:
+  -h, --help            show this help message and exit
+  --id ID               collection id (generated when omitted)
+  --project PROJECT     owning project id
+  --description DESCRIPTION
+### knowledge-engine knowledge collection add --help
+usage: knowledge-engine knowledge collection add [-h]
+                                                 --record SOURCE_ID RECORD_ID
+                                                 collection_id
+
+positional arguments:
+  collection_id
+
+options:
+  -h, --help            show this help message and exit
+  --record SOURCE_ID RECORD_ID
+                        a record (repeatable)
+### knowledge-engine knowledge collection remove --help
+usage: knowledge-engine knowledge collection remove [-h]
+                                                    --record SOURCE_ID RECORD_ID
+                                                    collection_id
+
+positional arguments:
+  collection_id
+
+options:
+  -h, --help            show this help message and exit
+  --record SOURCE_ID RECORD_ID
+                        a record (repeatable)
+### knowledge-engine knowledge record --help
+usage: knowledge-engine knowledge record [-h] {list,classify} ...
+
+positional arguments:
+  {list,classify}
+    list           List the records in a scope
+    classify       Set research type, status, tags or project
+
+options:
+  -h, --help       show this help message and exit
+### knowledge-engine knowledge record list --help
+usage: knowledge-engine knowledge record list [-h] [--project PROJECT]
+                                              [--include-workspace]
+                                              [--profile PROFILE]
+                                              [--source ID] [--collection ID]
+                                              [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                              [--tag TAG] [--context CONTEXT]
+                                              [--limit LIMIT]
+                                              [--offset OFFSET]
+                                              [workspace_id]
+
+positional arguments:
+  workspace_id
+
+options:
+  -h, --help            show this help message and exit
+  --project PROJECT     project id
+  --include-workspace   with --project: also records that belong to no project
+  --profile PROFILE     profile for omitted selections
+  --source ID           source id (repeatable; ORed)
+  --collection ID       collection id (repeatable; ORed)
+  --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
+                        research type (repeatable; ORed)
+  --tag TAG             tag (repeatable; ANDed)
+  --context CONTEXT     a full QueryContext as JSON (overrides the flags)
+  --limit LIMIT
+  --offset OFFSET
+### knowledge-engine knowledge record classify --help
+usage: knowledge-engine knowledge record classify [-h]
+                                                  [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                                  [--status {unclassified,inbox,reviewed,archived}]
+                                                  [--set-tag TAG]
+                                                  [--add-tag TAG]
+                                                  [--remove-tag TAG]
+                                                  [--project PROJECT |
+                                                  --clear-project]
+                                                  source_id record_id
+
+positional arguments:
+  source_id
+  record_id
+
+options:
+  -h, --help            show this help message and exit
+  --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
+                        research type
+  --status {unclassified,inbox,reviewed,archived}
+                        curation status
+  --set-tag TAG         replace the tags (repeatable)
+  --add-tag TAG         add a tag
+  --remove-tag TAG      remove a tag
+  --project PROJECT     assign to this project
+  --clear-project       make the record workspace-wide
+### knowledge-engine knowledge profile --help
+usage: knowledge-engine knowledge profile [-h] {list,set} ...
+
+positional arguments:
+  {list,set}
+    list      List the profiles of a workspace
+    set       Create or replace a profile
+
+options:
+  -h, --help  show this help message and exit
+### knowledge-engine knowledge profile list --help
+usage: knowledge-engine knowledge profile list [-h] workspace_id
+
+positional arguments:
+  workspace_id
+
+options:
+  -h, --help    show this help message and exit
+### knowledge-engine knowledge profile set --help
+usage: knowledge-engine knowledge profile set [-h] [--description DESCRIPTION]
+                                              [--source ID] [--collection ID]
+                                              [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                              [--tag TAG]
+                                              workspace_id profile_id
+
+positional arguments:
+  workspace_id
+  profile_id
+
+options:
+  -h, --help            show this help message and exit
+  --description DESCRIPTION
+  --source ID           source id (repeatable; ORed)
+  --collection ID       collection id (repeatable; ORed)
+  --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
+                        research type (repeatable; ORed)
+  --tag TAG             tag (repeatable; ANDed)
 ### knowledge-engine serve --help
 usage: knowledge-engine serve [-h] [--host HOST] [--port PORT]
 

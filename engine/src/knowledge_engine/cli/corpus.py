@@ -123,6 +123,25 @@ def _capability_inventory(config: Config, registry: Registry) -> dict[str, Any]:
             "scopes": known_scopes,
         }
 
+    def knowledge_payload() -> dict[str, Any]:
+        from ..knowledge.config import KnowledgeConfig
+        from ..knowledge.mcp_tools import tool_definitions
+        from ..knowledge.store import KnowledgeStore
+
+        knowledge = KnowledgeConfig.from_env()
+        tools = [tool["name"] for tool in tool_definitions()]
+        payload: dict[str, Any] = {
+            "status": "available",
+            "enabled": knowledge.enabled,
+            "tool_count": len(tools),
+            "tools": tools,
+            "store_exists": knowledge.db_path.is_file(),
+        }
+        if payload["store_exists"]:
+            with KnowledgeStore.open_readonly(knowledge.db_path) as store:
+                payload["counts"] = store.status()["counts"]
+        return payload
+
     def hosted_tools_payload() -> dict[str, Any]:
         from ..tool_host import host
 
@@ -163,6 +182,7 @@ def _capability_inventory(config: Config, registry: Registry) -> dict[str, Any]:
         "base_mcp": {"tool_count": len(base_tools), "tools": base_tools},
         "project_context": _safe_payload(project_context_payload, {"tool_count": 0, "tools": []}),
         "board": _safe_payload(board_payload, {"tool_count": 0, "tools": [], "scopes": []}),
+        "knowledge": _safe_payload(knowledge_payload, {"tool_count": 0, "tools": []}),
         "hosted_tools": _safe_payload(hosted_tools_payload, {"tool_count": 0, "tools": []}),
         "sandbox": _safe_payload(sandbox_payload, {}),
     }

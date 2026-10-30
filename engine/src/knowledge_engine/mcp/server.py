@@ -56,6 +56,8 @@ AND/OR/NOT, prefix*), `kind` restricts results to one entry kind, `limit` caps t
 - `registry_list` / `registry_get` inspect registry entries; `registry_toggle` \
 enables or disables one (disabled entries drop out of the index on the next reindex).
 - `project_context.*` and `board_*` tools are present when those subsystems are enabled.
+- `knowledge_*` tools administer scoped-knowledge metadata (workspaces, projects, \
+collections, classification); they do not change `search`.
 Tool results are JSON text."""
 
 
@@ -101,9 +103,23 @@ def load_agent_board_group() -> ToolGroup:
     return ToolGroup("agent_board", schemas, dispatch, BoardContext.from_config())
 
 
+def load_knowledge_group() -> ToolGroup:
+    """``knowledge_*`` admin tools, unless ``KE_KNOWLEDGE_ENABLED=0``."""
+    from ..core.settings import Settings  # noqa: PLC0415 - read when the server is built
+    from ..knowledge.config import KnowledgeConfig  # noqa: PLC0415 - optional subsystem
+    from ..knowledge.mcp_tools import collect_tools  # noqa: PLC0415
+
+    config = KnowledgeConfig.from_settings(Settings())
+    if not config.enabled:
+        raise GroupDisabledError("disabled by KE_KNOWLEDGE_ENABLED=0")
+    schemas, dispatch, context = collect_tools(config)
+    return ToolGroup("knowledge", schemas, dispatch, context)
+
+
 GROUP_LOADERS: tuple[tuple[str, Callable[[], ToolGroup]], ...] = (
     ("project_context", load_project_context_group),
     ("agent_board", load_agent_board_group),
+    ("knowledge", load_knowledge_group),
 )
 
 
@@ -358,7 +374,19 @@ def _shutdown(registry: Registry, indexer: Indexer) -> None:
         pipeline_db.close_all()
     except Exception:
         logger.exception("closing the pipeline DB connections failed")
+    close_knowledge_stores()
     logger.debug("MCP server shut down; connections closed")
+
+
+def close_knowledge_stores() -> None:
+    """Close the stores the ``knowledge_*`` tools opened (only if that group was loaded)."""
+    module = sys.modules.get("knowledge_engine.knowledge.mcp_tools")
+    if module is None:
+        return
+    try:
+        module.close_all()
+    except Exception:
+        logger.exception("closing the knowledge stores failed")
 
 
 def _serve(args: argparse.Namespace, server: MCPServer[Any]) -> int:

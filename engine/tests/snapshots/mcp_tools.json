@@ -1346,5 +1346,548 @@
       },
       "name": "project_context.scanner_apply_pointers"
     }
+  ],
+  "knowledge": [
+    {
+      "description": "Counts of workspaces, projects, sources, collections and records, the schema version and the last backfill run of the scoped-knowledge store.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "No arguments.",
+        "properties": {},
+        "title": "NoInput",
+        "type": "object"
+      },
+      "name": "knowledge_status"
+    },
+    {
+      "description": "List knowledge workspaces.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "No arguments.",
+        "properties": {},
+        "title": "NoInput",
+        "type": "object"
+      },
+      "name": "knowledge_workspace_list"
+    },
+    {
+      "description": "Create a knowledge workspace (an explicit knowledge boundary with a stable id).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Generated when omitted.",
+            "title": "Workspace Id"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "WorkspaceCreate",
+        "type": "object"
+      },
+      "name": "knowledge_workspace_create"
+    },
+    {
+      "description": "List the projects of a workspace.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "WorkspaceRef",
+        "type": "object"
+      },
+      "name": "knowledge_project_list"
+    },
+    {
+      "description": "Create a project in a workspace. Display names may repeat; the returned project_id is the identity.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "display_name": {
+            "description": "Need not be unique; the project id is.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Generated when omitted.",
+            "title": "Project Id"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "display_name"
+        ],
+        "title": "ProjectCreate",
+        "type": "object"
+      },
+      "name": "knowledge_project_create"
+    },
+    {
+      "description": "List the record-owning sources registered in a workspace.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "WorkspaceRef",
+        "type": "object"
+      },
+      "name": "knowledge_source_list"
+    },
+    {
+      "description": "List the collections of a workspace (optionally of one project).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "CollectionListInput",
+        "type": "object"
+      },
+      "name": "knowledge_collection_list"
+    },
+    {
+      "description": "Create a collection (curated grouping; organization, not permission).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "collection_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Generated when omitted.",
+            "title": "Collection Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Owning project; omit for a workspace-wide collection.",
+            "title": "Project Id"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "display_name"
+        ],
+        "title": "CollectionCreate",
+        "type": "object"
+      },
+      "name": "knowledge_collection_create"
+    },
+    {
+      "description": "Add records to a collection; a record may belong to several collections.",
+      "inputSchema": {
+        "$defs": {
+          "RecordRefIn": {
+            "additionalProperties": false,
+            "properties": {
+              "source_id": {
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+                "title": "Source Id",
+                "type": "string"
+              },
+              "record_id": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+                "title": "Record Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_id",
+              "record_id"
+            ],
+            "title": "RecordRefIn",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "collection_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/$defs/RecordRefIn"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "collection_id",
+          "records"
+        ],
+        "title": "MembershipInput",
+        "type": "object"
+      },
+      "name": "knowledge_collection_add"
+    },
+    {
+      "description": "Remove records from a collection.",
+      "inputSchema": {
+        "$defs": {
+          "RecordRefIn": {
+            "additionalProperties": false,
+            "properties": {
+              "source_id": {
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+                "title": "Source Id",
+                "type": "string"
+              },
+              "record_id": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+                "title": "Record Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_id",
+              "record_id"
+            ],
+            "title": "RecordRefIn",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "collection_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/$defs/RecordRefIn"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "collection_id",
+          "records"
+        ],
+        "title": "MembershipInput",
+        "type": "object"
+      },
+      "name": "knowledge_collection_remove"
+    },
+    {
+      "description": "Set a record's research type, curation status, tags or project. Omitted fields are unchanged; nothing is inferred.",
+      "inputSchema": {
+        "$defs": {
+          "CurationStatus": {
+            "description": "Review maturity. Never inferred from model output.",
+            "enum": [
+              "unclassified",
+              "inbox",
+              "reviewed",
+              "archived"
+            ],
+            "title": "CurationStatus",
+            "type": "string"
+          },
+          "ResearchType": {
+            "description": "Controlled content classification. Unknown values fail validation.",
+            "enum": [
+              "reference",
+              "paper",
+              "article",
+              "transcript",
+              "code",
+              "note",
+              "dataset",
+              "synthesis",
+              "other"
+            ],
+            "title": "ResearchType",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "research_type": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ResearchType"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "curation_status": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CurationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Replace the tag set.",
+            "title": "Tags"
+          },
+          "add_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Add Tags",
+            "type": "array"
+          },
+          "remove_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remove Tags",
+            "type": "array"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Assign to this project.",
+            "title": "Project Id"
+          },
+          "clear_project": {
+            "default": false,
+            "description": "Make the record workspace-wide again (no project).",
+            "title": "Clear Project",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_id",
+          "record_id"
+        ],
+        "title": "ClassifyInput",
+        "type": "object"
+      },
+      "name": "knowledge_record_classify"
+    },
+    {
+      "description": "List the records in a scope. Omitted selections use the configured profile; an explicit empty selection matches nothing; unknown ids are errors; tags are ANDed, values within a list ORed.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext (workspace_id required; see the knowledge contracts).",
+            "title": "Context",
+            "type": "object"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 500,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "context"
+        ],
+        "title": "RecordQueryInput",
+        "type": "object"
+      },
+      "name": "knowledge_record_query"
+    },
+    {
+      "description": "List the scope profiles of a workspace.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "WorkspaceRef",
+        "type": "object"
+      },
+      "name": "knowledge_profile_list"
+    },
+    {
+      "description": "Create or replace a named scope profile (the defaults for omitted selections).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "additionalProperties": true,
+            "description": "A ScopeProfile.",
+            "title": "Profile",
+            "type": "object"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "title": "ProfileInput",
+        "type": "object"
+      },
+      "name": "knowledge_profile_set"
+    }
   ]
 }

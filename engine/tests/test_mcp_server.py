@@ -182,14 +182,15 @@ def test_tools_list_matches_pre_migration_snapshot(ke_env: Path, mode: str) -> N
     listed = _with_client(server, list_tools, mode=mode)
     expected_order = [
         tool["name"]
-        for group in ("base", "project_context", "agent_board")
+        for group in ("base", "project_context", "agent_board", "knowledge")
         for tool in snapshot[group]
     ]
     assert [tool["name"] for tool in listed] == expected_order
     by_name = {tool["name"]: tool for tool in listed}
 
-    # Legacy groups are re-registered verbatim.
-    for legacy in snapshot["project_context"] + snapshot["agent_board"]:
+    # Legacy groups (and the knowledge group, generated from its operation
+    # catalog) are registered verbatim.
+    for legacy in snapshot["project_context"] + snapshot["agent_board"] + snapshot["knowledge"]:
         tool = by_name[legacy["name"]]
         assert tool["description"] == legacy["description"]
         assert tool["inputSchema"] == legacy["inputSchema"]
