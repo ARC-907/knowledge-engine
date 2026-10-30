@@ -8,6 +8,20 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 
 ## [Unreleased]
 
+### Added
+
+- CI job `dashboard (browser smoke)` runs the Playwright dashboard tests on
+  Ubuntu with the locked Playwright's Chromium
+  ([#40](https://github.com/ARC-907/knowledge-engine/issues/40)). It fails if the
+  tests are skipped or not collected, has a 15-minute timeout, and uploads a
+  screenshot and the page's console errors for each failing test.
+
+### Fixed
+
+- The dashboard browser tests built their FTS index through `app.state`, which
+  only exists inside the app lifespan since 3.0, so they errored before
+  reaching the browser; they now build the index the way `reindex` does.
+
 ## [3.0.0] — 2026-10-24
 
 The 3.0 release modernises the whole project: Python 3.12+, `uv` and

@@ -36,6 +36,9 @@ pytestmark = [
 # Read at collection time: the suite-wide fixture strips every KE_* variable
 # before a test body runs.
 _CHROMIUM_OVERRIDE = os.environ.get("KE_UI_CHROMIUM")
+# When set (CI does), a failing test leaves a full-page screenshot and the
+# browser console errors here.
+_ARTIFACT_DIR = os.environ.get("KE_UI_ARTIFACT_DIR")
 
 
 def _free_port() -> int:
@@ -78,12 +81,29 @@ def server_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]
     monkeypatch.setenv("KE_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("KE_PIPELINE_DB", str(tmp_path / "data" / "pipeline.db"))
 
+    monkeypatch.setenv("KE_REGISTRY_PATH", str(corpus / "registry.json"))
+    monkeypatch.chdir(tmp_path)
+
     import uvicorn
 
     from knowledge_engine.app import create_app
+    from knowledge_engine.core.config import Config
+    from knowledge_engine.core.registry import Registry
+    from knowledge_engine.retrieval.fts5 import Indexer
+
+    # create_app() does no I/O (app.state is populated by the lifespan), so
+    # build the FTS index up front, exactly as `knowledge-engine reindex` does.
+    config = Config.from_env()
+    config.ensure_dirs()
+    registry = Registry(config.registry_path)
+    indexer = Indexer(config, registry)
+    try:
+        indexer.rebuild()
+    finally:
+        indexer.close()
+        registry.close()
 
     app = create_app()
-    app.state.indexer.rebuild()
 
     port = _free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
@@ -127,8 +147,23 @@ def _launch_chromium(pw: Any) -> Any:
     raise AssertionError("unreachable: pytest.skip() raises")  # keeps every path explicit
 
 
+def _save_failure_artifacts(request: pytest.FixtureRequest, page: Any) -> None:
+    report = getattr(request.node, "rep_call", None)
+    if not _ARTIFACT_DIR or report is None or not report.failed:
+        return
+    out = Path(_ARTIFACT_DIR)
+    out.mkdir(parents=True, exist_ok=True)
+    name = request.node.name.replace("/", "_")
+    try:
+        page.screenshot(path=str(out / f"{name}.png"), full_page=True)
+    except Exception as exc:  # the page may already be broken; keep the test's own failure
+        (out / f"{name}.screenshot-error.txt").write_text(str(exc), encoding="utf-8")
+    errors = getattr(page, "errors", [])
+    (out / f"{name}.page-errors.txt").write_text("\n".join(errors), encoding="utf-8")
+
+
 @pytest.fixture
-def page() -> Iterator[Any]:
+def page(request: pytest.FixtureRequest) -> Iterator[Any]:
     sync_api = pytest.importorskip("playwright.sync_api", reason="install the `ui` group")
     with sync_api.sync_playwright() as pw:
         browser = _launch_chromium(pw)
@@ -139,6 +174,7 @@ def page() -> Iterator[Any]:
         page.errors = errors  # type: ignore[attr-defined]
         try:
             yield page
+            _save_failure_artifacts(request, page)
         finally:
             context.close()
             browser.close()
