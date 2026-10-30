@@ -16,6 +16,45 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   tests are skipped or not collected, has a 15-minute timeout, and uploads a
   screenshot and the page's console errors for each failing test.
 
+**Scoped knowledge: contracts and metadata (V2 P0/P1, #35)**
+
+- `knowledge_engine.knowledge`: versioned (schema version 1) Pydantic contracts
+  for scoped queries and evidence — `QueryContext`, `SearchHit`,
+  `SearchEnvelope`, `SourceStatus`, `OpenResult`, a typed locator union (UTF-8
+  byte spans, PDF page/bbox, transcript milliseconds, code commit-or-snapshot
+  ranges, explicit `unsupported`; all ranges half-open), research-type,
+  curation-status and verification vocabularies, and `SourceRecord`,
+  `Revision`, `EvidenceSpan`, `Derivation`, `Citation` schemas with
+  content-addressed identity helpers. JSON Schema pinned in
+  `engine/tests/snapshots/knowledge_contracts.json`.
+- Typed knowledge errors with stable codes (`invalid_scope`, `unknown_scope`,
+  `invalid_input`, `denied`, `unavailable`, `incompatible`, `timeout`,
+  `cancelled`, `output_invalid`, `internal_error`) and the `SourceAdapter`
+  protocol with a capability descriptor.
+- `knowledge.db` metadata store (`KE_KNOWLEDGE_DB`, default
+  `<KE_DATA_DIR>/knowledge.db`; numbered migrations): workspaces, projects,
+  sources, collections with many-to-many membership, per-record research type,
+  normalised tags and curation status, scope profiles. Filter semantics per
+  ADR 0006.
+- `knowledge-engine knowledge migrate --dry-run|--apply [--backup-dir]
+  [--batch-size] [--max-batches]`: registers the existing corpus as source
+  `corpus:base` in the default workspace, every file `unclassified` / `other`
+  and outside any project; the dry run writes nothing; apply backs up first,
+  runs in resumable checkpointed batches, and reruns create no duplicates.
+  `knowledge-engine knowledge status` reports the counts.
+- Admin surface over one operation catalog: HTTP routes under `/knowledge/*`,
+  14 MCP tools `knowledge_*`, and `knowledge-engine knowledge workspace|project|
+  source|collection|record|profile ...` commands. `capabilities` lists it.
+- Settings `KE_KNOWLEDGE_ENABLED`, `KE_KNOWLEDGE_DB`,
+  `KE_KNOWLEDGE_DEFAULT_WORKSPACE`, `KE_KNOWLEDGE_PROFILE`.
+- ADRs 0006–0010 (scope defaults and filter semantics, record/revision identity
+  and locator units, retention/tombstones, module catalog restart behaviour,
+  Serena mapping deferral) and the operator guide
+  `01-user-docs/SCOPED-KNOWLEDGE.md`.
+- Snapshots extended for the added surface only (`openapi.json`,
+  `mcp_tools.json`, `cli_help.txt`); legacy `/search`, MCP `search` and CLI
+  `search` are unchanged.
+
 ### Fixed
 
 - Nested registry entries are attributed consistently in every search mode

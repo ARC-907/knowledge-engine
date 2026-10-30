@@ -12,3 +12,8 @@ both ways.
 | [0003](0003-board-auth-model.md) | Agent board authentication model | Accepted |
 | [0004](0004-merge-train.md) | Deliver large changes as a merge train of stacked PRs with a local gate | Accepted |
 | [0005](0005-nested-entry-ownership.md) | Nested registry entries: the deepest enabled entry owns a file | Accepted |
+| [0006](0006-scope-defaults-and-filter-semantics.md) | Default legacy/workspace inclusion and scope filter semantics | Accepted |
+| [0007](0007-record-revision-identity-and-locators.md) | Canonical record/revision identity and locator units | Accepted |
+| [0008](0008-retention-and-tombstones.md) | Retention and tombstone policy | Accepted |
+| [0009](0009-module-catalog-persistence.md) | Module catalog persistence and restart behaviour | Accepted |
+| [0010](0010-serena-mapping-deferred.md) | Exact Serena compatibility mapping deferred to the Serena slice | Accepted (deferral) |

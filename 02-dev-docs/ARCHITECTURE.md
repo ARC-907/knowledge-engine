@@ -53,7 +53,12 @@ surface over several source-owned systems:
 | Hosted tools | Script/service/static tool registrations | `tool_host/host.py` backed by `runtime.foundation.db` |
 | Foundation | Shared substrate: SQLite backbone, queues, worker registry, tool records, board config | `runtime/foundation/` and the optional `runtime/pipeline/` modules |
 | Execution adapter | Execution delegated to an external or sandboxed agent runtime | `runtime/sandbox/` factory hook (`get_sandbox()`); bring your own executor |
+| Scoped-knowledge metadata | Workspaces, projects, sources, collections, record classification (V2 P0/P1) | `/knowledge/*`, `knowledge_*` MCP tools, `knowledge-engine knowledge ...`; no effect on `/search` |
 
+The versioned contracts a future retrieval broker will use (query context,
+hits, envelopes, source status, locators, typed errors, the `SourceAdapter`
+protocol) live in `knowledge_engine.knowledge`; the scope rules are ADR 0006
+and the identity rules ADR 0007 (see [`adr/`](adr/README.md)).
 A future retrieval broker should normalise and govern these existing surfaces.
 It should not flatten all stores into one database. Each source keeps
 ownership of its full/original content and exposes allowed open modes through
@@ -70,14 +75,14 @@ corpus/                            the knowledge content (data layer)
 engine/                            the engine (code layer): pyproject.toml, uv.lock, tests/
   src/knowledge_engine/
     cli/                           `knowledge-engine` CLI: parser + lazy dispatch (__init__.py); corpus, registry,
-                                   embeddings, serve, mcp, board, project_context command modules
+                                   embeddings, serve, mcp, board, project_context, knowledge command modules
     app.py  mcp_server.py          compatibility shims (server.app.create_app / mcp.server.main; mcp_server is deprecated)
     core/                          paths.py (KE_HOME + KE_* resolver), settings.py (typed Settings, config show, CONFIGURATION.md
                                    generator), config.py, registry.py + registry.schema.json, watcher.py, http.py (CORS, body cap,
                                    proxy policy), logging_config.py, logsafe.py, errors.py, ollama.py, util/ (env, hashing, proc,
                                    slug, sqlite [migration runner, ConnectionCache], time, vectors)
     server/                        app.py (I/O-free FastAPI factory), lifespan.py, deps.py, schemas.py, api/ (health, registry,
-                                   search, generate, board alias), static/ (dashboard served at /ui/)
+                                   search, generate, knowledge, board alias), static/ (dashboard served at /ui/)
     mcp/                           server.py (official MCP Python SDK; stdio + streamable HTTP), http.py (/mcp mount, Host policy),
                                    options.py, tool_groups.py, toolkit.py (legacy tool-group adapter)
     generation/                    base.py (Provider, ProviderRegistry, cached probes), cloud_http.py, ollama_provider.py, factory.py
@@ -87,9 +92,15 @@ engine/                            the engine (code layer): pyproject.toml, uv.l
     agent_board/                   schemas, store, digest, scopes, keys, provider_registry, sweeper, http/ (trust, limits, bodies,
                                    messages, admin), service (standalone app), cli, mcp_tools/ (15 tools)
     tool_host/                     host.py — script/service/static tool registry
+    knowledge/                     V2 contracts and metadata: contracts.py (versioned Pydantic models, locators,
+                                   identity helpers), errors.py (stable codes), adapter.py (SourceAdapter protocol),
+                                   scope.py (scope resolution + reference filter), store.py + migrations/ (knowledge.db),
+                                   backfill.py (`knowledge migrate`), service.py (admin operation catalog), mcp_tools.py,
+                                   config.py
     runtime/                       foundation/ (config.py YAML + .env loader; db/ versioned SQLite backbone, schema/001–008_*.sql),
                                    pipeline/ (queue, message_board, worker_registry, task_classifier), sandbox/ (NoopSandbox hook)
-  tests/                           pytest suite; snapshots/ (cli_help.txt, openapi.json, mcp_tools.json); fixtures/
+  tests/                           pytest suite; snapshots/ (cli_help.txt, openapi.json, mcp_tools.json,
+                                   knowledge_contracts.json); fixtures/
 
 ui-src/                            Tailwind v4 toolchain that produces server/static/tailwind.css (dev-time only)
 scripts/                           check_docs_paths.py, vendor.py, mcp-client-config.example.json, agent-board/ (Windows watchdog)
@@ -159,14 +170,26 @@ The FastAPI app (`knowledge_engine.app:create_app`) serves the routes below;
 | `/board/keys/bootstrap-master` | POST | Create the first master key (loopback socket peer only, once) |
 | `/board/providers`, `/board/providers/{key_id}`, `…/toggle`, `…/verify` | * | Provider credential bindings (admin) |
 | `/board/config` | GET / PATCH | Singleton runtime config (PATCH is admin) |
+| `/knowledge/status` | GET | Scoped-knowledge counts, schema version, last migration run |
+| `/knowledge/workspaces` | GET / POST | List / create workspaces |
+| `/knowledge/workspaces/{workspace_id}/projects` | GET / POST | List / create projects (display names may repeat) |
+| `/knowledge/workspaces/{workspace_id}/sources` | GET | Record-owning sources |
+| `/knowledge/workspaces/{workspace_id}/collections` | GET / POST | List (`?project_id=`) / create collections |
+| `/knowledge/collections/{collection_id}/members`, `…/members/remove` | POST | Add / remove records (many-to-many) |
+| `/knowledge/records/{source_id}/{record_id}` | PATCH | Research type, curation status, tags, project |
+| `/knowledge/records/query` | POST | Records in a scope (`QueryContext` semantics, ADR 0006) |
+| `/knowledge/workspaces/{workspace_id}/profiles`, `…/profiles/{profile_id}` | GET / PUT | Scope profiles |
 | `/mcp` | * | MCP streamable HTTP, only with `KE_MCP_HTTP=1` |
 | `/ui/` | GET | The dashboard |
 | `/docs` | GET | OpenAPI / Swagger UI (provided by FastAPI) |
 
 The default deployment is **local-trust**: the server binds `127.0.0.1`, CORS
 allows loopback origins only (`KE_CORS_ORIGINS` widens it; `*` only when
-explicit), and the `/search`, `/registry` and `/generate` surfaces have no
-authentication. Harden before exposing the server beyond localhost
+explicit), and the `/search`, `/registry`, `/knowledge` and `/generate`
+surfaces have no authentication. `/knowledge` is mounted unless
+`KE_KNOWLEDGE_ENABLED=0`; its failures are typed
+(`{"detail", "type", "error": {"code", ...}}`, codes in
+`knowledge_engine.knowledge.errors`). Harden before exposing the server beyond localhost
 ([`01-user-docs/DEPLOYMENT.md`](../01-user-docs/DEPLOYMENT.md), [`SECURITY.md`](../SECURITY.md)).
 
 The `/board/*` surface adds its own gates, evaluated as dependencies before
@@ -224,6 +247,15 @@ schema); a group that is disabled or fails to initialise is logged and skipped.
   of bodies, `board_status`, `board_channels`, `board_message_types`), scope
   (`board_scopes`), search (`board_search`), sweep (`board_sweep_now`).
 
+- **knowledge** (`knowledge/mcp_tools.py`, 14 tools, unless
+  `KE_KNOWLEDGE_ENABLED=0`): one `knowledge_<operation>` tool per entry of the
+  admin operation catalog in `knowledge/service.py` (`status`,
+  `workspace_list`/`_create`, `project_list`/`_create`, `source_list`,
+  `collection_list`/`_create`/`_add`/`_remove`, `record_classify`,
+  `record_query`, `profile_list`/`_set`), the same operations as the
+  `/knowledge` routes and the `knowledge` CLI. The store opens on the first
+  call; typed failures are `isError` results carrying `{"error": {...}}`.
+
 When you add a new corpus surface, expose it through MCP — the MCP tool list
 is what an AI assistant sees, so anything not on it is invisible to agents.
 
@@ -246,8 +278,9 @@ nearest directory at or above the working directory with
 `corpus/registry.json`), `KE_CORPUS_ROOT`, `KE_REGISTRY_PATH`, and
 `KE_DATA_DIR` (default `<KE_HOME>/.knowledge-engine/data`), which holds
 `index.db` (FTS5), `embeddings.db`, `pipeline.db` (board, keys, pipeline
-tables) and `board-scopes/*.db`. Schema changes to the pipeline/board and
-project-context databases are numbered SQL migrations run by
+tables), `knowledge.db` (scoped-knowledge metadata, `KE_KNOWLEDGE_DB`) and
+`board-scopes/*.db`. Schema changes to the pipeline/board,
+project-context and knowledge databases are numbered SQL migrations run by
 `core.util.sqlite` (one transaction each, recorded in `schema_version`;
 pre-versioned databases are adopted in place).
 
