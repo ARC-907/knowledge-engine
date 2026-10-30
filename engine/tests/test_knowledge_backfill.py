@@ -108,7 +108,7 @@ def test_dry_run_reports_and_writes_nothing(corpus: dict[str, Path]) -> None:
     assert report["unknown_metadata"]["non_utf8_examples"] == ["libs/a/latin1.md"]
     assert report["disk"]["sufficient"] and report["disk"]["required_bytes"] > 0
     assert report["workspace"] == {"workspace_id": "default", "exists": False}
-    assert report["schema"] == {"current_version": 0, "target_version": 1, "store_exists": False}
+    assert report["schema"] == {"current_version": 0, "target_version": 2, "store_exists": False}
     assert report["resume"] is None
 
 

@@ -86,6 +86,9 @@ is used instead.
 | `KE_KNOWLEDGE_DB` | string (optional) | *(unset)* | Scoped-knowledge metadata store (workspaces, projects, sources, collections, classification). Unset: <data_dir>/knowledge.db. | `knowledge.config` |
 | `KE_KNOWLEDGE_DEFAULT_WORKSPACE` | string | `default` | Id of the default workspace `knowledge migrate --apply` creates and registers the existing corpus in (lowercase letters, digits, `.`, `_`, `-`). | `knowledge.config` |
 | `KE_KNOWLEDGE_PROFILE` | string | `default` | Scope profile used for every selection a knowledge query omits. `default` (built in unless stored): every source of the workspace, no other constraint. | `knowledge.config` |
+| `KE_EVIDENCE_ON_DELETE` | string | `tombstone` | What deleting a record leaves in the evidence store: `tombstone` (bytes and derived rows removed; identity, digest, time and reason kept, so citations resolve `unavailable`) or `purge` (nothing kept). | `knowledge.config` |
+| `KE_EVIDENCE_RETENTION` | string | `retain` | Retention of records the evidence store creates: `retain` (keep revision bytes) or `digest_only` (keep the digest and an external locator, not the bytes). | `knowledge.config` |
+| `KE_EVIDENCE_MAX_BYTES` | int | `16777216` | Largest revision whose bytes the evidence store retains; larger files are recorded digest-only with the reason (max 268435456). | `knowledge.config` |
 
 ## Pipeline and substrates
 

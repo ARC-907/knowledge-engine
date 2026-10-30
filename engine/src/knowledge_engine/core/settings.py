@@ -520,6 +520,36 @@ class Settings(BaseSettings):
         pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$",
     )
 
+    evidence_on_delete: str = _env(
+        "KE_EVIDENCE_ON_DELETE",
+        "tombstone",
+        "What deleting a record leaves in the evidence store: `tombstone` (bytes and "
+        "derived rows removed; identity, digest, time and reason kept, so citations "
+        "resolve `unavailable`) or `purge` (nothing kept).",
+        section="knowledge",
+        read_by="knowledge.config",
+        pattern=r"^(tombstone|purge)$",
+    )
+    evidence_retention: str = _env(
+        "KE_EVIDENCE_RETENTION",
+        "retain",
+        "Retention of records the evidence store creates: `retain` (keep revision bytes) "
+        "or `digest_only` (keep the digest and an external locator, not the bytes).",
+        section="knowledge",
+        read_by="knowledge.config",
+        pattern=r"^(retain|digest_only)$",
+    )
+    evidence_max_bytes: int = _env(
+        "KE_EVIDENCE_MAX_BYTES",
+        16 * 1024 * 1024,
+        "Largest revision whose bytes the evidence store retains; larger files are "
+        "recorded digest-only with the reason (max 268435456).",
+        section="knowledge",
+        read_by="knowledge.config",
+        ge=1,
+        le=256 * 1024 * 1024,
+    )
+
     # ── Pipeline and substrates (read directly by those modules) ──
     pipeline_db: str | None = _env(
         "KE_PIPELINE_DB",

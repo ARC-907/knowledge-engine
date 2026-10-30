@@ -32,7 +32,7 @@ def store(tmp_path: Path) -> Iterator[KnowledgeStore]:
 
 def test_migration_creates_versioned_schema_without_default_rows(tmp_path: Path) -> None:
     with KnowledgeStore.open(tmp_path / "k.db") as s:
-        assert s.schema_version() == latest_schema_version() == 1
+        assert s.schema_version() == latest_schema_version() == 2
         # No workspace exists until the backfill or an admin call creates one.
         assert s.list_workspaces() == []
         assert s.status()["counts"]["workspaces"] == 0

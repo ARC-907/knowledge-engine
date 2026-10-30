@@ -139,3 +139,6 @@ MCP returns `{"error": {...}}` as an error result; the CLI prints
 See [CONFIGURATION.md](CONFIGURATION.md) for the full reference. Exposing these
 routes beyond localhost needs the same hardening as the rest of the API
 ([DEPLOYMENT.md](DEPLOYMENT.md)).
+
+To keep the exact bytes of corpus files as revisions, open cited spans and
+export checked citations, continue with [CITATIONS.md](CITATIONS.md).
