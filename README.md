@@ -123,7 +123,8 @@ commands (`serve`, `board-serve`, `mcp`, `watch`) default to `KE_LOG_LEVEL`
   decision records under [`02-dev-docs/adr/`](02-dev-docs/adr/).
 - **Project** — [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md),
   [SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
-  [RELEASING.md](02-dev-docs/RELEASING.md).
+  [RELEASING.md](02-dev-docs/RELEASING.md); status and plans in
+  [ROADMAP.md](02-dev-docs/ROADMAP.md).
 
 ## What this does NOT give you
 
