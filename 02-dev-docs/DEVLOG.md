@@ -51,6 +51,29 @@ with lasting effect also get an [ADR](adr/README.md); defects get a row in the
     `KeyboardInterrupt`. Cancelling now stops the whole process tree on Windows
     too (`taskkill /T /F`), so the same test covers both platforms instead of
     being skipped on one.
+- **Serena adapter (P7).** Built against the probe's findings and checked
+  three ways:
+  - **Fake server.** A fake Serena written with the MCP SDK's low-level
+    server impersonates 2.1.0: the name, version and full tool list, and the
+    exact recorded schemas of the three mapped tools. It answers from the
+    project's Python files in Serena's result shapes, and it has switches for
+    a wrong version, schema drift, an extra tool, slow answers, a crash and
+    escaping paths. The same SDK drives the real client, so the tests cover
+    the real protocol path without Serena installed.
+  - **Persistent sessions.** Each Serena process lives on an anyio blocking
+    portal thread. A task owns the MCP client and waits on a stop event;
+    synchronous callers use `portal.call` with a per-call deadline. Startup
+    is bounded from the calling thread, which cancels the client task, so no
+    cancel scope spans the client's own task group.
+  - **Live test** (opt-in) against Serena 2.1.0: two git projects that both
+    define `class Shape` each answered from their own repository in about 16
+    seconds. It found B-028: Serena writes `.serena/` into every project it
+    opens, so every tree looked dirty and no locator carried a commit. That
+    directory is now excluded from the dirty check.
+  - Writing the tests also showed that a revision recorded in the evidence
+    store still read `verified` after the file changed on disk, because the
+    store had seen nothing newer. The adapter now reports `stale` whenever the
+    file no longer holds the requested revision.
 - **Serena compatibility probe.** Installed `serena-agent==2.1.0` in an
   isolated environment and drove it over stdio with the MCP SDK client
   (protocol `2026-07-28`). Findings that shape the adapter:
