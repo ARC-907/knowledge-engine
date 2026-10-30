@@ -21,8 +21,10 @@
    when ``KE_BOARD_SWEEPER`` / the persisted flag say so;
 5. scoped knowledge (unless ``KE_KNOWLEDGE_ENABLED=0``): open ``knowledge.db``
    (applying its migrations) for the ``/knowledge`` routes
-   (``app.state.knowledge``); a failure is logged and those routes answer
-   ``503``, the rest of the app is unaffected;
+   (``app.state.knowledge``) and build the retrieval broker over it and the
+   registry/FTS/embedding objects above (``app.state.broker``, for
+   ``/knowledge/search`` and ``/knowledge/open``); a failure is logged and
+   those routes answer ``503``, the rest of the app is unaffected;
 6. MCP over HTTP (``KE_MCP_HTTP=1``): attach a server built around this
    lifespan's registry/indexer/embedding index to the mount and run its
    session manager.
@@ -219,14 +221,36 @@ def _open_knowledge(app: FastAPI, settings: Settings) -> None:
     except Exception:
         _logger.exception("knowledge store could not be opened; /knowledge will answer 503")
         app.state.knowledge = None
+        return
+    try:
+        from ..knowledge.broker_api import build_broker  # noqa: PLC0415 - optional subsystem
+
+        app.state.broker = build_broker(
+            app.state.knowledge.store,
+            app.state.registry,
+            app.state.indexer,
+            corpus_root=app.state.config.corpus_root,
+            embeddings=getattr(app.state, "embeddings", None),
+            embeddings_error=getattr(app.state, "embeddings_error", None),
+            profile=config.profile,
+        )
+    except Exception:
+        _logger.exception("retrieval broker could not be built; /knowledge/search will answer 503")
+        app.state.broker = None
 
 
 #: ``app.state`` attributes the lifespan owns; cleared on shutdown so the
 #: ``server.deps`` providers answer 503 afterwards.
-ENGINE_STATE = ("indexer", "registry", "providers", "config", "knowledge")
+ENGINE_STATE = ("indexer", "registry", "providers", "config", "knowledge", "broker")
 
 
 def _close_engine(app: FastAPI) -> None:
+    broker = getattr(app.state, "broker", None)
+    if broker is not None:
+        try:
+            broker.close()
+        except Exception:
+            _logger.exception("closing the retrieval broker failed")
     knowledge = getattr(app.state, "knowledge", None)
     if knowledge is not None:
         try:

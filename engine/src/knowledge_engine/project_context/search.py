@@ -43,6 +43,7 @@ def search(
     since: str | None = None,
     mode: str = RESULT_SUMMARY,
     cfg: Any | None = None,
+    project_fp: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search the project FTS index and return ranked result dicts.
 
@@ -57,6 +58,9 @@ def search(
         since: Only include records whose ``created_at`` is ``>= since``.
         mode: ``"summary"`` (default) or ``"full"``.
         cfg: Optional config; required for bodies in ``"full"`` mode.
+        project_fp: Restrict to one project fingerprint. Projects whose names
+            share a slug share one content DB, so a caller that must not mix
+            projects (the retrieval broker) passes it.
 
     Returns:
         A list of result dicts ordered by BM25 relevance (best first). Each
@@ -75,6 +79,9 @@ def search(
         git_commit=git_commit,
         since=since,
     )
+    if project_fp is not None:
+        where.append("pd.project_fp = ?")
+        params.append(project_fp)
 
     sql = (
         f"SELECT pd.record_id, pd.category, pd.branch_fp, pd.source_path, "

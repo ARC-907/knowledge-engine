@@ -9,9 +9,8 @@ change it.
 
 Nothing here changes `search`. The `/search` route, the MCP `search` tool and
 `knowledge-engine search` keep returning exactly what they did before.
-Scoped search across sources arrives with the retrieval broker in a later
-release; this release adds the metadata, its migration and the admin
-commands.
+Scoped search across sources uses this metadata through the retrieval broker:
+see [KNOWLEDGE-SEARCH.md](KNOWLEDGE-SEARCH.md).
 
 ## The model
 
@@ -101,6 +100,7 @@ knowledge-engine knowledge record classify corpus:base <record_id> --project <pr
 | `PATCH /knowledge/records/{source_id}/{record_id}` | Classify a record |
 | `POST /knowledge/records/query` | List the records in a scope |
 | `GET /knowledge/workspaces/{id}/profiles`, `PUT …/profiles/{profile_id}` | Scope profiles |
+| `PUT`/`DELETE /knowledge/workspaces/{id}/project-context/links/{project_id}` | Link a project to a project-context store ([KNOWLEDGE-SEARCH.md](KNOWLEDGE-SEARCH.md#project-context-sources)) |
 
 ### Scope rules
 
@@ -131,7 +131,7 @@ MCP returns `{"error": {...}}` as an error result; the CLI prints
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `KE_KNOWLEDGE_ENABLED` | `1` | `0` removes the `/knowledge` routes and `knowledge_*` MCP tools (the CLI still works) |
+| `KE_KNOWLEDGE_ENABLED` | `1` | `0` removes the `/knowledge` routes (including search and open), the `knowledge_*` MCP tools and `knowledge.search`/`knowledge.open` (the CLI still works) |
 | `KE_KNOWLEDGE_DB` | `<KE_DATA_DIR>/knowledge.db` | The metadata store |
 | `KE_KNOWLEDGE_DEFAULT_WORKSPACE` | `default` | Workspace the migration creates |
 | `KE_KNOWLEDGE_PROFILE` | `default` | Profile for omitted selections |

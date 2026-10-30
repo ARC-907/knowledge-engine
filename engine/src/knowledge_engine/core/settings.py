@@ -486,8 +486,10 @@ class Settings(BaseSettings):
     knowledge_enabled: EnvBool = _env(
         "KE_KNOWLEDGE_ENABLED",
         True,
-        "Expose the scoped-knowledge admin surface: the /knowledge HTTP routes and the "
-        "`knowledge_*` MCP tools. The `knowledge-engine knowledge` CLI always works.",
+        "Expose the scoped-knowledge surface: the /knowledge HTTP routes (admin, "
+        "/knowledge/search, /knowledge/open), the `knowledge_*` admin MCP tools and the "
+        "`knowledge.search` / `knowledge.open` broker tools. The `knowledge-engine knowledge` "
+        "CLI always works.",
         section="knowledge",
         read_by="server.app, server.lifespan, mcp.server",
     )

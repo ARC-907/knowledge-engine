@@ -129,6 +129,11 @@ def test_filter_semantics(
     assert {v.record_id for v in _views(store) if record_in_scope(v, scope)} == expected
     # Workspace boundary: the other workspace's record never appears.
     assert "x1" not in _ids(records)
+    # The broker's search snapshot (V2 P2) loads exactly the same records.
+    snapshot = store.snapshot(context)
+    assert {rid for recs in snapshot.records.values() for rid in recs} == expected
+    for recs in snapshot.records.values():
+        assert all(record_in_scope(rec.view, snapshot.scope) for rec in recs.values())
 
 
 def test_effective_scope_reports_profile_and_emptiness(store: KnowledgeStore) -> None:

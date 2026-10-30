@@ -128,6 +128,26 @@ class ProfileInput(_Input):
     profile: dict[str, Any] = Field(description="A ScopeProfile.")
 
 
+class ProjectContextLinkInput(_Input):
+    workspace_id: WorkspaceId
+    project_id: ProjectId
+    root: str = Field(
+        min_length=1,
+        max_length=4096,
+        description="Absolute path of the project-context project root on this host.",
+    )
+    project_fp: str | None = Field(
+        default=None,
+        max_length=80,
+        description="Project fingerprint (proj_...); defaults to the one registered for root.",
+    )
+
+
+class ProjectContextUnlinkInput(_Input):
+    workspace_id: WorkspaceId
+    project_id: ProjectId
+
+
 # ── Outputs ──────────────────────────────────────────────────────────
 
 
@@ -164,6 +184,14 @@ class RecordPage(BaseModel):
 
 class ProfileList(BaseModel):
     profiles: list[ScopeProfile]
+
+
+class ProjectContextLink(BaseModel):
+    source_id: str
+    workspace_id: str
+    project_id: str
+    project_fp: str | None = None
+    linked: bool
 
 
 class StatusCounts(BaseModel):
@@ -287,6 +315,26 @@ class KnowledgeService:
     def profile_list(self, data: WorkspaceRef) -> ProfileList:
         return ProfileList(profiles=self.store.list_profiles(data.workspace_id))
 
+    def project_context_link(self, data: ProjectContextLinkInput) -> ProjectContextLink:
+        from .sources.project_context import link_project  # noqa: PLC0415 - optional subsystem
+
+        return ProjectContextLink.model_validate(
+            link_project(
+                self.store,
+                data.workspace_id,
+                data.project_id,
+                data.root,
+                project_fp=data.project_fp,
+            )
+        )
+
+    def project_context_unlink(self, data: ProjectContextUnlinkInput) -> ProjectContextLink:
+        from .sources.project_context import unlink_project  # noqa: PLC0415 - optional subsystem
+
+        return ProjectContextLink.model_validate(
+            unlink_project(self.store, data.workspace_id, data.project_id)
+        )
+
 
 @dataclass(frozen=True)
 class Operation:
@@ -393,6 +441,22 @@ OPERATIONS: tuple[Operation, ...] = (
         "profile_set",
         False,
     ),
+    Operation(
+        "project_context_link",
+        "Link a project to the project-context store at a root on this host, so the "
+        "retrieval broker searches that project's documentation (source "
+        "project_context:<workspace_id>). Only linked project-context projects are searchable.",
+        ProjectContextLinkInput,
+        "project_context_link",
+        False,
+    ),
+    Operation(
+        "project_context_unlink",
+        "Remove a project's project-context link; its documentation stops being searchable.",
+        ProjectContextUnlinkInput,
+        "project_context_unlink",
+        False,
+    ),
 )
 
 OPERATIONS_BY_NAME: dict[str, Operation] = {op.name: op for op in OPERATIONS}
@@ -430,6 +494,9 @@ __all__ = [
     "Operation",
     "ProfileInput",
     "ProfileList",
+    "ProjectContextLink",
+    "ProjectContextLinkInput",
+    "ProjectContextUnlinkInput",
     "ProjectCreate",
     "ProjectList",
     "RecordPage",

@@ -12,8 +12,8 @@ a sibling module that is imported only when that subcommand runs:
 * :mod:`.mcp`             -- ``mcp``
 * :mod:`.board`           -- ``board ...`` (the agent-board client)
 * :mod:`.project_context` -- ``project-context ...``
-* :mod:`.knowledge`       -- ``knowledge migrate``, ``knowledge status`` and the
-  scoped-knowledge admin commands
+* :mod:`.knowledge`       -- ``knowledge migrate``, ``knowledge status``, the
+  scoped-knowledge admin commands and ``knowledge search|open`` (the broker)
 
 :func:`main` configures stderr logging once (``-v``/``-q``), loads the
 pipeline ``.env`` (variables already set win) and runs the subcommand. A
@@ -455,6 +455,63 @@ def _add_knowledge_parser(sub: Any) -> None:
     prof_set.add_argument("--description", default=None)
     _selection_options(prof_set)
     _admin(prof_set, "profile_set")
+
+    pc = kn_sub.add_parser(
+        "project-context", help="Link projects to project-context stores for the broker"
+    )
+    pc_sub = pc.add_subparsers(dest="knowledge_pc_cmd", required=True)
+    pc_link = pc_sub.add_parser("link", help="Link a project to a project-context root")
+    pc_link.add_argument("workspace_id")
+    pc_link.add_argument("project_id")
+    pc_link.add_argument("root", help="absolute path of the project-context project root")
+    pc_link.add_argument(
+        "--project-fp", default=None, help="fingerprint (default: the one registered for ROOT)"
+    )
+    _admin(pc_link, "project_context_link")
+    pc_unlink = pc_sub.add_parser("unlink", help="Remove a project's project-context link")
+    pc_unlink.add_argument("workspace_id")
+    pc_unlink.add_argument("project_id")
+    _admin(pc_unlink, "project_context_unlink")
+
+    ks = kn_sub.add_parser(
+        "search", help="Scoped search across a workspace's sources (the retrieval broker)"
+    )
+    ks.add_argument("query")
+    _scope_options(ks)
+    ks.add_argument(
+        "--mode", choices=SEARCH_MODES, default=None, help="fts (default), vector, hybrid"
+    )
+    ks.add_argument("--limit", type=_positive_int, default=None, help="hits (default 10, max 100)")
+    ks.add_argument("--timeout-ms", type=_positive_int, default=None, help="per-source deadline")
+    ks.add_argument(
+        "--byte-budget", type=_positive_int, default=None, help="bytes of titles + excerpts"
+    )
+    _route(ks, "knowledge", "cmd_knowledge_search")
+
+    ko = kn_sub.add_parser("open", help="Open one in-scope record at an exact revision")
+    ko.add_argument("source_id")
+    ko.add_argument("record_id")
+    ko.add_argument("--revision", default=None, help="revision id (default: the current one)")
+    _scope_options(ko)
+    ko.add_argument("--timeout-ms", type=_positive_int, default=None, help="deadline")
+    _route(ko, "knowledge", "cmd_knowledge_open")
+
+
+def _scope_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--workspace", default=None, help="workspace id (default: the configured default)"
+    )
+    parser.add_argument("--project", default=None, help="project id")
+    parser.add_argument(
+        "--include-workspace",
+        action="store_true",
+        help="with --project: also records that belong to no project",
+    )
+    parser.add_argument("--profile", default=None, help="profile for omitted selections")
+    _selection_options(parser)
+    parser.add_argument(
+        "--context", default=None, help="a full QueryContext as JSON (overrides the flags)"
+    )
 
 
 def _load_handler(module: str, func: str) -> Handler:
