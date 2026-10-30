@@ -19,13 +19,17 @@
    app's :class:`~knowledge_engine.agent_board.sweeper.Sweeper`
    (``app.state.sweeper``), install it as the process default and start it
    when ``KE_BOARD_SWEEPER`` / the persisted flag say so;
-5. MCP over HTTP (``KE_MCP_HTTP=1``): attach a server built around this
+5. scoped knowledge (unless ``KE_KNOWLEDGE_ENABLED=0``): open ``knowledge.db``
+   (applying its migrations) for the ``/knowledge`` routes
+   (``app.state.knowledge``); a failure is logged and those routes answer
+   ``503``, the rest of the app is unaffected;
+6. MCP over HTTP (``KE_MCP_HTTP=1``): attach a server built around this
    lifespan's registry/indexer/embedding index to the mount and run its
    session manager.
 
 On shutdown the sweeper is stopped (and the previous default restored), the
 MCP session manager exits, the registry and the FTS connection are closed,
-every cached pipeline/board DB connection is closed
+the knowledge store is closed, every cached pipeline/board DB connection is closed
 (``runtime.foundation.db.close_all``), and the engine objects are removed
 from ``app.state`` so a request that still arrives gets ``503`` from
 ``server.deps`` instead of touching a closed handle. Optional
@@ -201,12 +205,34 @@ async def _start_mcp(
         _logger.exception("MCP session manager failed to start; /mcp will answer 503")
 
 
+def _open_knowledge(app: FastAPI, settings: Settings) -> None:
+    """Open the scoped-knowledge store for ``/knowledge`` (optional; failures are logged)."""
+    try:
+        from ..knowledge.config import KnowledgeConfig  # noqa: PLC0415 - optional subsystem
+        from ..knowledge.service import KnowledgeService  # noqa: PLC0415
+        from ..knowledge.store import KnowledgeStore  # noqa: PLC0415
+
+        config = KnowledgeConfig.from_settings(settings)
+        app.state.knowledge = KnowledgeService(
+            KnowledgeStore.open(config.db_path), profile=config.profile
+        )
+    except Exception:
+        _logger.exception("knowledge store could not be opened; /knowledge will answer 503")
+        app.state.knowledge = None
+
+
 #: ``app.state`` attributes the lifespan owns; cleared on shutdown so the
 #: ``server.deps`` providers answer 503 afterwards.
-ENGINE_STATE = ("indexer", "registry", "providers", "config")
+ENGINE_STATE = ("indexer", "registry", "providers", "config", "knowledge")
 
 
 def _close_engine(app: FastAPI) -> None:
+    knowledge = getattr(app.state, "knowledge", None)
+    if knowledge is not None:
+        try:
+            knowledge.store.close()
+        except Exception:
+            _logger.exception("closing the knowledge store failed")
     for name in ("indexer", "registry"):
         resource = getattr(app.state, name, None)
         if resource is None:
@@ -223,6 +249,14 @@ def _close_engine(app: FastAPI) -> None:
         pipeline_db.close_all()
     except Exception:
         _logger.exception("closing the pipeline DB connections failed")
+    if getattr(app.state, "mcp_http", None) is None:
+        return
+    try:
+        from ..mcp.server import close_knowledge_stores  # noqa: PLC0415 - MCP mounted
+
+        close_knowledge_stores()
+    except Exception:
+        _logger.exception("closing the MCP knowledge stores failed")
 
 
 @asynccontextmanager
@@ -246,6 +280,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             _start_provider_probe(providers)
         if settings.board_enabled:
             owned_sweeper, previous_sweeper = _start_board(app, settings)
+        if settings.knowledge_enabled:
+            _open_knowledge(app, settings)
         async with AsyncExitStack() as optional_services:
             await _start_mcp(app, optional_services, config, registry, indexer)
             yield

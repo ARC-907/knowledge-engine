@@ -26,8 +26,9 @@ from ..core.http import BodySizeLimitMiddleware, install_cors, parse_cors_origin
 from ..core.logsafe import log_safe
 from ..core.settings import Settings
 from ..generation import ProviderError
+from ..knowledge.errors import KnowledgeError
 from ..retrieval.embeddings.errors import EmbeddingError
-from .api import generate_routes, health_routes, registry_routes, search_routes
+from .api import generate_routes, health_routes, knowledge_routes, registry_routes, search_routes
 from .lifespan import lifespan
 
 _logger = logging.getLogger(__name__)
@@ -89,6 +90,23 @@ async def _embedding_error(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content=exc.to_dict(public=True))
 
 
+async def _knowledge_error(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, KnowledgeError)  # noqa: S101 - registered for this type only
+    _logger.log(
+        logging.ERROR if exc.http_status >= 500 else logging.WARNING,
+        "%d %s %s: %s (%s)",
+        exc.http_status,
+        log_safe(request.method),
+        log_safe(request.url.path),
+        log_safe(exc.message),
+        exc.code,
+    )
+    return JSONResponse(
+        status_code=exc.http_status,
+        content={"detail": exc.message, "type": exc.code, "error": exc.to_dict()},
+    )
+
+
 def _mount_board(app: FastAPI) -> None:
     try:
         # Optional subsystem: a broken board must never block the core app.
@@ -128,11 +146,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_exception_handlers(app)
     app.add_exception_handler(ProviderError, _provider_error)
     app.add_exception_handler(EmbeddingError, _embedding_error)
+    app.add_exception_handler(KnowledgeError, _knowledge_error)
 
     app.include_router(health_routes.router)
     app.include_router(registry_routes.router, prefix="/registry", tags=["registry"])
     app.include_router(search_routes.router, prefix="/search", tags=["search"])
     app.include_router(generate_routes.router, prefix="/generate", tags=["generate"])
+    if settings.knowledge_enabled:
+        app.include_router(knowledge_routes.router, prefix="/knowledge", tags=["knowledge"])
     app.add_middleware(
         BodySizeLimitMiddleware,
         max_bytes=generate_routes.MAX_REQUEST_BODY_BYTES,

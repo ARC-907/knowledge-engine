@@ -12,6 +12,8 @@ a sibling module that is imported only when that subcommand runs:
 * :mod:`.mcp`             -- ``mcp``
 * :mod:`.board`           -- ``board ...`` (the agent-board client)
 * :mod:`.project_context` -- ``project-context ...``
+* :mod:`.knowledge`       -- ``knowledge migrate``, ``knowledge status`` and the
+  scoped-knowledge admin commands
 
 :func:`main` configures stderr logging once (``-v``/``-q``), loads the
 pipeline ``.env`` (variables already set win) and runs the subcommand. A
@@ -169,6 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
     _route(sp, "corpus", "cmd_search")
 
     _add_embeddings_parser(sub)
+    _add_knowledge_parser(sub)
 
     sp = sub.add_parser("serve", help="Run the FastAPI server (uvicorn)")
     sp.add_argument("--host", default="127.0.0.1")
@@ -271,6 +274,189 @@ def _add_embeddings_parser(sub: Any) -> None:
     _route(status, "embeddings", "cmd_embeddings_status")
 
 
+#: ``knowledge record classify --type`` values
+#: (``knowledge_engine.knowledge.contracts.ResearchType``).
+RESEARCH_TYPES = (
+    "reference",
+    "paper",
+    "article",
+    "transcript",
+    "code",
+    "note",
+    "dataset",
+    "synthesis",
+    "other",
+)
+#: ``knowledge record classify --status`` values
+#: (``knowledge_engine.knowledge.contracts.CurationStatus``).
+CURATION_STATUSES = ("unclassified", "inbox", "reviewed", "archived")
+
+
+def _admin(parser: argparse.ArgumentParser, op: str) -> None:
+    parser.set_defaults(_handler=("knowledge", "cmd_knowledge_admin"), knowledge_op=op)
+
+
+def _selection_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--source", action="append", metavar="ID", help="source id (repeatable; ORed)"
+    )
+    parser.add_argument(
+        "--collection", action="append", metavar="ID", help="collection id (repeatable; ORed)"
+    )
+    parser.add_argument(
+        "--type",
+        action="append",
+        choices=RESEARCH_TYPES,
+        help="research type (repeatable; ORed)",
+    )
+    parser.add_argument("--tag", action="append", metavar="TAG", help="tag (repeatable; ANDed)")
+
+
+def _add_knowledge_parser(sub: Any) -> None:
+    kn = sub.add_parser(
+        "knowledge",
+        help="Scoped-knowledge metadata: migrate the corpus, status, workspaces, projects, "
+        "collections, classification",
+    )
+    kn_sub = kn.add_subparsers(dest="knowledge_cmd", required=True)
+
+    mig = kn_sub.add_parser(
+        "migrate",
+        help="Register the existing corpus in knowledge.db (dry run, or backup + resumable apply)",
+    )
+    mode = mig.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--dry-run", action="store_true", help="report what --apply would do; write nothing"
+    )
+    mode.add_argument(
+        "--apply", action="store_true", help="back up, then register in resumable batches"
+    )
+    mig.add_argument(
+        "--backup-dir", default=None, help="backup location (default: <data_dir>/backups)"
+    )
+    mig.add_argument(
+        "--batch-size", type=_positive_int, default=500, help="records per batch (500)"
+    )
+    mig.add_argument(
+        "--max-batches",
+        type=_positive_int,
+        default=None,
+        help="stop after N batches; a later --apply resumes from the checkpoint",
+    )
+    _route(mig, "knowledge", "cmd_knowledge_migrate")
+
+    _route(
+        kn_sub.add_parser("status", help="Workspace/project/collection/source/record counts"),
+        "knowledge",
+        "cmd_knowledge_status",
+    )
+
+    ws = kn_sub.add_parser("workspace", help="List or create workspaces")
+    ws_sub = ws.add_subparsers(dest="knowledge_ws_cmd", required=True)
+    _admin(ws_sub.add_parser("list", help="List workspaces"), "workspace_list")
+    ws_create = ws_sub.add_parser("create", help="Create a workspace")
+    ws_create.add_argument("name", help="display name")
+    ws_create.add_argument("--id", default=None, help="workspace id (generated when omitted)")
+    ws_create.add_argument("--description", default=None)
+    _admin(ws_create, "workspace_create")
+
+    pr = kn_sub.add_parser("project", help="List or create projects")
+    pr_sub = pr.add_subparsers(dest="knowledge_project_cmd", required=True)
+    pr_list = pr_sub.add_parser("list", help="List the projects of a workspace")
+    pr_list.add_argument("workspace_id")
+    _admin(pr_list, "project_list")
+    pr_create = pr_sub.add_parser("create", help="Create a project (names may repeat)")
+    pr_create.add_argument("workspace_id")
+    pr_create.add_argument("name", help="display name")
+    pr_create.add_argument("--id", default=None, help="project id (generated when omitted)")
+    pr_create.add_argument("--description", default=None)
+    _admin(pr_create, "project_create")
+
+    src = kn_sub.add_parser("source", help="List record-owning sources")
+    src_sub = src.add_subparsers(dest="knowledge_source_cmd", required=True)
+    src_list = src_sub.add_parser("list", help="List the sources of a workspace")
+    src_list.add_argument("workspace_id")
+    _admin(src_list, "source_list")
+
+    col = kn_sub.add_parser("collection", help="List, create and edit collections")
+    col_sub = col.add_subparsers(dest="knowledge_collection_cmd", required=True)
+    col_list = col_sub.add_parser("list", help="List the collections of a workspace")
+    col_list.add_argument("workspace_id")
+    col_list.add_argument("--project", default=None, help="only this project's collections")
+    _admin(col_list, "collection_list")
+    col_create = col_sub.add_parser("create", help="Create a collection")
+    col_create.add_argument("workspace_id")
+    col_create.add_argument("name", help="display name")
+    col_create.add_argument("--id", default=None, help="collection id (generated when omitted)")
+    col_create.add_argument("--project", default=None, help="owning project id")
+    col_create.add_argument("--description", default=None)
+    _admin(col_create, "collection_create")
+    for verb, op, text in (
+        ("add", "collection_add", "Add records to a collection"),
+        ("remove", "collection_remove", "Remove records from a collection"),
+    ):
+        member = col_sub.add_parser(verb, help=text)
+        member.add_argument("collection_id")
+        member.add_argument(
+            "--record",
+            nargs=2,
+            action="append",
+            required=True,
+            metavar=("SOURCE_ID", "RECORD_ID"),
+            help="a record (repeatable)",
+        )
+        _admin(member, op)
+
+    rec = kn_sub.add_parser("record", help="List and classify records")
+    rec_sub = rec.add_subparsers(dest="knowledge_record_cmd", required=True)
+    rec_list = rec_sub.add_parser("list", help="List the records in a scope")
+    rec_list.add_argument("workspace_id", nargs="?", default=None)
+    rec_list.add_argument("--project", default=None, help="project id")
+    rec_list.add_argument(
+        "--include-workspace",
+        action="store_true",
+        help="with --project: also records that belong to no project",
+    )
+    rec_list.add_argument("--profile", default=None, help="profile for omitted selections")
+    _selection_options(rec_list)
+    rec_list.add_argument(
+        "--context", default=None, help="a full QueryContext as JSON (overrides the flags)"
+    )
+    rec_list.add_argument("--limit", type=_positive_int, default=100)
+    rec_list.add_argument("--offset", type=_non_negative_int, default=0)
+    _admin(rec_list, "record_list")
+    classify = rec_sub.add_parser("classify", help="Set research type, status, tags or project")
+    classify.add_argument("source_id")
+    classify.add_argument("record_id")
+    classify.add_argument("--type", choices=RESEARCH_TYPES, default=None, help="research type")
+    classify.add_argument(
+        "--status", choices=CURATION_STATUSES, default=None, help="curation status"
+    )
+    classify.add_argument(
+        "--set-tag", action="append", metavar="TAG", help="replace the tags (repeatable)"
+    )
+    classify.add_argument("--add-tag", action="append", metavar="TAG", help="add a tag")
+    classify.add_argument("--remove-tag", action="append", metavar="TAG", help="remove a tag")
+    project = classify.add_mutually_exclusive_group()
+    project.add_argument("--project", default=None, help="assign to this project")
+    project.add_argument(
+        "--clear-project", action="store_true", help="make the record workspace-wide"
+    )
+    _admin(classify, "record_classify")
+
+    prof = kn_sub.add_parser("profile", help="List or set scope profiles")
+    prof_sub = prof.add_subparsers(dest="knowledge_profile_cmd", required=True)
+    prof_list = prof_sub.add_parser("list", help="List the profiles of a workspace")
+    prof_list.add_argument("workspace_id")
+    _admin(prof_list, "profile_list")
+    prof_set = prof_sub.add_parser("set", help="Create or replace a profile")
+    prof_set.add_argument("workspace_id")
+    prof_set.add_argument("profile_id")
+    prof_set.add_argument("--description", default=None)
+    _selection_options(prof_set)
+    _admin(prof_set, "profile_set")
+
+
 def _load_handler(module: str, func: str) -> Handler:
     handler: Handler = getattr(importlib.import_module(f"{__name__}.{module}"), func)
     return handler
@@ -327,9 +513,11 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "CURATION_STATUSES",
     "EMBED_PROVIDERS",
     "LONG_RUNNING",
     "PROG",
+    "RESEARCH_TYPES",
     "SEARCH_MODES",
     "CommandError",
     "build_parser",
