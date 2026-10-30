@@ -15,6 +15,7 @@ HTTP app builds its broker around the objects of its lifespan instead.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -31,7 +32,7 @@ from .contracts import (
     parse_query_context,
     validation_messages,
 )
-from .errors import InvalidInputError
+from .errors import InvalidInputError, KnowledgeError
 
 if TYPE_CHECKING:
     from ..core.registry import Registry
@@ -126,11 +127,13 @@ def build_broker(
     embeddings_error: str | None = None,
     profile: str = "default",
     evidence_policy: EvidencePolicy | None = None,
+    serena: Callable[[], Any] | None = None,
 ) -> KnowledgeBroker:
     """A broker over existing engine objects (owned by the caller, except the pool).
 
     The corpus adapter reads recorded revisions from the evidence store in the
     same ``knowledge.db`` (``evidence_policy``: the operator's retention policy).
+    ``serena`` returns the Serena manager when that adapter is enabled.
     """
     from .evidence.store import EvidenceStore  # noqa: PLC0415
     from .sources import CorpusBackend, build_adapter_factory  # noqa: PLC0415 - heavy imports
@@ -144,7 +147,22 @@ def build_broker(
         evidence=EvidenceStore(store, evidence_policy),
         profile=profile,
     )
-    return KnowledgeBroker(store, build_adapter_factory(backend), profile=profile)
+    return KnowledgeBroker(store, build_adapter_factory(backend, serena=serena), profile=profile)
+
+
+def serena_for(settings: Settings, store: KnowledgeStore) -> Callable[[], Any] | None:
+    """The Serena manager getter when enabled; its sources are (re)registered first."""
+    from ..serena.adapter import manager_getter, register_sources  # noqa: PLC0415
+    from ..serena.config import SerenaConfig  # noqa: PLC0415
+
+    getter = manager_getter(settings)
+    if getter is None:
+        return None
+    try:
+        register_sources(store, SerenaConfig.from_settings(settings))
+    except KnowledgeError as exc:
+        _logger.warning("Serena sources were not registered: %s", exc.message)
+    return getter
 
 
 @dataclass
@@ -179,6 +197,7 @@ class BrokerEngine:
             store = KnowledgeStore.open(knowledge.db_path)
             opened.append(store)
             embeddings, error = open_index(resolved)
+            serena = serena_for(resolved, store)
             broker = build_broker(
                 store,
                 registry,
@@ -188,6 +207,7 @@ class BrokerEngine:
                 embeddings_error=error,
                 profile=knowledge.profile,
                 evidence_policy=knowledge.evidence,
+                serena=serena,
             )
         except Exception:
             for resource in reversed(opened):
@@ -218,4 +238,5 @@ __all__ = [
     "build_broker",
     "run_open",
     "run_search",
+    "serena_for",
 ]

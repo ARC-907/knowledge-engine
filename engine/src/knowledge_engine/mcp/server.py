@@ -66,6 +66,8 @@ workspace's sources (corpus, linked project context) with explicit scope, and op
 a hit's exact revision. They do not change `search`.
 - `<module>.<tool>` tools belong to operator-enabled modules; long-running ones return \
 a job id for `module_job_status` / `module_job_cancel`.
+- `serena.*` tools (when the operator enabled the Serena adapter) look up code symbols \
+of a configured project read-only and return code locators pinned to a commit or snapshot.
 Tool results are JSON text."""
 
 
@@ -151,12 +153,24 @@ def load_modules_group() -> ToolGroup:
     return ToolGroup("modules", schemas, dispatch, context)
 
 
+def load_serena_group() -> ToolGroup:
+    """``serena.*`` read-only code-symbol tools, only when ``KE_SERENA_ENABLED=1``."""
+    from ..core.settings import Settings  # noqa: PLC0415 - read when the server is built
+    from ..serena.mcp_tools import collect_tools  # noqa: PLC0415 - optional subsystem
+
+    if not Settings().serena_enabled:
+        raise GroupDisabledError("disabled by KE_SERENA_ENABLED=0 (the default)")
+    schemas, dispatch, context = collect_tools()
+    return ToolGroup("serena", schemas, dispatch, context)
+
+
 GROUP_LOADERS: tuple[tuple[str, Callable[[], ToolGroup]], ...] = (
     ("project_context", load_project_context_group),
     ("agent_board", load_agent_board_group),
     ("knowledge", load_knowledge_group),
     ("knowledge_broker", load_knowledge_broker_group),
     ("modules", load_modules_group),
+    ("serena", load_serena_group),
 )
 
 

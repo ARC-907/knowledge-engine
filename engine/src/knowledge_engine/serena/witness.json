@@ -1,0 +1,40 @@
+{
+  "server_name": "Serena",
+  "server_version": "2.1.0",
+  "protocol": "2026-07-28",
+  "tool_schema_sha256": {
+    "find_referencing_symbols": "sha256:fabeb9a1aa796a5268ca740851cce7a07478408b76ccf307b2405e0ecd76e794",
+    "find_symbol": "sha256:a731b979c1016ada9cde512597a62e9bcb402babf63fdb27021de0a5a673eb5e",
+    "get_symbols_overview": "sha256:53d4483b727dfb8f9c14fab6480a391a3ee4f3f990a37baa493417338598d41c"
+  },
+  "upstream_tools": [
+    "activate_project",
+    "create_text_file",
+    "delete_memory",
+    "edit_memory",
+    "execute_shell_command",
+    "find_declaration",
+    "find_file",
+    "find_implementations",
+    "find_referencing_symbols",
+    "find_symbol",
+    "get_current_config",
+    "get_diagnostics_for_file",
+    "get_symbols_overview",
+    "insert_after_symbol",
+    "insert_before_symbol",
+    "list_dir",
+    "list_memories",
+    "onboarding",
+    "read_file",
+    "read_memory",
+    "rename_memory",
+    "rename_symbol",
+    "replace_content",
+    "replace_in_files",
+    "replace_symbol_body",
+    "safe_delete_symbol",
+    "search_for_pattern",
+    "write_memory"
+  ]
+}

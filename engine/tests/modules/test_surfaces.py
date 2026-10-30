@@ -76,6 +76,7 @@ def test_group_loader_list_is_generic() -> None:
         "knowledge",
         "knowledge_broker",
         "modules",
+        "serena",
     ]
 
 
