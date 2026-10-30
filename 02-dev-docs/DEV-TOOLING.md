@@ -140,9 +140,12 @@ directly with the same flags the session uses (`start-mcp-server --project
 `SERENA_USAGE_REPORTING=false`; without it, Serena reports usage to its
 vendor at startup.
 
-Tested with `serena-agent==2.1.0` (`SERENA_SPEC` in the noxfile). The engine's
-own Serena integration (V2 roadmap P7) is a separate, read-only adapter; see
-[ADR 0010](adr/0010-serena-mapping-deferred.md).
+Tested with `serena-agent==2.1.0` (`SERENA_SPEC` in the noxfile). The launch
+flags and the child environment come from `knowledge_engine.serena.session`,
+the same ones the engine's own adapter uses. That adapter is a different
+thing: Serena on *your* repositories as a read-only knowledge source, with
+three allowlisted tools; see [SERENA.md](../01-user-docs/SERENA.md) and
+[ADR 0016](adr/0016-serena-read-only-adapter.md).
 
 ## Repository self-index
 

@@ -16,9 +16,10 @@ both ways.
 | [0007](0007-record-revision-identity-and-locators.md) | Canonical record/revision identity and locator units | Accepted |
 | [0008](0008-retention-and-tombstones.md) | Retention and tombstone policy | Accepted |
 | [0009](0009-module-catalog-persistence.md) | Module catalog persistence and restart behaviour | Accepted |
-| [0010](0010-serena-mapping-deferred.md) | Exact Serena compatibility mapping deferred to the Serena slice | Accepted (deferral) |
+| [0010](0010-serena-mapping-deferred.md) | Exact Serena compatibility mapping deferred to the Serena slice | Superseded by 0016 |
 | [0011](0011-retrieval-broker-fusion-and-adapters.md) | Retrieval broker: candidate caps, fusion, filtering and source mapping | Accepted |
 | [0012](0012-evidence-store-and-ingestion.md) | Evidence store layout, idempotent ingestion and rename detection | Accepted |
 | [0013](0013-citation-identity-and-export.md) | Citation identity, claim validation and export formats | Accepted |
 | [0014](0014-module-catalog-store-and-script-protocol.md) | Module catalog in its own `modules.db`; script wire protocol v1 | Accepted |
 | [0015](0015-module-jobs-cancellation-and-ingestion.md) | Module jobs, cancellation and the host-ingestion interface | Accepted |
+| [0016](0016-serena-read-only-adapter.md) | Serena: read-only adapter, pinned witness, one process per project | Accepted |

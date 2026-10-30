@@ -163,6 +163,43 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   its knowledge store with the module host; the CLI opens `knowledge.db` only
   when a call ingests. `KE_KNOWLEDGE_ENABLED=0` keeps ingestion `unavailable`.
 
+**Serena adapter (V2 P7, #38)**
+
+- `knowledge_engine.serena`: an optional, read-only adapter to a separately
+  installed Serena (tested with 2.1.0; GPL-3.0-or-later, never bundled), off
+  unless `KE_SERENA_ENABLED=1`. Projects come from an operator file
+  (`KE_SERENA_PROJECTS`: `project_id`, `root`, optional `repository_id`) and
+  are routed by project id only.
+- One Serena stdio MCP process per project:
+  - started with the tool interface forced, an isolated `HOME`, usage
+    reporting off and `uv` on `PATH`;
+  - verified on every start against a recorded witness (server version and
+    the SHA-256 of each mapped tool's input schema); any drift is
+    `incompatible` and nothing is called;
+  - calls are serialized, bounded by `KE_SERENA_REQUEST_TIMEOUT_S`, and
+    restarted with exponential backoff after a timeout or crash; processes
+    are capped by `KE_SERENA_MAX_SESSIONS` and stopped after
+    `KE_SERENA_IDLE_SHUTDOWN_S`.
+- Only `find_symbol`, `get_symbols_overview` and `find_referencing_symbols`
+  are forwarded, as the MCP tools `serena.find_symbol`,
+  `serena.get_symbols_overview` and `serena.find_referencing_symbols` (plus
+  `serena.status`), with the engine's own typed schemas. Every other Serena
+  tool is refused. Paths in and out are contained in the project root.
+- Results carry code locators: 1-based exclusive lines, pinned to the commit,
+  or to a snapshot digest when the working tree is dirty (Serena's own
+  `.serena/` state excluded).
+- Broker sources `serena:<project_id>` (kind `serena`) search code symbols
+  only when explicitly selected; opened file revisions are recorded in the
+  evidence store, so the citation tools validate and export code evidence.
+- CLI: `knowledge-engine serena status|check|sync|find-symbol|overview|references`.
+- Settings `KE_SERENA_ENABLED`, `KE_SERENA_COMMAND`, `KE_SERENA_VERSION`,
+  `KE_SERENA_PROJECTS`, `KE_SERENA_REQUEST_TIMEOUT_S`,
+  `KE_SERENA_STARTUP_TIMEOUT_S`, `KE_SERENA_MAX_SESSIONS`,
+  `KE_SERENA_IDLE_SHUTDOWN_S`.
+- Guide `01-user-docs/SERENA.md`; decision record ADR 0016 (supersedes the
+  deferral in ADR 0010). `scripts/serena_check.py` reuses the adapter's
+  launch flags.
+
 **Logging and developer tooling (V2 T1)**
 
 - `KE_LOG_FORMAT=json` writes one JSON object per log line (`ts`, `level`,

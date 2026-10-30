@@ -34,7 +34,8 @@
    session manager.
 
 On shutdown the sweeper is stopped (and the previous default restored), the
-MCP session manager exits, the registry and the FTS connection are closed,
+MCP session manager exits, the module host and any Serena processes the
+optional adapter started are stopped, the registry and the FTS connection are closed,
 the knowledge store is closed, every cached pipeline/board DB connection is closed
 (``runtime.foundation.db.close_all``), and the engine objects are removed
 from ``app.state`` so a request that still arrives gets ``503`` from
@@ -229,7 +230,7 @@ def _open_knowledge(app: FastAPI, settings: Settings) -> None:
         app.state.knowledge = None
         return
     try:
-        from ..knowledge.broker_api import build_broker  # noqa: PLC0415 - optional subsystem
+        from ..knowledge.broker_api import build_broker, serena_for  # noqa: PLC0415 - optional
 
         app.state.broker = build_broker(
             app.state.knowledge.store,
@@ -240,6 +241,7 @@ def _open_knowledge(app: FastAPI, settings: Settings) -> None:
             embeddings_error=getattr(app.state, "embeddings_error", None),
             profile=config.profile,
             evidence_policy=config.evidence,
+            serena=serena_for(settings, app.state.knowledge.store),
         )
     except Exception:
         _logger.exception("retrieval broker could not be built; /knowledge/search will answer 503")
@@ -267,6 +269,16 @@ def _open_modules(app: FastAPI, settings: Settings) -> None:
         app.state.previous_module_host = set_default_host(host)
     except Exception:
         _logger.exception("module catalog could not be opened; /modules will answer 503")
+
+
+def _close_serena() -> None:
+    """Stop the Serena processes the optional adapter started (no-op when unused)."""
+    try:
+        from ..serena.manager import close_default_manager  # noqa: PLC0415 - optional subsystem
+
+        close_default_manager()
+    except Exception:
+        _logger.exception("stopping the Serena sessions failed")
 
 
 def _close_modules(app: FastAPI) -> None:
@@ -358,6 +370,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         _stop_board(owned_sweeper, previous_sweeper)
         _close_modules(app)
+        _close_serena()
         _close_engine(app)
         _logger.info("engine shut down; registry, index and pipeline DB connections closed")
 

@@ -1,9 +1,9 @@
 ### knowledge-engine --help
 usage: knowledge-engine [-h] [-v | -q]
-                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve,module} ...
+                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve,module,serena} ...
 
 positional arguments:
-  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve,module}
+  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve,module,serena}
     info                Print configuration and counts
     bootstrap           Walk corpus/ and register every folder as an entry
     capabilities        Print runtime capability and retrieval-surface
@@ -26,6 +26,8 @@ positional arguments:
                         port).
     module              Modules: discover, register, configure,
                         enable/disable, status, invoke, jobs
+    serena              Optional read-only Serena adapter: code symbols of
+                        configured projects
 
 options:
   -h, --help            show this help message and exit

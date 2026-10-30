@@ -99,6 +99,19 @@ is used instead.
 | `KE_MODULES_DB` | string (optional) | *(unset)* | Module catalog (intent, configuration, observed health, runs, jobs, artifacts). Unset: <data_dir>/modules.db; artifact bytes go next to it in module-artifacts/. | `modules.config` |
 | `KE_MODULES_HOST_CAPABILITIES` | string | `read,network,process` | Host policy: the capabilities any module may be granted (comma-separated subset of read, write, network, process). Authoritative over manifests and operator grants. | `modules.config` |
 
+## Serena adapter (optional, read-only code symbols)
+
+| Variable | Type | Default | Description | Read by |
+|---|---|---|---|---|
+| `KE_SERENA_ENABLED` | bool | `0` | Enable the read-only Serena adapter: `serena:<project_id>` broker sources, the `serena.*` MCP tools and `knowledge-engine serena`. Off: nothing starts Serena. | `serena.config` |
+| `KE_SERENA_COMMAND` | string | `serena` | The Serena executable (operator-installed, e.g. from `serena-agent`), split like a shell command line; `uv` must be on its PATH (it starts pyright through `uvx`). | `serena.config` |
+| `KE_SERENA_VERSION` | string | `2.1.0` | The Serena version the adapter accepts. A server reporting another version, or a mapped tool whose input schema differs from the recorded witness, is `incompatible`. | `serena.config` |
+| `KE_SERENA_PROJECTS` | string (optional) | *(unset)* | Operator project file (TOML or JSON): one entry per project with `project_id`, `root` and optional `repository_id`. Unset: <data_dir>/serena-projects.toml. | `serena.config` |
+| `KE_SERENA_REQUEST_TIMEOUT_S` | float | `60` | Deadline of one Serena tool call, in seconds (the session restarts after a timeout). | `serena.config` |
+| `KE_SERENA_STARTUP_TIMEOUT_S` | float | `300` | Deadline for starting Serena and its language server for one project, in seconds. | `serena.config` |
+| `KE_SERENA_MAX_SESSIONS` | int | `4` | Most Serena processes running at once (one per project); the least recently used idle session is stopped to make room. | `serena.config` |
+| `KE_SERENA_IDLE_SHUTDOWN_S` | int | `900` | Stop a project's Serena process after this many idle seconds (0: never). | `serena.config` |
+
 ## Pipeline and substrates
 
 | Variable | Type | Default | Description | Read by |

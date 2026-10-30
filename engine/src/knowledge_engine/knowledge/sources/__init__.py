@@ -4,6 +4,9 @@
   registry (:class:`~.corpus.CorpusAdapter`);
 * :mod:`.project_context` -- ``project_context:<workspace>``: linked
   project-context stores (:class:`~.project_context.ProjectContextAdapter`);
+* ``serena:<project_id>``: code symbols of a configured repository through the
+  optional, read-only Serena adapter (:mod:`knowledge_engine.serena.adapter`;
+  ``unavailable`` unless ``KE_SERENA_ENABLED=1``);
 * the agent board is **not** a broker source: board posts are coordination
   messages, not research records, and searching them must be an explicit
   opt-in. :data:`BOARD_SOURCE_AVAILABLE` is ``False`` and a ``board`` source
@@ -15,6 +18,9 @@ adapter; the broker calls it once per selected source and request.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
 
 from ..adapter import SourceAdapter
 from ..backfill import CORPUS_SOURCE_ID
@@ -29,9 +35,16 @@ BOARD_SOURCE_AVAILABLE = False
 
 
 def build_adapter_factory(
-    corpus: CorpusBackend | None, *, project_context: bool = True
+    corpus: CorpusBackend | None,
+    *,
+    project_context: bool = True,
+    serena: Callable[[], Any] | None = None,
 ) -> AdapterFactory:
-    """The default factory: corpus and project-context adapters; others are unavailable."""
+    """The default factory: corpus, project-context and (when enabled) Serena adapters.
+
+    ``serena`` returns the process's Serena manager; ``None`` (the adapter is
+    disabled) makes every ``serena`` source ``unavailable``.
+    """
 
     def factory(source: SnapshotSource, snapshot: ScopeSnapshot) -> SourceAdapter:
         if source.kind == "corpus":
@@ -43,6 +56,15 @@ def build_adapter_factory(
             return CorpusAdapter(source.source_id, corpus, snapshot)
         if source.kind == PROJECT_CONTEXT_KIND and project_context:
             return ProjectContextAdapter(source.source_id, snapshot)
+        if source.kind == "serena":
+            from ...serena.adapter import adapter_factory_entry  # noqa: PLC0415 - optional
+
+            build = adapter_factory_entry(
+                serena,
+                evidence=corpus.evidence if corpus is not None else None,
+                profile=corpus.profile if corpus is not None else "default",
+            )
+            return build(source.source_id, snapshot)
         if source.kind == "board" and not BOARD_SOURCE_AVAILABLE:
             raise UnavailableError(
                 "the agent board is not a search source (explicit opt-in; not available)",
