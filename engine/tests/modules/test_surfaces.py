@@ -74,6 +74,7 @@ def test_group_loader_list_is_generic() -> None:
         "project_context",
         "agent_board",
         "knowledge",
+        "knowledge_broker",
         "modules",
     ]
 
