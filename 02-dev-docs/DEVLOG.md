@@ -51,6 +51,21 @@ with lasting effect also get an [ADR](adr/README.md); defects get a row in the
     `KeyboardInterrupt`. Cancelling now stops the whole process tree on Windows
     too (`taskkill /T /F`), so the same test covers both platforms instead of
     being skipped on one.
+- **Dashboard (P8).** The Knowledge and Modules tabs are thin clients over the
+  broker, evidence, citation and module routes; no route changed. Choices:
+  - The new tabs come after Board, so the existing keyboard and tab-order
+    tests stay as they were.
+  - The broker has no curation filter, so the dashboard offers none and says so.
+  - A citation needs a locator: a whole revision has no evidence identity. So
+    "Cite this revision" sends a text locator over the whole content, and a
+    selected passage is converted to UTF-8 byte offsets for a quotation.
+  - Citing needs `knowledge snapshot`; before it, the claim is shown
+    `unresolved` with the engine's reason rather than being hidden.
+  - FTS excerpts are split on the literal `<mark>` delimiters and every part is
+    rendered as text, so corpus content is never parsed as HTML.
+  - A screenshot taken right after switching tabs showed two tabs highlighted.
+    It was the 150 ms colour transition, not state; the tests assert
+    `aria-selected`, not colours.
 - **Serena compatibility probe.** Installed `serena-agent==2.1.0` in an
   isolated environment and drove it over stdio with the MCP SDK client
   (protocol `2026-07-28`). Findings that shape the adapter:

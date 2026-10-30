@@ -191,6 +191,45 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   in `alloy fmt` form, and Serena answers symbol queries for the repository.
 - Guide: `02-dev-docs/DEV-TOOLING.md`.
 
+**Dashboard (V2 P8)**
+
+- Knowledge tab over `POST /knowledge/search`:
+  - Workspace and project selectors, with the option to include records
+    outside any project.
+  - Source, collection, research-type and tag filters with the broker's
+    semantics: nothing ticked leaves the group to the scope profile; values
+    are ORed within a group, groups are ANDed, and all tags must match.
+  - Mode and hit limit.
+  - Per-source status and a partial-result warning. Typed errors are shown;
+    an error never appears as an empty result.
+  - Hits show their source, research type, project, collection memberships,
+    locator and excerpt. Matches are highlighted from the index's `<mark>`
+    delimiters; the excerpt is never parsed as HTML.
+- Evidence navigation: **Open** shows the exact revision with its
+  verification state (`verified`, `stale`, `unavailable`, `ambiguous`,
+  `unsupported`, each with a written label and explanation), digest, locator
+  and content. Citation evidence re-opens through `POST /knowledge/evidence/open`.
+- Citations of a whole revision, or of a selected passage as a quotation
+  (converted to UTF-8 byte offsets), export Markdown and CSL-JSON through
+  `POST /knowledge/citations/export`. Each claim's status and issues are
+  shown, with copy buttons.
+- Modules tab: registered modules with lifecycle state, detail, transport,
+  tools and active calls, plus the default workspace's jobs. `degraded` and
+  `failed` are marked with an icon and a written label, not by colour alone.
+  The only action is the bounded health check. It uses the board admin key
+  stored in the Config tab.
+- The new tabs follow the existing keyboard navigation, labels and light/dark
+  theme; the Tailwind stylesheet is recompiled. Guide:
+  `01-user-docs/DASHBOARD.md`.
+- Browser tests (`tests/ui/test_dashboard_knowledge.py`, run by the
+  `dashboard (browser smoke)` job) cover:
+  - project, collection and research-type filters changing the results;
+  - scope errors being reported;
+  - open and cite showing `verified`;
+  - an unrecorded old revision showing `unsupported` instead of newer text;
+  - a module rendering as degraded, then failed, then ready after a health
+    check.
+
 ### Fixed
 
 - Nested registry entries are attributed consistently in every search mode

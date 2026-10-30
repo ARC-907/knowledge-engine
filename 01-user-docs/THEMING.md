@@ -7,7 +7,7 @@ The Knowledge-Engine dashboard is three small files under
 | --- | --- |
 | `index.html` | The markup. Plain HTML with Tailwind utility classes and Alpine.js directives. |
 | `app.js` | The Alpine component: state, API calls, tabs, theme toggle. Classic script, no bundler. |
-| `tailwind.css` | **Compiled** Tailwind CSS (≈18 KB). Generated from `ui-src/input.css`; committed. |
+| `tailwind.css` | **Compiled** Tailwind CSS (≈22 KB). Generated from `ui-src/input.css`; committed. |
 | `vendor/alpinejs/<ver>/alpine.min.js` | Alpine.js, vendored and SHA-384-pinned by `scripts/vendor.py`. |
 
 Nothing is fetched from a CDN, and the published Python package never needs

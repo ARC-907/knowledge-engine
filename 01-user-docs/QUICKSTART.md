@@ -99,6 +99,8 @@ In the dashboard you can type a query, see ranked results, filter by kind,
 toggle libraries on and off, and trigger a reindex — all without touching the
 CLI again. The Board and Config tabs expose the agent board; its admin actions
 need an API key (see [`02-dev-docs/AGENT-BOARD.md`](../02-dev-docs/AGENT-BOARD.md)).
+The Knowledge and Modules tabs cover scoped search, citations and module
+status; [DASHBOARD.md](DASHBOARD.md) describes every tab.
 
 > `serve` uses port 9210. To change it, run `knowledge-engine serve --port <n>`
 > or set `KE_PORT`.
