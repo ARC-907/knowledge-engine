@@ -25,7 +25,11 @@
    registry/FTS/embedding objects above (``app.state.broker``, for
    ``/knowledge/search`` and ``/knowledge/open``); a failure is logged and
    those routes answer ``503``, the rest of the app is unaffected;
-6. MCP over HTTP (``KE_MCP_HTTP=1``): attach a server built around this
+6. modules (unless ``KE_MODULES_ENABLED=0``): open ``modules.db``, rebuild
+   observed module health and install the host as the process default
+   (``app.state.modules``) so ``/modules`` and the MCP module tools share one
+   dispatcher; a failure is logged and ``/modules`` answers ``503``;
+7. MCP over HTTP (``KE_MCP_HTTP=1``): attach a server built around this
    lifespan's registry/indexer/embedding index to the mount and run its
    session manager.
 
@@ -239,6 +243,36 @@ def _open_knowledge(app: FastAPI, settings: Settings) -> None:
         app.state.broker = None
 
 
+def _open_modules(app: FastAPI, settings: Settings) -> None:
+    """Open the module host for ``/modules`` and the MCP module tools (failures are logged)."""
+    app.state.modules = None
+    app.state.previous_module_host = None
+    try:
+        from ..modules.config import ModulesConfig  # noqa: PLC0415 - optional subsystem
+        from ..modules.dispatcher import ModuleHost, set_default_host  # noqa: PLC0415
+
+        host = ModuleHost.open(ModulesConfig.from_settings(settings))
+        host.start()
+        app.state.modules = host
+        app.state.previous_module_host = set_default_host(host)
+    except Exception:
+        _logger.exception("module catalog could not be opened; /modules will answer 503")
+
+
+def _close_modules(app: FastAPI) -> None:
+    host = getattr(app.state, "modules", None)
+    if host is None:
+        return
+    try:
+        from ..modules.dispatcher import set_default_host  # noqa: PLC0415
+
+        set_default_host(getattr(app.state, "previous_module_host", None))
+        host.close()
+    except Exception:
+        _logger.exception("closing the module host failed")
+    app.state.modules = None
+
+
 #: ``app.state`` attributes the lifespan owns; cleared on shutdown so the
 #: ``server.deps`` providers answer 503 afterwards.
 ENGINE_STATE = ("indexer", "registry", "providers", "config", "knowledge", "broker")
@@ -306,11 +340,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             owned_sweeper, previous_sweeper = _start_board(app, settings)
         if settings.knowledge_enabled:
             _open_knowledge(app, settings)
+        if settings.modules_enabled:
+            _open_modules(app, settings)
         async with AsyncExitStack() as optional_services:
             await _start_mcp(app, optional_services, config, registry, indexer)
             yield
     finally:
         _stop_board(owned_sweeper, previous_sweeper)
+        _close_modules(app)
         _close_engine(app)
         _logger.info("engine shut down; registry, index and pipeline DB connections closed")
 

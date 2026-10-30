@@ -1,9 +1,9 @@
 ### knowledge-engine --help
 usage: knowledge-engine [-h] [-v | -q]
-                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve} ...
+                        {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve,module} ...
 
 positional arguments:
-  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve}
+  {info,bootstrap,capabilities,reindex,watch,registry,config,mcp,search,embeddings,knowledge,serve,project-context,board,board-serve,module}
     info                Print configuration and counts
     bootstrap           Walk corpus/ and register every folder as an entry
     capabilities        Print runtime capability and retrieval-surface
@@ -24,6 +24,8 @@ positional arguments:
     board               Agent Board (post/read/search/ack/sweep/keys)
     board-serve         Run the standalone Agent Board service (separate
                         port).
+    module              Modules: discover, register, configure,
+                        enable/disable, status, invoke, jobs
 
 options:
   -h, --help            show this help message and exit

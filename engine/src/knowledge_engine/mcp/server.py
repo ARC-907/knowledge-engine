@@ -61,6 +61,8 @@ collections, classification); they do not change `search`.
 - `knowledge.search` / `knowledge.open` are the scoped retrieval broker: search a \
 workspace's sources (corpus, linked project context) with explicit scope, and open \
 a hit's exact revision. They do not change `search`.
+- `<module>.<tool>` tools belong to operator-enabled modules; long-running ones return \
+a job id for `module_job_status` / `module_job_cancel`.
 Tool results are JSON text."""
 
 
@@ -130,11 +132,28 @@ def load_knowledge_broker_group() -> ToolGroup:
     return ToolGroup("knowledge_broker", schemas, dispatch, context)
 
 
+def load_modules_group() -> ToolGroup:
+    """``<module_id>.<tool>`` tools of every enabled module, unless ``KE_MODULES_ENABLED=0``.
+
+    One entry for all modules: adding a module is a manifest plus operator
+    configuration, never an edit here. The tool list is frozen per process (ADR 0009).
+    """
+    from ..core.settings import Settings  # noqa: PLC0415 - read when the server is built
+    from ..modules.dispatcher import default_host  # noqa: PLC0415 - optional subsystem
+    from ..modules.mcp_tools import collect_tools  # noqa: PLC0415
+
+    if not Settings().modules_enabled:
+        raise GroupDisabledError("disabled by KE_MODULES_ENABLED=0")
+    schemas, dispatch, context = collect_tools(default_host())
+    return ToolGroup("modules", schemas, dispatch, context)
+
+
 GROUP_LOADERS: tuple[tuple[str, Callable[[], ToolGroup]], ...] = (
     ("project_context", load_project_context_group),
     ("agent_board", load_agent_board_group),
     ("knowledge", load_knowledge_group),
     ("knowledge_broker", load_knowledge_broker_group),
+    ("modules", load_modules_group),
 )
 
 
@@ -390,6 +409,7 @@ def _shutdown(registry: Registry, indexer: Indexer) -> None:
     except Exception:
         logger.exception("closing the pipeline DB connections failed")
     close_knowledge_stores()
+    close_module_host()
     logger.debug("MCP server shut down; connections closed")
 
 
@@ -403,6 +423,17 @@ def close_knowledge_stores() -> None:
             module.close_all()
         except Exception:
             logger.exception("closing the knowledge stores of %s failed", name)
+
+
+def close_module_host() -> None:
+    """Close the process module host (only if the modules group opened one)."""
+    module = sys.modules.get("knowledge_engine.modules.dispatcher")
+    if module is None:
+        return
+    try:
+        module.close_default_host()
+    except Exception:
+        logger.exception("closing the module host failed")
 
 
 def _serve(args: argparse.Namespace, server: MCPServer[Any]) -> int:

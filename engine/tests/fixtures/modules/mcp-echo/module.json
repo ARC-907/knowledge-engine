@@ -1,0 +1,17 @@
+{
+  "manifest_version": 1,
+  "module_id": "test.mcp-echo",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Test fixture: an external stdio MCP server wrapped as a module.",
+  "engine_compatibility": {"engine": ">=0.0.0"},
+  "transport": {"kind": "mcp", "connection": "stdio", "command": ["python", "server.py"]},
+  "capabilities": ["read", "process"],
+  "tools": [
+    {"name": "shout", "description": "Upper-case text via the external server.", "effect": "read", "remote_name": "shout",
+     "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+     "output_schema": {"type": "object", "required": ["text"]}}
+  ],
+  "configuration": {"secrets": [{"name": "token", "env": "ECHO_TOKEN", "required": false}]},
+  "limits": {"deadline_ms": 30000, "concurrency": 1}
+}

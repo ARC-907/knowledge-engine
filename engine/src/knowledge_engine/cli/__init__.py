@@ -14,6 +14,7 @@ a sibling module that is imported only when that subcommand runs:
 * :mod:`.project_context` -- ``project-context ...``
 * :mod:`.knowledge`       -- ``knowledge migrate``, ``knowledge status``, the
   scoped-knowledge admin commands and ``knowledge search|open`` (the broker)
+* :mod:`.modules`         -- ``module register|configure|enable|disable|list|status|invoke|job``
 
 :func:`main` configures stderr logging once (``-v``/``-q``), loads the
 pipeline ``.env`` (variables already set win) and runs the subcommand. A
@@ -199,7 +200,68 @@ def build_parser() -> argparse.ArgumentParser:
     abs_serve.add_argument("--host", default=None, help="default: $BOARD_HOST or 127.0.0.1")
     abs_serve.add_argument("--port", type=int, default=None, help="default: $BOARD_PORT or 11437")
     _route(abs_serve, "serve", "cmd_board_serve")
+    _add_module_parser(sub)
     return parser
+
+
+#: ``module enable --grant`` / ``module invoke --effect`` values
+#: (``knowledge_engine.modules.manifest.CAPABILITIES``).
+CAPABILITIES = ("read", "write", "network", "process")
+
+
+def _add_module_parser(sub: Any) -> None:
+    md = sub.add_parser(
+        "module",
+        help="Modules: discover, register, configure, enable/disable, status, invoke, jobs",
+    )
+    md_sub = md.add_subparsers(dest="module_cmd", required=True)
+    md_sub.add_parser("discover", help="Validate the manifests under KE_MODULES_DIR (no execution)")
+    reg = md_sub.add_parser(
+        "register", help="Register (install) a module directory; stays disabled"
+    )
+    reg.add_argument("path", help="module directory (never inside the corpus)")
+    conf = md_sub.add_parser("configure", help="Set operator settings and secret references")
+    conf.add_argument("module_id")
+    conf.add_argument("--set", action="append", metavar="NAME=VALUE", help="a declared setting")
+    conf.add_argument(
+        "--secret", action="append", metavar="NAME=ENV_VAR", help="secret reference -> env var name"
+    )
+    en = md_sub.add_parser("enable", help="Check compatibility/config/grants and enable")
+    en.add_argument("module_id")
+    en.add_argument(
+        "--grant",
+        action="append",
+        choices=CAPABILITIES,
+        help="capability to grant (repeatable; default: declared within the host policy)",
+    )
+    dis = md_sub.add_parser("disable", help="Reject new work and drain/cancel active calls")
+    dis.add_argument("module_id")
+    dis.add_argument("--drain", type=float, default=5.0, help="seconds to wait for active calls")
+    md_sub.add_parser("list", help="Registered modules with intent and observed state")
+    st = md_sub.add_parser("status", help="One module (or all) with recent runs")
+    st.add_argument("module_id", nargs="?", default=None)
+    st.add_argument("--probe", action="store_true", help="run the module's bounded health probe")
+    inv = md_sub.add_parser("invoke", help="Call a module tool through the shared dispatcher")
+    inv.add_argument("module_id")
+    inv.add_argument("tool")
+    inv.add_argument("--input", default=None, help="tool input as a JSON object")
+    inv.add_argument("--input-file", default=None, help="read the JSON input from a file")
+    inv.add_argument("--workspace", default=None, help="scope workspace (default: the default)")
+    inv.add_argument("--project", default=None, help="scope project")
+    inv.add_argument("--timeout-ms", type=_positive_int, default=None)
+    inv.add_argument(
+        "--effect", action="append", choices=CAPABILITIES, help="allowed effect (e.g. read only)"
+    )
+    inv.add_argument("--ingest", action="store_true", help="ingest artifacts into the scope")
+    job = md_sub.add_parser("job", help="Status, cancel or list long-running module jobs")
+    job_sub = job.add_subparsers(dest="job_cmd", required=True)
+    for verb, text in (("status", "Job state and result"), ("cancel", "Cancel a running job")):
+        jp = job_sub.add_parser(verb, help=text)
+        jp.add_argument("job_id")
+        jp.add_argument("--workspace", default=None)
+    jl = job_sub.add_parser("list", help="Recent jobs of a workspace")
+    jl.add_argument("--workspace", default=None)
+    _route(md, "modules", "cmd_module")
 
 
 def _embedding_options(parser: argparse.ArgumentParser) -> None:
@@ -570,6 +632,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "CAPABILITIES",
     "CURATION_STATUSES",
     "EMBED_PROVIDERS",
     "LONG_RUNNING",
