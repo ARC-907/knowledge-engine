@@ -61,7 +61,7 @@ user-visible changes under `[Unreleased]` in the [CHANGELOG](../CHANGELOG.md).
 | 1 | R0 nested-entry ownership | Merged in [#41](https://github.com/ARC-907/knowledge-engine/pull/41) |
 | 2 | #40 browser CI job | Merged in [#42](https://github.com/ARC-907/knowledge-engine/pull/42) |
 | 3 | P0 + P1 contracts and metadata store | Merged in [#43](https://github.com/ARC-907/knowledge-engine/pull/43) |
-| 4 | P2 retrieval broker and bindings | Implemented; PR in review |
+| 4 | P2 retrieval broker and bindings ([ADR 0011](adr/0011-retrieval-broker-fusion-and-adapters.md)) | Merged in [#45](https://github.com/ARC-907/knowledge-engine/pull/45) |
 | 5 | P3 + P4 evidence and citations | In progress |
 | 6 | P5 + P6 modules, reference utilities, ingestion | In progress |
 | 7 | T1 tooling, observability and self-indexing | Next |

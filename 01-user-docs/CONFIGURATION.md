@@ -80,7 +80,7 @@ is used instead.
 
 | Variable | Type | Default | Description | Read by |
 |---|---|---|---|---|
-| `KE_KNOWLEDGE_ENABLED` | bool | `1` | Expose the scoped-knowledge admin surface: the /knowledge HTTP routes and the `knowledge_*` MCP tools. The `knowledge-engine knowledge` CLI always works. | `server.app, server.lifespan, mcp.server` |
+| `KE_KNOWLEDGE_ENABLED` | bool | `1` | Expose the scoped-knowledge surface: the /knowledge HTTP routes (admin, /knowledge/search, /knowledge/open), the `knowledge_*` admin MCP tools and the `knowledge.search` / `knowledge.open` broker tools. The `knowledge-engine knowledge` CLI always works. | `server.app, server.lifespan, mcp.server` |
 | `KE_KNOWLEDGE_DB` | string (optional) | *(unset)* | Scoped-knowledge metadata store (workspaces, projects, sources, collections, classification). Unset: <data_dir>/knowledge.db. | `knowledge.config` |
 | `KE_KNOWLEDGE_DEFAULT_WORKSPACE` | string | `default` | Id of the default workspace `knowledge migrate --apply` creates and registers the existing corpus in (lowercase letters, digits, `.`, `_`, `-`). | `knowledge.config` |
 | `KE_KNOWLEDGE_PROFILE` | string | `default` | Scope profile used for every selection a knowledge query omits. `default` (built in unless stored): every source of the workspace, no other constraint. | `knowledge.config` |

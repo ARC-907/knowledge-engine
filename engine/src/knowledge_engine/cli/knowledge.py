@@ -1,4 +1,4 @@
-"""``knowledge-engine knowledge ...``: scoped-knowledge metadata (migrate, status, admin).
+"""``knowledge-engine knowledge ...``: scoped-knowledge metadata (migrate, status, admin, search).
 
 Every command prints JSON on stdout. Admin commands go through the same
 operation catalog as the ``/knowledge`` HTTP routes and the ``knowledge_*``
@@ -191,6 +191,19 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], tuple[str, dict[str, Any]]]] 
         {"context": _context(a), "limit": a.limit, "offset": a.offset},
     ),
     "profile_list": lambda a: ("profile_list", {"workspace_id": a.workspace_id}),
+    "project_context_link": lambda a: (
+        "project_context_link",
+        _clean(
+            workspace_id=a.workspace_id,
+            project_id=a.project_id,
+            root=a.root,
+            project_fp=a.project_fp,
+        ),
+    ),
+    "project_context_unlink": lambda a: (
+        "project_context_unlink",
+        {"workspace_id": a.workspace_id, "project_id": a.project_id},
+    ),
     "profile_set": lambda a: (
         "profile_set",
         {
@@ -208,10 +221,64 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], tuple[str, dict[str, Any]]]] 
 }
 
 
+def _scope_context(args: argparse.Namespace, **extra: Any) -> dict[str, Any]:
+    """The query context of the scope flags (or ``--context``), plus non-empty ``extra``."""
+    args.workspace_id = args.workspace
+    return {**_context(args), **_clean(**extra)}
+
+
+def _with_broker(run: Callable[[Any], dict[str, Any]]) -> int:
+    from ..knowledge.broker_api import BrokerEngine
+
+    with _typed_errors():
+        engine = BrokerEngine.open()
+        try:
+            result = run(engine.broker)
+        finally:
+            engine.close()
+    _emit(result)
+    return 0
+
+
+def cmd_knowledge_search(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
+    """``knowledge search QUERY [scope flags] [--mode] [--limit] ...``: the broker envelope."""
+    from ..knowledge.broker_api import run_search
+
+    context = _scope_context(
+        args,
+        mode=args.mode,
+        limit=args.limit,
+        timeout_ms=args.timeout_ms,
+        byte_budget=args.byte_budget,
+    )
+    payload = {"query": args.query, "context": context}
+    return _with_broker(lambda broker: run_search(broker, payload))
+
+
+def cmd_knowledge_open(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
+    """``knowledge open SOURCE_ID RECORD_ID [--revision REV] [scope flags]``."""
+    from ..knowledge.broker_api import run_open
+
+    payload = _clean(
+        context=_scope_context(args, timeout_ms=args.timeout_ms),
+        source_id=args.source_id,
+        record_id=args.record_id,
+        revision_id=args.revision,
+    )
+    return _with_broker(lambda broker: run_open(broker, payload))
+
+
 def cmd_knowledge_admin(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
     """Every ``knowledge <object> <verb>`` admin command."""
     operation, arguments = HANDLERS[args.knowledge_op](args)
     return _run(operation, arguments)
 
 
-__all__ = ["HANDLERS", "cmd_knowledge_admin", "cmd_knowledge_migrate", "cmd_knowledge_status"]
+__all__ = [
+    "HANDLERS",
+    "cmd_knowledge_admin",
+    "cmd_knowledge_migrate",
+    "cmd_knowledge_open",
+    "cmd_knowledge_search",
+    "cmd_knowledge_status",
+]

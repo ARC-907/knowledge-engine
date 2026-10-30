@@ -15,7 +15,11 @@ Modules (importing this package does no I/O and loads none of them):
 * :mod:`.backfill` -- ``knowledge migrate`` (dry run, backup, resumable apply);
 * :mod:`.service` -- the admin operation catalog shared by HTTP, MCP and CLI;
 * :mod:`.mcp_tools` -- the ``knowledge_*`` MCP tool group;
-* :mod:`.config` -- the resolved configuration (``KE_KNOWLEDGE_DB`` and friends).
+* :mod:`.config` -- the resolved configuration (``KE_KNOWLEDGE_DB`` and friends);
+* :mod:`.broker` -- the retrieval broker (scoped search/open over source adapters, V2 P2);
+* :mod:`.sources` -- the corpus and project-context adapters and the default factory;
+* :mod:`.broker_api` -- request models shared by the broker's HTTP, MCP and CLI bindings;
+* :mod:`.broker_mcp` -- the ``knowledge.search`` / ``knowledge.open`` MCP tools.
 
 The legacy ``/search`` route, MCP ``search`` tool and CLI ``search`` command
 do not read this package.

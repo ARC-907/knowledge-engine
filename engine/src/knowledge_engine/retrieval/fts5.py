@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,8 @@ from .ownership import EntryOwnership
 
 INDEX_FILENAME = "index.db"
 TEXT_SUFFIXES = {".md", ".txt", ".rst"}
+#: Most ranked rows :meth:`Indexer.search_where` examines for one query.
+MAX_FILTER_SCAN = 50_000
 
 _logger = logging.getLogger(__name__)
 
@@ -269,9 +271,70 @@ class Indexer:
             syntax_fallback=fallback,
         )
 
+    def search_where(
+        self,
+        query: str,
+        *,
+        limit: int,
+        accept: Callable[[str], bool],
+        max_scan: int = MAX_FILTER_SCAN,
+    ) -> tuple[SearchResults, bool]:
+        """BM25 hits whose path passes ``accept``, filtered *before* ``limit``.
+
+        Matches are read in BM25 order and ``accept(relpath)`` decides each one
+        until ``limit`` are accepted, so a selective filter still yields up to
+        ``limit`` hits. At most ``max_scan`` ranked matches are examined (bounded
+        work per query); the second value is true when that cap stopped the scan
+        before ``limit`` hits were found. Snippets are computed only for the
+        accepted rows. Invalid FTS5 syntax falls back to a phrase as in
+        :meth:`search`.
+        """
+        if limit < 1 or max_scan < 1:
+            raise ValueError("limit and max_scan must be positive integers")
+        sql = (
+            "SELECT rowid, entry_id, entry_kind, relpath, bm25(docs) FROM docs"
+            " WHERE docs MATCH ? ORDER BY bm25(docs) LIMIT ?"
+        )
+        params: list[Any] = [query, max_scan]
+        fallback = False
+        try:
+            rows = self._run(sql, params)
+        except sqlite3.OperationalError as exc:
+            if not _is_fts5_query_error(exc):
+                raise
+            fallback = True
+            params[0] = quote_phrase(query)
+            try:
+                rows = self._run(sql, params)
+            except sqlite3.OperationalError as retry_exc:
+                if not _is_fts5_query_error(retry_exc):
+                    raise
+                _logger.warning("FTS5 search failed for query %r: %s", query, retry_exc)
+                rows = []
+        accepted = [row for row in rows if accept(str(row[3]))][:limit]
+        capped = len(rows) >= max_scan and len(accepted) < limit
+        hits: list[dict[str, Any]] = []
+        for rowid, entry_id, entry_kind, relpath, score in accepted:
+            snippet_rows = self._run(
+                "SELECT snippet(docs, 3, '<mark>', '</mark>', '...', 12) FROM docs"
+                " WHERE docs MATCH ? AND rowid = ?",
+                [params[0], rowid],
+            )
+            hits.append(
+                {
+                    "entry_id": entry_id,
+                    "entry_kind": entry_kind,
+                    "path": relpath,
+                    "snippet": snippet_rows[0][0] if snippet_rows else "",
+                    "score": score,
+                }
+            )
+        return SearchResults(hits, syntax_fallback=fallback), capped
+
 
 __all__ = [
     "INDEX_FILENAME",
+    "MAX_FILTER_SCAN",
     "TEXT_SUFFIXES",
     "IndexedDoc",
     "Indexer",

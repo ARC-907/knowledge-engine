@@ -73,7 +73,7 @@ from .errors import (
     UnavailableError,
     UnknownScopeError,
 )
-from .scope import DEFAULT_PROFILE_ID, ScopeCatalog, resolve_scope
+from .scope import DEFAULT_PROFILE_ID, RecordView, ScopeCatalog, resolve_scope
 
 _logger = logging.getLogger(__name__)
 
@@ -84,6 +84,10 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 SOURCE_KINDS = ("corpus", "project_context", "board", "serena", "module", "other")
 #: Largest page :meth:`KnowledgeStore.list_records` returns.
 MAX_PAGE = 500
+#: Most in-scope records one search snapshot loads (bounded memory per request).
+MAX_SNAPSHOT_RECORDS = 1_000_000
+#: Largest JSON configuration a source may store.
+MAX_SOURCE_CONFIG_BYTES = 262_144
 
 _T = TypeVar("_T")
 
@@ -162,6 +166,52 @@ class NewRecord:
     logical_path: str | None
     title: str = ""
     canonical_uri: str | None = None
+
+
+@dataclass(frozen=True)
+class SnapshotRecord:
+    """One in-scope record of a :class:`ScopeSnapshot`: its scope view, path and title."""
+
+    view: RecordView
+    logical_path: str | None
+    title: str
+
+
+@dataclass(frozen=True)
+class SnapshotSource:
+    """A source of the snapshot's workspace: its kind and stored configuration."""
+
+    source_id: str
+    kind: str
+    display_name: str
+    config: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ScopeSnapshot:
+    """A consistent view of one request's scope, read in one transaction.
+
+    ``records`` holds only the records inside ``scope`` (by source, then
+    record id); records of sources that keep no rows in ``knowledge.db``
+    (project context) are absent and their adapters apply
+    :func:`~knowledge_engine.knowledge.scope.record_in_scope` themselves;
+    ``record_sources`` names the sources that do keep rows, so an empty
+    in-scope set of such a source still means "nothing visible".
+    """
+
+    scope: EffectiveScope
+    sources: dict[str, SnapshotSource]
+    records: dict[str, dict[str, SnapshotRecord]]
+    #: Sources of the workspace that keep record rows in ``knowledge.db``.
+    record_sources: frozenset[str] = frozenset()
+
+    def by_path(self, source_id: str) -> dict[str, SnapshotRecord]:
+        """``{logical_path: record}`` of one source's in-scope records."""
+        return {
+            rec.logical_path: rec
+            for rec in self.records.get(source_id, {}).values()
+            if rec.logical_path is not None
+        }
 
 
 class KnowledgeStore:
@@ -1076,6 +1126,132 @@ class KnowledgeStore:
 
         return self._guard(run)
 
+    # ── source configuration and search snapshots ────────────────
+
+    def source_config(self, source_id: str) -> dict[str, Any]:
+        """The stored JSON configuration of a source (``{}`` when none)."""
+        sid = _check(_SOURCE_ID, source_id, "source_id")
+        with self._reading() as conn:
+            self._source(conn, sid)
+            row = conn.execute(
+                "SELECT config_json FROM sources WHERE source_id = ?", (sid,)
+            ).fetchone()
+        return _load_config(row["config_json"], sid)
+
+    def set_source_config(self, source_id: str, config: dict[str, Any]) -> dict[str, Any]:
+        """Replace a source's JSON configuration (validated as a bounded JSON object)."""
+        sid = _check(_SOURCE_ID, source_id, "source_id")
+        if not isinstance(config, dict):
+            raise InvalidInputError("a source configuration is a JSON object")
+        text = json.dumps(config, sort_keys=True)
+        if len(text.encode("utf-8")) > MAX_SOURCE_CONFIG_BYTES:
+            raise InvalidInputError(
+                "source configuration too large", details={"max_bytes": MAX_SOURCE_CONFIG_BYTES}
+            )
+
+        def run() -> dict[str, Any]:
+            with self._writing() as conn:
+                self._source(conn, sid)
+                conn.execute(
+                    "UPDATE sources SET config_json = ?, updated_at = ? WHERE source_id = ?",
+                    (text, _now(), sid),
+                )
+            return dict(config)
+
+        return self._guard(run)
+
+    def snapshot(
+        self, context: QueryContext, *, configured_profile: str = DEFAULT_PROFILE_ID
+    ) -> ScopeSnapshot:
+        """Resolve ``context`` and load its sources and in-scope records in one transaction.
+
+        Every id is validated (typed errors as :meth:`resolve`). The record
+        metadata (project, research type, tags, collection membership, logical
+        path, title) of every in-scope record is loaded, at most
+        :data:`MAX_SNAPSHOT_RECORDS`; a larger scope is ``invalid_scope``.
+        """
+
+        def run() -> ScopeSnapshot:
+            with self._reading() as conn:
+                catalog = self._catalog(conn, context.workspace_id)
+                scope = resolve_scope(context, catalog, configured_profile=configured_profile)
+                sources = {
+                    row["source_id"]: SnapshotSource(
+                        source_id=row["source_id"],
+                        kind=row["kind"],
+                        display_name=row["display_name"],
+                        config=_load_config(row["config_json"], row["source_id"]),
+                    )
+                    for row in conn.execute(
+                        "SELECT source_id, kind, display_name, config_json FROM sources"
+                        " WHERE workspace_id = ? ORDER BY source_id",
+                        (catalog.workspace_id,),
+                    )
+                }
+                record_sources = frozenset(
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT DISTINCT r.source_id FROM records r JOIN sources s"
+                        " USING (source_id) WHERE s.workspace_id = ?",
+                        (catalog.workspace_id,),
+                    )
+                )
+                return ScopeSnapshot(
+                    scope, sources, self._snapshot_records(conn, scope), record_sources
+                )
+
+        return self._guard(run)
+
+    def _snapshot_records(
+        self, conn: sqlite3.Connection, scope: EffectiveScope
+    ) -> dict[str, dict[str, SnapshotRecord]]:
+        if scope.empty or not scope.source_ids:
+            return {}
+        where, params = _scope_filter(scope)
+        base = "FROM records r JOIN sources s USING (source_id) WHERE " + where
+        count = int(conn.execute("SELECT COUNT(*) " + base, params).fetchone()[0])
+        if count > MAX_SNAPSHOT_RECORDS:
+            raise InvalidScopeError(
+                f"the scope holds {count} records, more than one search can load"
+                f" ({MAX_SNAPSHOT_RECORDS}); narrow it by project, collection, type or tag",
+                details={"records": count, "max_records": MAX_SNAPSHOT_RECORDS},
+            )
+        tags: dict[tuple[str, str], set[str]] = {}
+        for row in conn.execute(
+            "SELECT t.source_id, t.record_id, t.tag FROM record_tags t JOIN records r"
+            " ON r.source_id = t.source_id AND r.record_id = t.record_id"
+            " JOIN sources s ON s.source_id = r.source_id WHERE " + where,
+            params,
+        ):
+            tags.setdefault((row[0], row[1]), set()).add(row[2])
+        members: dict[tuple[str, str], set[str]] = {}
+        for row in conn.execute(
+            "SELECT m.source_id, m.record_id, m.collection_id FROM collection_members m"
+            " JOIN records r ON r.source_id = m.source_id AND r.record_id = m.record_id"
+            " JOIN sources s ON s.source_id = r.source_id WHERE " + where,
+            params,
+        ):
+            members.setdefault((row[0], row[1]), set()).add(row[2])
+        out: dict[str, dict[str, SnapshotRecord]] = {}
+        for row in conn.execute(
+            "SELECT r.source_id, r.record_id, r.project_id, r.research_type, r.logical_path,"
+            " r.title " + base,
+            params,
+        ):
+            key = (row["source_id"], row["record_id"])
+            view = RecordView(
+                source_id=row["source_id"],
+                record_id=row["record_id"],
+                project_id=row["project_id"],
+                research_type=ResearchType(row["research_type"]),
+                tags=frozenset(tags.get(key, ())),
+                collection_ids=frozenset(members.get(key, ())),
+            )
+            out.setdefault(row["source_id"], {})[row["record_id"]] = SnapshotRecord(
+                view=view, logical_path=row["logical_path"], title=row["title"]
+            )
+        return out
+
     def count_records(self, source_id: str) -> int:
         with self._reading() as conn:
             if not _has_table(conn, "records"):
@@ -1163,6 +1339,15 @@ def _scope_filter(scope: EffectiveScope) -> tuple[str, list[Any]]:
     return " AND ".join(clauses), params
 
 
+def _load_config(text: str | None, source_id: str) -> dict[str, Any]:
+    try:
+        value = json.loads(text or "{}")
+    except ValueError:
+        _logger.warning("source %s has an unreadable configuration; ignoring it", source_id)
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def _ts(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
@@ -1216,11 +1401,16 @@ def _collection_model(row: sqlite3.Row) -> Collection:
 __all__ = [
     "KNOWLEDGE_DB_FILENAME",
     "MAX_PAGE",
+    "MAX_SNAPSHOT_RECORDS",
+    "MAX_SOURCE_CONFIG_BYTES",
     "MIGRATIONS_DIR",
     "SOURCE_KINDS",
     "UNSET",
     "KnowledgeStore",
     "NewRecord",
     "RecordRef",
+    "ScopeSnapshot",
+    "SnapshotRecord",
+    "SnapshotSource",
     "latest_schema_version",
 ]

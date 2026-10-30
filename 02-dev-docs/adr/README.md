@@ -17,3 +17,4 @@ both ways.
 | [0008](0008-retention-and-tombstones.md) | Retention and tombstone policy | Accepted |
 | [0009](0009-module-catalog-persistence.md) | Module catalog persistence and restart behaviour | Accepted |
 | [0010](0010-serena-mapping-deferred.md) | Exact Serena compatibility mapping deferred to the Serena slice | Accepted (deferral) |
+| [0011](0011-retrieval-broker-fusion-and-adapters.md) | Retrieval broker: candidate caps, fusion, filtering and source mapping | Accepted |

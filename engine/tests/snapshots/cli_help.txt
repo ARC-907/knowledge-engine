@@ -191,10 +191,10 @@ options:
                         <data_dir>/embeddings.db)
 ### knowledge-engine knowledge --help
 usage: knowledge-engine knowledge [-h]
-                                  {migrate,status,workspace,project,source,collection,record,profile} ...
+                                  {migrate,status,workspace,project,source,collection,record,profile,project-context,search,open} ...
 
 positional arguments:
-  {migrate,status,workspace,project,source,collection,record,profile}
+  {migrate,status,workspace,project,source,collection,record,profile,project-context,search,open}
     migrate             Register the existing corpus in knowledge.db (dry run,
                         or backup + resumable apply)
     status              Workspace/project/collection/source/record counts
@@ -204,6 +204,10 @@ positional arguments:
     collection          List, create and edit collections
     record              List and classify records
     profile             List or set scope profiles
+    project-context     Link projects to project-context stores for the broker
+    search              Scoped search across a workspace's sources (the
+                        retrieval broker)
+    open                Open one in-scope record at an exact revision
 
 options:
   -h, --help            show this help message and exit
@@ -465,6 +469,111 @@ options:
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
   --tag TAG             tag (repeatable; ANDed)
+### knowledge-engine knowledge project-context --help
+usage: knowledge-engine knowledge project-context [-h] {link,unlink} ...
+
+positional arguments:
+  {link,unlink}
+    link         Link a project to a project-context root
+    unlink       Remove a project's project-context link
+
+options:
+  -h, --help     show this help message and exit
+### knowledge-engine knowledge project-context link --help
+usage: knowledge-engine knowledge project-context link [-h]
+                                                       [--project-fp PROJECT_FP]
+                                                       workspace_id project_id
+                                                       root
+
+positional arguments:
+  workspace_id
+  project_id
+  root                  absolute path of the project-context project root
+
+options:
+  -h, --help            show this help message and exit
+  --project-fp PROJECT_FP
+                        fingerprint (default: the one registered for ROOT)
+### knowledge-engine knowledge project-context unlink --help
+usage: knowledge-engine knowledge project-context unlink [-h]
+                                                         workspace_id
+                                                         project_id
+
+positional arguments:
+  workspace_id
+  project_id
+
+options:
+  -h, --help    show this help message and exit
+### knowledge-engine knowledge search --help
+usage: knowledge-engine knowledge search [-h] [--workspace WORKSPACE]
+                                         [--project PROJECT]
+                                         [--include-workspace]
+                                         [--profile PROFILE] [--source ID]
+                                         [--collection ID]
+                                         [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                         [--tag TAG] [--context CONTEXT]
+                                         [--mode {fts,vector,hybrid}]
+                                         [--limit LIMIT]
+                                         [--timeout-ms TIMEOUT_MS]
+                                         [--byte-budget BYTE_BUDGET]
+                                         query
+
+positional arguments:
+  query
+
+options:
+  -h, --help            show this help message and exit
+  --workspace WORKSPACE
+                        workspace id (default: the configured default)
+  --project PROJECT     project id
+  --include-workspace   with --project: also records that belong to no project
+  --profile PROFILE     profile for omitted selections
+  --source ID           source id (repeatable; ORed)
+  --collection ID       collection id (repeatable; ORed)
+  --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
+                        research type (repeatable; ORed)
+  --tag TAG             tag (repeatable; ANDed)
+  --context CONTEXT     a full QueryContext as JSON (overrides the flags)
+  --mode {fts,vector,hybrid}
+                        fts (default), vector, hybrid
+  --limit LIMIT         hits (default 10, max 100)
+  --timeout-ms TIMEOUT_MS
+                        per-source deadline
+  --byte-budget BYTE_BUDGET
+                        bytes of titles + excerpts
+### knowledge-engine knowledge open --help
+usage: knowledge-engine knowledge open [-h] [--revision REVISION]
+                                       [--workspace WORKSPACE]
+                                       [--project PROJECT]
+                                       [--include-workspace]
+                                       [--profile PROFILE] [--source ID]
+                                       [--collection ID]
+                                       [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                       [--tag TAG] [--context CONTEXT]
+                                       [--timeout-ms TIMEOUT_MS]
+                                       source_id record_id
+
+positional arguments:
+  source_id
+  record_id
+
+options:
+  -h, --help            show this help message and exit
+  --revision REVISION   revision id (default: the current one)
+  --workspace WORKSPACE
+                        workspace id (default: the configured default)
+  --project PROJECT     project id
+  --include-workspace   with --project: also records that belong to no project
+  --profile PROFILE     profile for omitted selections
+  --source ID           source id (repeatable; ORed)
+  --collection ID       collection id (repeatable; ORed)
+  --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
+                        research type (repeatable; ORed)
+  --tag TAG             tag (repeatable; ANDed)
+  --context CONTEXT     a full QueryContext as JSON (overrides the flags)
+  --timeout-ms TIMEOUT_MS
+                        deadline
 ### knowledge-engine serve --help
 usage: knowledge-engine serve [-h] [--host HOST] [--port PORT]
 

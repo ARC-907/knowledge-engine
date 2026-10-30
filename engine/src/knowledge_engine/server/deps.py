@@ -16,6 +16,7 @@ from ..core.config import Config
 from ..core.registry import Registry
 from ..core.settings import Settings
 from ..generation import ProviderRegistry
+from ..knowledge.broker import KnowledgeBroker
 from ..knowledge.service import KnowledgeService
 from ..retrieval.embeddings.index import CorpusEmbeddingIndex
 from ..retrieval.fts5 import Indexer
@@ -76,6 +77,14 @@ def get_knowledge(request: Request) -> KnowledgeService:
     return service
 
 
+def get_broker(request: Request) -> KnowledgeBroker:
+    """The retrieval broker (``/knowledge/search``, ``/knowledge/open``); 503 when absent."""
+    broker: KnowledgeBroker | None = getattr(request.app.state, "broker", None)
+    if broker is None or broker.closed:
+        raise HTTPException(503, "retrieval broker unavailable")
+    return broker
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 ConfigDep = Annotated[Config, Depends(get_config)]
 RegistryDep = Annotated[Registry, Depends(get_registry)]
@@ -83,8 +92,10 @@ IndexerDep = Annotated[Indexer, Depends(get_indexer)]
 ProvidersDep = Annotated[ProviderRegistry, Depends(get_providers)]
 SearcherDep = Annotated[HybridSearcher, Depends(get_searcher)]
 KnowledgeDep = Annotated[KnowledgeService, Depends(get_knowledge)]
+BrokerDep = Annotated[KnowledgeBroker, Depends(get_broker)]
 
 __all__ = [
+    "BrokerDep",
     "ConfigDep",
     "IndexerDep",
     "KnowledgeDep",
@@ -92,6 +103,7 @@ __all__ = [
     "RegistryDep",
     "SearcherDep",
     "SettingsDep",
+    "get_broker",
     "get_config",
     "get_indexer",
     "get_knowledge",

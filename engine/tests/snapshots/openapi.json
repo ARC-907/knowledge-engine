@@ -85,6 +85,36 @@
         "title": "Bibliographic",
         "type": "object"
       },
+      "BoundingBox": {
+        "additionalProperties": false,
+        "description": "A rectangle in PDF points, origin at the bottom-left of the page.",
+        "properties": {
+          "x0": {
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "title": "Y1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x0",
+          "y0",
+          "x1",
+          "y1"
+        ],
+        "title": "BoundingBox",
+        "type": "object"
+      },
       "ClassificationPatch": {
         "additionalProperties": false,
         "description": "The HTTP body of a classification change (the record comes from the path).",
@@ -158,6 +188,98 @@
           }
         },
         "title": "ClassificationPatch",
+        "type": "object"
+      },
+      "CodeLocator": {
+        "additionalProperties": false,
+        "description": "Code in a repository at an exact commit, or at a snapshot digest when dirty.\n\nExactly one of ``commit`` and ``snapshot_digest`` is set: a dirty working\ntree is never represented as a clean commit. Lines are 1-based with an\nexclusive ``end_line``.",
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "end_line": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Line"
+          },
+          "kind": {
+            "const": "code",
+            "default": "code",
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "description": "Repository-relative POSIX path.",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "repository_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "snapshot_digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Digest"
+          },
+          "start_line": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Line"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Qualified symbol name.",
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "repository_id",
+          "path"
+        ],
+        "title": "CodeLocator",
         "type": "object"
       },
       "Collection": {
@@ -561,6 +683,39 @@
         "title": "EntryIn",
         "type": "object"
       },
+      "ErrorInfo": {
+        "additionalProperties": false,
+        "description": "The wire form of a :class:`~knowledge_engine.knowledge.errors.KnowledgeError`.",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "maxLength": 2000,
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorInfo",
+        "type": "object"
+      },
       "ErrorResponse": {
         "description": "Body of the 400/502/503 answers produced by the global exception handlers.",
         "properties": {
@@ -781,6 +936,197 @@
           "display_name"
         ],
         "title": "KeyCreateIn",
+        "type": "object"
+      },
+      "KnowledgeSearchEnvelope": {
+        "additionalProperties": false,
+        "description": ":class:`~.contracts.SearchEnvelope` whose hits document as ``KnowledgeSearchHit``.",
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "effective_scope": {
+            "$ref": "#/components/schemas/EffectiveScope"
+          },
+          "hits": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSearchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "partial": {
+            "default": false,
+            "title": "Partial",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_status": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "title": "Source Status",
+            "type": "array"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "effective_scope"
+        ],
+        "title": "KnowledgeSearchEnvelope",
+        "type": "object"
+      },
+      "KnowledgeSearchHit": {
+        "additionalProperties": false,
+        "description": ":class:`~.contracts.SearchHit` under a name distinct from the legacy ``/search`` hit.\n\nOnly the OpenAPI component name differs (the legacy ``SearchHit`` schema of\n``GET /search`` keeps its name); the fields are the contract's.",
+        "properties": {
+          "collection_ids": {
+            "default": [],
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            "title": "Collection Ids",
+            "type": "array"
+          },
+          "excerpt": {
+            "default": "",
+            "maxLength": 20000,
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "code": "#/components/schemas/CodeLocator",
+                    "pdf": "#/components/schemas/PdfLocator",
+                    "text": "#/components/schemas/TextLocator",
+                    "transcript": "#/components/schemas/TranscriptLocator",
+                    "unsupported": "#/components/schemas/UnsupportedLocator"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TextLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PdfLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TranscriptLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CodeLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UnsupportedLocator"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator"
+          },
+          "provenance_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance Id"
+          },
+          "ranking": {
+            "$ref": "#/components/schemas/RankingInfo"
+          },
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "research_type": {
+            "$ref": "#/components/schemas/ResearchType",
+            "default": "other"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "pattern": "^rev_[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RecordScope"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "record_id",
+          "scope",
+          "ranking"
+        ],
+        "title": "KnowledgeSearchHit",
         "type": "object"
       },
       "KnowledgeStatus": {
@@ -1052,6 +1398,246 @@
         "title": "MessageIn",
         "type": "object"
       },
+      "OpenRequest": {
+        "additionalProperties": false,
+        "description": "Open one record of the scope at a revision (the current one when omitted).",
+        "properties": {
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext; the record must be in its scope.",
+            "title": "Context",
+            "type": "object"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "code": "#/components/schemas/CodeLocator",
+                    "pdf": "#/components/schemas/PdfLocator",
+                    "text": "#/components/schemas/TextLocator",
+                    "transcript": "#/components/schemas/TranscriptLocator",
+                    "unsupported": "#/components/schemas/UnsupportedLocator"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TextLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PdfLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TranscriptLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CodeLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UnsupportedLocator"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional text locator to echo.",
+            "title": "Locator"
+          },
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "pattern": "^rev_[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The exact revision (from a search hit); omit for the current.",
+            "title": "Revision Id"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "context",
+          "source_id",
+          "record_id"
+        ],
+        "title": "OpenRequest",
+        "type": "object"
+      },
+      "OpenResult": {
+        "additionalProperties": false,
+        "description": "The exact revision of a record (or why it cannot be served).",
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Text content when available.",
+            "title": "Content"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "code": "#/components/schemas/CodeLocator",
+                    "pdf": "#/components/schemas/PdfLocator",
+                    "text": "#/components/schemas/TextLocator",
+                    "transcript": "#/components/schemas/TranscriptLocator",
+                    "unsupported": "#/components/schemas/UnsupportedLocator"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TextLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PdfLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TranscriptLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CodeLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UnsupportedLocator"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator"
+          },
+          "media_type": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Media Type",
+            "type": "string"
+          },
+          "provenance_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance Id"
+          },
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "pattern": "^rev_[0-9a-f]{32}$",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RecordScope"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_status": {
+            "$ref": "#/components/schemas/SourceStatus"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/VerificationState"
+          }
+        },
+        "required": [
+          "source_id",
+          "record_id",
+          "revision_id",
+          "scope",
+          "media_type",
+          "verification",
+          "source_status"
+        ],
+        "title": "OpenResult",
+        "type": "object"
+      },
+      "PdfLocator": {
+        "additionalProperties": false,
+        "description": "A 1-based PDF page, optionally narrowed to a bounding box.",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoundingBox"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "pdf",
+            "default": "pdf",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "description": "1-based page number.",
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page"
+        ],
+        "title": "PdfLocator",
+        "type": "object"
+      },
       "PermissionGrantIn": {
         "additionalProperties": true,
         "description": "A permission grant on a board key.",
@@ -1179,6 +1765,72 @@
         "title": "ProjectBody",
         "type": "object"
       },
+      "ProjectContextLink": {
+        "properties": {
+          "linked": {
+            "title": "Linked",
+            "type": "boolean"
+          },
+          "project_fp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Fp"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "workspace_id",
+          "project_id",
+          "linked"
+        ],
+        "title": "ProjectContextLink",
+        "type": "object"
+      },
+      "ProjectContextLinkBody": {
+        "additionalProperties": false,
+        "properties": {
+          "project_fp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Project fingerprint; defaults to the one registered for root.",
+            "title": "Project Fp"
+          },
+          "root": {
+            "description": "Absolute path of the project-context project root.",
+            "title": "Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root"
+        ],
+        "title": "ProjectContextLinkBody",
+        "type": "object"
+      },
       "ProjectList": {
         "properties": {
           "projects": {
@@ -1231,6 +1883,68 @@
           "provider"
         ],
         "title": "ProviderBindingIn",
+        "type": "object"
+      },
+      "RankingInfo": {
+        "additionalProperties": false,
+        "description": "Native rank/score provenance; raw scores of different stores are never compared.",
+        "properties": {
+          "fused_rank": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fused Rank"
+          },
+          "fused_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fused Score"
+          },
+          "native_rank": {
+            "description": "1-based rank within the source's own result.",
+            "minimum": 1.0,
+            "title": "Native Rank",
+            "type": "integer"
+          },
+          "native_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Native Score"
+          },
+          "score_kind": {
+            "default": "other",
+            "enum": [
+              "bm25",
+              "cosine",
+              "rrf",
+              "other"
+            ],
+            "title": "Score Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "native_rank"
+        ],
+        "title": "RankingInfo",
         "type": "object"
       },
       "RecordPage": {
@@ -1704,6 +2418,31 @@
         "title": "SearchHit",
         "type": "object"
       },
+      "SearchRequest": {
+        "additionalProperties": false,
+        "description": "One broker search: the query text and its query context.",
+        "properties": {
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext: workspace_id is required; project_id, profile_id, source_ids, collection_ids, research_types, tags, include_workspace, mode, limit, timeout_ms and byte_budget are optional (see the knowledge contracts).",
+            "title": "Context",
+            "type": "object"
+          },
+          "query": {
+            "description": "FTS5 query text (vector/hybrid: natural language).",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "context"
+        ],
+        "title": "SearchRequest",
+        "type": "object"
+      },
       "SearchResponse": {
         "properties": {
           "count": {
@@ -1929,6 +2668,73 @@
         "title": "SourceRecord",
         "type": "object"
       },
+      "SourceState": {
+        "description": "Health of one source for one request (or a health probe).",
+        "enum": [
+          "ok",
+          "degraded",
+          "unavailable",
+          "timeout",
+          "error"
+        ],
+        "title": "SourceState",
+        "type": "string"
+      },
+      "SourceStatus": {
+        "additionalProperties": false,
+        "description": "Per-source outcome of a request (or of a health probe).",
+        "properties": {
+          "elapsed_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Ms"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hit_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Hit Count",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SourceState"
+          }
+        },
+        "required": [
+          "source_id",
+          "state"
+        ],
+        "title": "SourceStatus",
+        "type": "object"
+      },
       "StatusCounts": {
         "properties": {
           "collection_memberships": {
@@ -1967,6 +2773,49 @@
         "title": "StatusCounts",
         "type": "object"
       },
+      "TextLocator": {
+        "additionalProperties": false,
+        "description": "A span of a text revision: UTF-8 byte offsets, half-open ``[start_byte, end_byte)``.",
+        "properties": {
+          "end_byte": {
+            "description": "Exclusive UTF-8 byte offset into the revision.",
+            "minimum": 0.0,
+            "title": "End Byte",
+            "type": "integer"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nearest heading text, informational only.",
+            "title": "Heading"
+          },
+          "kind": {
+            "const": "text",
+            "default": "text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "start_byte": {
+            "description": "Inclusive UTF-8 byte offset into the revision.",
+            "minimum": 0.0,
+            "title": "Start Byte",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_byte",
+          "end_byte"
+        ],
+        "title": "TextLocator",
+        "type": "object"
+      },
       "ToggleIn": {
         "properties": {
           "enabled": {
@@ -1978,6 +2827,70 @@
           "enabled"
         ],
         "title": "ToggleIn",
+        "type": "object"
+      },
+      "TranscriptLocator": {
+        "additionalProperties": false,
+        "description": "A transcript segment: milliseconds, half-open ``[start_ms, end_ms)``.",
+        "properties": {
+          "end_ms": {
+            "minimum": 0.0,
+            "title": "End Ms",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "transcript",
+            "default": "transcript",
+            "title": "Kind",
+            "type": "string"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only when known.",
+            "title": "Speaker"
+          },
+          "start_ms": {
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "TranscriptLocator",
+        "type": "object"
+      },
+      "UnsupportedLocator": {
+        "additionalProperties": false,
+        "description": "No usable position could be recovered; never replaced by an invented one.",
+        "properties": {
+          "kind": {
+            "const": "unsupported",
+            "default": "unsupported",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "UnsupportedLocator",
         "type": "object"
       },
       "ValidationError": {
@@ -2019,6 +2932,18 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "VerificationState": {
+        "description": "Outcome of resolving evidence; says nothing about the truth of a claim.",
+        "enum": [
+          "verified",
+          "stale",
+          "unavailable",
+          "ambiguous",
+          "unsupported"
+        ],
+        "title": "VerificationState",
+        "type": "string"
       },
       "Workspace": {
         "additionalProperties": false,
@@ -3866,6 +4791,169 @@
         ]
       }
     },
+    "/knowledge/open": {
+      "get": {
+        "description": "``POST /knowledge/open`` with the scope in query parameters (no locator).",
+        "operationId": "broker_open_get_knowledge_open_get",
+        "parameters": [
+          {
+            "description": "Workspace of the scope.",
+            "in": "query",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "description": "Workspace of the scope.",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Exact revision; omit for the current one.",
+            "in": "query",
+            "name": "revision_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact revision; omit for the current one.",
+              "title": "Revision Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "profile_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Profile Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_workspace",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Workspace",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Broker Open Get",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "post": {
+        "description": "Open one in-scope record at an exact revision (the current one when omitted).",
+        "operationId": "broker_open_knowledge_open_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Broker Open",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
     "/knowledge/records/query": {
       "post": {
         "operationId": "query_records_knowledge_records_query_post",
@@ -3963,6 +5051,48 @@
           }
         },
         "summary": "Classify Record",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/search": {
+      "post": {
+        "description": "Scoped search across the workspace's sources (see KNOWLEDGE-SEARCH.md).",
+        "operationId": "broker_search_knowledge_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSearchEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Broker Search",
         "tags": [
           "knowledge"
         ]
@@ -4258,6 +5388,116 @@
           }
         },
         "summary": "Set Profile",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/workspaces/{workspace_id}/project-context/links/{project_id}": {
+      "delete": {
+        "operationId": "unlink_project_context_knowledge_workspaces__workspace_id__project_context_links__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectContextLink"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink Project Context",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "put": {
+        "operationId": "link_project_context_knowledge_workspaces__workspace_id__project_context_links__project_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectContextLinkBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectContextLink"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Project Context",
         "tags": [
           "knowledge"
         ]
