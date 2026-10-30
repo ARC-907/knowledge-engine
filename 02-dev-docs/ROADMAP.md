@@ -45,19 +45,32 @@ compatibility/deprecation process and an explicit version decision.
 | P6 | Utilities: inventory and wrap media/news and transcription programs; host ingestion | P3, P5; actual utility interfaces available | End-to-end artifact -> scoped source -> evidence -> citation; idempotent restart | #37 |
 | P7 | Serena: optional pinned external MCP adapter and project routing | P2, P3, P5 | Allowlisted reads, two-project concurrency/reconnect, code citations, unavailable-source behavior | [#38](https://github.com/ARC-907/knowledge-engine/issues/38) |
 | P8 | Dashboard: scope/collection/type filters, evidence navigation and module status | P2, P4, P5 | Browser smoke exercises filtering, citation open and degraded module state | [#40](https://github.com/ARC-907/knowledge-engine/issues/40) |
+| T1 | Tooling: Nox sessions mirroring CI, Serena project config for contributors, JSON logs with a Loki/Grafana stack, repository self-indexing with a local embedding model | None (independent) | `nox` reproduces CI locally; Grafana shows engine logs from Loki; the repository is searchable in its own engine with a local model | This roadmap |
 | P9 | Release qualification: docs, migration guide, clean install and compatibility matrix | P4, P6, P7, P8 | All relevant gates in V2-DESIGN pass on the exact candidate | Linked implementation issues |
 
-P0 and P1 are implemented on the `train/v2-p0-contracts` branch: the contracts,
-typed errors, adapter protocol and ADRs 0006–0010
-(`knowledge_engine.knowledge`), and the `knowledge.db` metadata store with the
-`knowledge migrate` dry run, backup and resumable backfill plus the
-`/knowledge`, `knowledge_*` MCP and `knowledge` CLI admin surface. The ownership
-decision is [ADR 0005](adr/0005-nested-entry-ownership.md) from R0.
-P2 is implemented on the `train/v2-p2-broker` branch (stacked on P0/P1): the
-retrieval broker, the corpus and project-context adapters and the
-`/knowledge/search`, `/knowledge/open`, `knowledge.search`/`knowledge.open` MCP
-and `knowledge search|open` CLI bindings
-([ADR 0011](adr/0011-retrieval-broker-fusion-and-adapters.md)).
+### Status and execution plan
+
+Updated 2026-10-30. Slices land one at a time, each through a draft PR, the
+local gate (ruff, mypy, pytest on 3.12/3.13/3.14, build and wheel smoke) and
+green CI before a squash merge. Bugs found along the way are recorded in
+[BUGLOG.md](BUGLOG.md); decisions and progress notes in [DEVLOG.md](DEVLOG.md);
+user-visible changes under `[Unreleased]` in the [CHANGELOG](../CHANGELOG.md).
+
+| Order | Step | State |
+| --- | --- | --- |
+| 1 | R0 nested-entry ownership | Merged in [#41](https://github.com/ARC-907/knowledge-engine/pull/41) |
+| 2 | #40 browser CI job | Merged in [#42](https://github.com/ARC-907/knowledge-engine/pull/42) |
+| 3 | P0 + P1 contracts and metadata store | Merged in [#43](https://github.com/ARC-907/knowledge-engine/pull/43) |
+| 4 | P2 retrieval broker and bindings ([ADR 0011](adr/0011-retrieval-broker-fusion-and-adapters.md)) | Merged in [#45](https://github.com/ARC-907/knowledge-engine/pull/45) |
+| 5 | P3 + P4 evidence and citations | In progress |
+| 6 | P5 + P6 modules, reference utilities, ingestion | In progress |
+| 7 | T1 tooling, observability and self-indexing | Next |
+| 8 | P7 Serena adapter (compatibility probe of Serena 2.1.0 done) | After 4–6 |
+| 9 | P8 dashboard | After 4–6 |
+| 10 | P9 docs, migration guide and qualification | Last |
+
+Publishing (tag `v3.0.0` or later, GitHub Release, repository settings) stays a
+maintainer decision and is not part of this plan.
 
 P0 and R0 may proceed together, but P0 cannot close without the ownership
 decision. After P1, retrieval and evidence work can proceed independently.

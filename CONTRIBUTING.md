@@ -106,6 +106,14 @@ fourteen PRs). Rules for a train:
    local gate plus required CI checks on the PR are what protect `main`
    (see [ADR 0004](02-dev-docs/adr/0004-merge-train.md)).
 
+## Logs kept alongside the code
+
+- [CHANGELOG.md](CHANGELOG.md): every user-visible change, under `[Unreleased]`.
+- [02-dev-docs/BUGLOG.md](02-dev-docs/BUGLOG.md): one row per fixed defect,
+  with root cause, the fixing PR and the regression test.
+- [02-dev-docs/DEVLOG.md](02-dev-docs/DEVLOG.md): dated notes on decisions,
+  findings and environment lessons that do not fit a commit message.
+
 ## Compatibility and deprecation policy
 
 - Semantic versioning applies to the engine package, the MCP tool surface

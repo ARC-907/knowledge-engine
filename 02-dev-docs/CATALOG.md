@@ -84,4 +84,4 @@ add your own under `corpus/` and register them (see
 - `README.md` — overview and quickstart (repository root)
 - `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `LICENSE` (MIT, covers the whole project)
 - `01-user-docs/` — user guides: `README` (index), `QUICKSTART`, `BRING-YOUR-OWN-CORPUS`, `LIBRARY-AUTHORING`, `SKILL-AUTHORING`, `MCP-WIRING`, `EMBEDDINGS`, `DEPLOYMENT`, `CONFIGURATION` (generated), `THEMING`, `FAQ`
-- `02-dev-docs/` — engine internals: `ARCHITECTURE`, `CATALOG` (this file), `AGENT-BOARD`, `DEPENDENCIES`, `GLOSSARY`, `RELEASING`, `ROADMAP` (status and plans), `V2-DESIGN` (proposed implementation contracts), `adr/` (decision records), `CHANGELOG` (pointer to the root file)
+- `02-dev-docs/` — engine internals: `ARCHITECTURE`, `CATALOG` (this file), `AGENT-BOARD`, `DEPENDENCIES`, `GLOSSARY`, `RELEASING`, `ROADMAP` (status and plans), `BUGLOG` (defects and their fixes), `DEVLOG` (dated progress notes), `V2-DESIGN` (proposed implementation contracts), `adr/` (decision records), `CHANGELOG` (pointer to the root file)

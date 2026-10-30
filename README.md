@@ -129,7 +129,8 @@ commands (`serve`, `board-serve`, `mcp`, `watch`) default to `KE_LOG_LEVEL`
   [SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
   [RELEASING.md](02-dev-docs/RELEASING.md); status and plans in
   [ROADMAP.md](02-dev-docs/ROADMAP.md) and the proposed
-  [V2 implementation design](02-dev-docs/V2-DESIGN.md).
+  [V2 implementation design](02-dev-docs/V2-DESIGN.md); the [bug log](02-dev-docs/BUGLOG.md)
+  and the [development log](02-dev-docs/DEVLOG.md).
 
 ## What this does NOT give you
 
