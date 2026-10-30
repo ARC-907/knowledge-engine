@@ -232,6 +232,12 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 
 ### Fixed
 
+- Knowledge search no longer reports `partial` once a module has ingested
+  output: `module` sources are searchable (keyword ranking over their current
+  revisions in the evidence store, scope and filters before ranking, bounded
+  scan with warnings) and openable at their exact revision. Previously the
+  broker had no adapter for them (B-030).
+
 - Nested registry entries are attributed consistently in every search mode
   ([#39](https://github.com/ARC-907/knowledge-engine/issues/39),
   [ADR 0005](02-dev-docs/adr/0005-nested-entry-ownership.md)): the deepest

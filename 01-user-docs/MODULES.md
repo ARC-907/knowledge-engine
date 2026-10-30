@@ -179,7 +179,8 @@ revisions.
 - **Revisions.** Each artifact is a revision of the record named by its
   `record_key`, else its canonical URI, else its bytes. The same record and
   bytes are one revision, so repeating a call adds nothing; changed bytes add a
-  revision. Revisions are opened, cited and exported like any other evidence.
+  revision. Revisions are searched (keyword), opened, cited and exported like
+  any other evidence ([KNOWLEDGE-SEARCH.md](KNOWLEDGE-SEARCH.md#module-sources)).
 - **Scope.** The workspace and project must exist (`unknown_scope` otherwise). A
   new record is assigned to the destination project; a record that already
   belongs to another project is not moved (`invalid_input`).

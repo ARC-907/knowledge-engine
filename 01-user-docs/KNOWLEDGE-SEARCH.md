@@ -210,6 +210,26 @@ HTTP: `PUT` / `DELETE /knowledge/workspaces/{workspace_id}/project-context/links
 - Open returns the stored sanitized text and honours
   `[project_context.mcp] allow_full_content` (`denied` when false).
 
+## Module sources
+
+Modules that ingest their output ([MODULES.md](MODULES.md)) register a `module`
+source in the destination workspace (`module:<module_id>` in the default
+workspace). Its records exist only in the evidence store, and the broker
+searches them there:
+
+- Search is keyword ranking (BM25) over the text of each in-scope record's
+  current revision. HTML is matched and excerpted as plain text; binary
+  revisions are not searched. Scope and filters apply before ranking, as for
+  every source.
+- At most 2000 in-scope records and the first 1 MiB of each revision are read
+  per search; when a search is cut short, the response says so in `warnings`.
+- `hybrid` mode uses keyword ranking for this source (with a warning) so it
+  still fuses with the others; `vector` mode reports it `unavailable`.
+- Hits carry the module run that produced the revision as `provenance_id`
+  (`run:<run_id>`). Open serves the exact revision from the evidence store
+  (`verified`, `stale`, `unavailable` or `unsupported`, never the latest
+  instead).
+
 The agent board is not a search source. A source of kind `board` is reported
 `unavailable`.
 

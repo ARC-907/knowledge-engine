@@ -144,7 +144,7 @@ def build_broker(
         evidence=EvidenceStore(store, evidence_policy),
         profile=profile,
     )
-    return KnowledgeBroker(store, build_adapter_factory(backend), profile=profile)
+    return KnowledgeBroker(store, build_adapter_factory(backend, profile=profile), profile=profile)
 
 
 @dataclass
