@@ -28,7 +28,9 @@ def _record(msg: str = "hello %s", *args: object, **extra: object) -> logging.Lo
 
 
 def test_json_formatter_emits_one_object_per_line() -> None:
-    line = JsonFormatter().format(_record("hello %s", "world", scope="alpha"))
+    line = JsonFormatter().format(
+        _record("hello %s", "world", scope="alpha", color_message="\x1b[36mhello\x1b[0m")
+    )
     assert "\n" not in line
     payload = json.loads(line)
     assert payload["message"] == "hello world"
@@ -36,6 +38,7 @@ def test_json_formatter_emits_one_object_per_line() -> None:
     assert payload["logger"] == "knowledge_engine.test"
     assert payload["line"] == 7
     assert payload["scope"] == "alpha"
+    assert "color_message" not in payload
     assert payload["ts"].endswith("+00:00")
 
 

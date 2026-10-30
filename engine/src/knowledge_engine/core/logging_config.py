@@ -52,7 +52,12 @@ LOG_FILE_MAX_BYTES = 10 * 1024 * 1024
 LOG_FILE_BACKUPS = 5
 
 # Attributes every LogRecord carries; anything else was passed via ``extra=``.
-_RECORD_ATTRS = frozenset(vars(logging.makeLogRecord({}))) | {"message", "asctime"}
+# ``color_message`` is uvicorn's ANSI-coloured copy of the message.
+_RECORD_ATTRS = frozenset(vars(logging.makeLogRecord({}))) | {
+    "message",
+    "asctime",
+    "color_message",
+}
 
 
 class JsonFormatter(logging.Formatter):
