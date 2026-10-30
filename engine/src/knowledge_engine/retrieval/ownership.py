@@ -36,7 +36,9 @@ def normalize_entry_path(raw: object) -> str:
 
 
 def _key(path: str) -> str:
-    return os.path.normcase(path)
+    # normcase folds case on Windows but also turns "/" into "\\" there;
+    # fold back so prefixes keep matching on "/" boundaries on every platform.
+    return os.path.normcase(path).replace("\\", "/")
 
 
 class EntryOwnership:

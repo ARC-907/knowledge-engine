@@ -192,3 +192,19 @@ def test_entry_resolver_matches_fts_attribution() -> None:
     # Before the fix a kind filter re-attributed the file to the enclosing entry.
     assert EntryResolver(entries, "library").resolve("libraries/zoo/birds/owl.md") is None
     assert EntryResolver(entries, "skill").resolve("libraries/zoo/birds/owl.md")["id"] == "inner"  # type: ignore[index]
+
+
+def test_ownership_keys_survive_windows_normcase(monkeypatch: pytest.MonkeyPatch) -> None:
+    """On Windows os.path.normcase lowercases *and* turns "/" into "\\"."""
+    import knowledge_engine.retrieval.ownership as ownership_mod
+
+    monkeypatch.setattr(ownership_mod.os.path, "normcase", lambda p: p.replace("/", "\\").lower())
+    ownership = EntryOwnership(
+        [
+            {"id": "outer", "kind": "library", "path": "Libraries/Zoo"},
+            {"id": "inner", "kind": "skill", "path": "libraries/zoo/birds"},
+        ]
+    )
+    assert ownership.owner("libraries/zoo/birds/owl.md")["id"] == "inner"  # type: ignore[index]
+    assert ownership.owner("LIBRARIES/ZOO/fox.md")["id"] == "outer"  # type: ignore[index]
+    assert ownership.owner("libraries/zoology/x.md") is None
