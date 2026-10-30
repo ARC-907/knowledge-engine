@@ -253,8 +253,15 @@ def _open_modules(app: FastAPI, settings: Settings) -> None:
     try:
         from ..modules.config import ModulesConfig  # noqa: PLC0415 - optional subsystem
         from ..modules.dispatcher import ModuleHost, set_default_host  # noqa: PLC0415
+        from ..modules.evidence_ingestion import ingestion_from_settings  # noqa: PLC0415
 
-        host = ModuleHost.open(ModulesConfig.from_settings(settings))
+        knowledge = getattr(app.state, "knowledge", None)
+        host = ModuleHost.open(
+            ModulesConfig.from_settings(settings),
+            ingestion=ingestion_from_settings(
+                settings, store=knowledge.store if knowledge is not None else None
+            ),
+        )
         host.start()
         app.state.modules = host
         app.state.previous_module_host = set_default_host(host)

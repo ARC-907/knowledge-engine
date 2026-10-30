@@ -154,8 +154,14 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   engine = an operator-configured CLI).
 - Host ingestion interface (`modules.ingestion.EvidenceIngestion`: normalized
   artifacts + explicit destination scope + derivation provenance) with an
-  in-memory double; without the evidence store (V2 P3) ingestion answers
-  `unavailable`.
+  in-memory double, and its production adapter over the evidence store
+  (`modules.evidence_ingestion`): artifacts become revisions of a per-workspace
+  `module` source (`module:<id>` in the default workspace,
+  `module:<id>--<workspace>` elsewhere) with the run's derivation and parent
+  revisions, assigned to the destination project; repeats and restarted runs
+  are idempotent; a record is never moved between projects. The server shares
+  its knowledge store with the module host; the CLI opens `knowledge.db` only
+  when a call ingests. `KE_KNOWLEDGE_ENABLED=0` keeps ingestion `unavailable`.
 
 **Logging and developer tooling (V2 T1)**
 

@@ -31,6 +31,20 @@ with lasting effect also get an [ADR](adr/README.md); defects get a row in the
   content, so a deletion still reads `unavailable` (ADR 0012). Review found
   B-025: `migrate` and `snapshot` derived record ids separately; they now
   share one allocator.
+- **Modules (P5/P6).** Built on the old P0 base with an ingestion interface
+  and an in-memory double, then rebased onto the broker and merged with P3.
+  The production adapter maps artifacts onto P3's ingest requests:
+  - Sources are per workspace, because a source belongs to exactly one
+    workspace: `module:<id>` in the default workspace and
+    `module:<id>--<workspace>` elsewhere, which cannot collide because module
+    ids never contain `--`.
+  - P3's idempotency keys, `module:<artifact>:<run>`, make restarted runs replay
+    and also serve as the durable artifact-to-revision index for lineage, so no
+    new table was needed.
+  - A record is refused rather than moved when a later run targets another
+    project.
+  - The CLI opens `knowledge.db` only when a call ingests, so module commands
+    that never ingest create no database.
 - **Serena compatibility probe.** Installed `serena-agent==2.1.0` in an
   isolated environment and drove it over stdio with the MCP SDK client
   (protocol `2026-07-28`). Findings that shape the adapter:

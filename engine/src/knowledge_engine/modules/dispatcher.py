@@ -255,6 +255,12 @@ class ModuleHost:
         except KnowledgeError:
             _logger.debug("could not record stopped modules", exc_info=True)
         self.catalog.close()
+        closer = getattr(self.ingestion, "close", None)
+        if callable(closer):
+            try:
+                closer()
+            except Exception:
+                _logger.warning("closing the module ingestion store failed", exc_info=True)
 
     # ── discovery and registration ───────────────────────────────
 
@@ -1238,7 +1244,14 @@ def default_host() -> ModuleHost:
     global _DEFAULT  # noqa: PLW0603 - process default, replaced by set_default_host
     with _DEFAULT_LOCK:
         if _DEFAULT is None or _DEFAULT.catalog.closed:
-            host = ModuleHost.open(ModulesConfig.from_env())
+            from ..core.settings import Settings  # noqa: PLC0415 - read when first used
+            from .evidence_ingestion import ingestion_from_settings  # noqa: PLC0415
+
+            settings = Settings()
+            host = ModuleHost.open(
+                ModulesConfig.from_settings(settings),
+                ingestion=ingestion_from_settings(settings),
+            )
             host.start()
             _DEFAULT = host
         return _DEFAULT

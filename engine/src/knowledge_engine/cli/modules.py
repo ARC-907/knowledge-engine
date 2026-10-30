@@ -31,13 +31,18 @@ def _emit(payload: Any) -> None:
 
 @contextmanager
 def _host() -> Iterator[Any]:
+    from ..core.settings import Settings
     from ..knowledge.errors import CLI_EXIT_CODES, KnowledgeError
     from ..modules.config import ModulesConfig
     from ..modules.dispatcher import ModuleHost
+    from ..modules.evidence_ingestion import ingestion_from_settings
 
     host = None
     try:
-        host = ModuleHost.open(ModulesConfig.from_env())
+        settings = Settings()
+        host = ModuleHost.open(
+            ModulesConfig.from_settings(settings), ingestion=ingestion_from_settings(settings)
+        )
         yield host
     except KnowledgeError as exc:
         _logger.debug("module command failed", exc_info=True)

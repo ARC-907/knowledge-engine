@@ -165,11 +165,31 @@ re-fetching the same bytes gives the same id. A tool that declares
 read-only path, and only for artifacts that belong to the call's workspace
 (and project, if any).
 
-`"ingest": true` hands the artifacts to host ingestion with the explicit
-destination scope and derivation provenance: run id, module id and version,
-parameters digest, and parent revisions. Ingestion needs the evidence store
-(V2 P3). Until it is wired in, an ingesting call answers `unavailable`;
-nothing is silently dropped.
+`"ingest": true` records the artifacts in the evidence store
+([CITATIONS.md](CITATIONS.md)) under an explicit destination scope, with the
+run's derivation: run id, module id and version, parameters digest, and parent
+revisions.
+
+- **Source.** The module's records belong to a `module` source registered in the
+  destination workspace on first use: `module:<module_id>` in the default
+  workspace (`KE_KNOWLEDGE_DEFAULT_WORKSPACE`), `module:<module_id>--<workspace_id>`
+  in any other.
+- **Revisions.** Each artifact is a revision of the record named by its
+  `record_key`, else its canonical URI, else its bytes. The same record and
+  bytes are one revision, so repeating a call adds nothing; changed bytes add a
+  revision. Revisions are opened, cited and exported like any other evidence.
+- **Scope.** The workspace and project must exist (`unknown_scope` otherwise). A
+  new record is assigned to the destination project; a record that already
+  belongs to another project is not moved (`invalid_input`).
+- **Lineage.** A tool that consumes artifacts from an earlier ingested run links
+  to their revisions as parents, so `knowledge evidence` shows which run produced
+  what from what.
+- **Restarts.** Ingestion is atomic per artifact. A run interrupted midway can be
+  repeated: what it already committed is replayed, not duplicated.
+
+With `KE_KNOWLEDGE_ENABLED=0` an ingesting call answers `unavailable`; nothing
+is silently dropped. Module calls without `"ingest": true` never touch the
+evidence store, and the CLI opens `knowledge.db` only when a call ingests.
 
 ## Module author guide
 

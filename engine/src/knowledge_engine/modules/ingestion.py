@@ -5,17 +5,20 @@ ingestion it hands the normalized artifacts (with their bytes), an explicit
 **destination scope** and the **derivation provenance** of the run to an
 :class:`EvidenceIngestion` implementation and records the receipt.
 
-The evidence/revision store is being built in a sibling slice (P3), so this
-module ships the interface plus two implementations:
+This module ships the interface plus two implementations; the production
+adapter over the evidence store is
+:class:`~knowledge_engine.modules.evidence_ingestion.EvidenceStoreIngestion`.
 
-* :class:`UnconfiguredIngestion` -- the default: every call fails with
+* :class:`UnconfiguredIngestion` -- used when ``KE_KNOWLEDGE_ENABLED=0`` (and
+  by a host built without an adapter): every call fails with
   ``unavailable`` (ingestion is never silently skipped);
 * :class:`InMemoryIngestion` -- a test double with P3's identity rules
   (``derive_revision_id``; the same record + bytes is one revision, so a
   restarted run creates no duplicates) and scope validation.
 
-Wiring the P3 store is one adapter class with the same ``ingest`` signature,
-passed to :class:`~knowledge_engine.modules.dispatcher.ModuleHost`.
+Hosts receive their implementation through
+:class:`~knowledge_engine.modules.dispatcher.ModuleHost` (``ingestion=``); see
+:func:`~knowledge_engine.modules.evidence_ingestion.ingestion_from_settings`.
 """
 
 from __future__ import annotations
@@ -101,7 +104,7 @@ def record_id_for(payload: ArtifactPayload) -> str:
 
 
 class UnconfiguredIngestion:
-    """Default sink: the evidence store is not wired into this build."""
+    """Sink for hosts without an evidence store: every ingestion is ``unavailable``."""
 
     def ingest(
         self,
@@ -111,8 +114,8 @@ class UnconfiguredIngestion:
         derivation: DerivationInput,
     ) -> IngestionReceipt:
         raise UnavailableError(
-            "evidence ingestion is not available in this build",
-            details={"hint": "the evidence store (V2 P3) provides the ingestion API"},
+            "evidence ingestion is not available",
+            details={"hint": "module ingestion needs the knowledge store (KE_KNOWLEDGE_ENABLED=1)"},
         )
 
     def revisions_for(self, artifact_ids: Iterable[str]) -> dict[str, str]:

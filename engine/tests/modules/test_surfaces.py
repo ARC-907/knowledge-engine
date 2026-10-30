@@ -212,7 +212,8 @@ def test_external_stdio_mcp_module(mod_env: Any, host: Any) -> None:
     host.enable("test.mcp-echo")
     result = host.invoke("test.mcp-echo", "shout", {"text": "hello"})
     assert result["output"]["text"] == "HELLO"
-    assert host.status("test.mcp-echo", probe=True)["probe"] == {"ok": True}
+    probed = host.status("test.mcp-echo", probe=True)
+    assert probed["probe"] == {"ok": True}
 
 
 # ── HTTP ─────────────────────────────────────────────────────────────
@@ -258,11 +259,20 @@ def test_http_admin_surface(mod_env: Any, helpers: Any) -> None:
         assert body["output"]["canonical_url"].startswith("https://news.example.org/")
         r = client.post("/modules/example.news/tools/fetch/invoke", json={"input": {}})
         assert r.status_code == 400 and r.json()["error"]["code"] == "invalid_input"
-        r = client.post(
-            "/modules/example.news/tools/fetch/invoke",
-            json={"input": {"url": url}, "scope": {"workspace_id": "default"}, "ingest": True},
-        )
-        assert r.status_code == 503 and "ingestion" in r.json()["detail"]
+        ingest = {"input": {"url": url}, "scope": {"workspace_id": "default"}, "ingest": True}
+        r = client.post("/modules/example.news/tools/fetch/invoke", json=ingest)
+        # Ingestion reaches the evidence store, which knows no workspace yet.
+        assert r.status_code == 422 and r.json()["type"] == "unknown_scope", r.text
+        client.app.state.knowledge.store.ensure_workspace("default", "Default")
+        r = client.post("/modules/example.news/tools/fetch/invoke", json=ingest)
+        assert r.status_code == 200, r.text
+        receipt = r.json()["ingestion"]
+        assert receipt["source_id"] == "module:example.news"
+        assert (receipt["created"], receipt["reused"]) == (1, 0)
+        (revision_id,) = receipt["artifact_revisions"].values()
+        evidence = client.app.state.knowledge.evidence
+        stored = evidence.get_revision(revision_id)
+        assert stored is not None
         status = client.get("/modules/example.news").json()
         assert status["recent_runs"][0]["surface"] == "http"
         assert status["recent_runs"][0]["principal"].startswith("key:")
@@ -279,8 +289,10 @@ def test_http_long_running_job(mod_env: Any, helpers: Any) -> None:
     from knowledge_engine.app import create_app
 
     with TestClient(create_app(), client=LOOPBACK, headers=_admin_headers()) as client:
-        assert client.post("/modules/register", json={"directory": "probe"}).status_code == 200
-        assert client.post("/modules/test.probe/enable").status_code == 200
+        registered = client.post("/modules/register", json={"directory": "probe"})
+        assert registered.status_code == 200
+        enabled = client.post("/modules/test.probe/enable")
+        assert enabled.status_code == 200
         r = client.post(
             "/modules/test.probe/tools/slow_job/invoke",
             json={"input": {"mode": "sleep", "seconds": 60}},
