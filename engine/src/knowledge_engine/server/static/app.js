@@ -77,11 +77,93 @@
 
   const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+  // ── Scoped knowledge (V2): constants and pure helpers ───────────
+  // Values of the ResearchType contract (knowledge.contracts).
+  const RESEARCH_TYPES = [
+    'reference', 'paper', 'article', 'transcript', 'code', 'note', 'dataset', 'synthesis', 'other',
+  ];
+
+  // Labels for the evidence VerificationState values. They describe how the
+  // evidence resolved, never whether a claim is true.
+  const VERIFICATION = {
+    verified: { label: 'Verified', text: 'This is the exact revision that was requested; its content is shown.' },
+    stale: { label: 'Stale', text: 'A newer revision exists. The requested (older) revision is shown, never the latest one.' },
+    unavailable: { label: 'Unavailable', text: 'The content is gone, was recorded digest-only, or failed its digest check. Nothing is shown.' },
+    ambiguous: { label: 'Ambiguous', text: 'The locator matches more than one position. Nothing is shown.' },
+    unsupported: { label: 'Unsupported', text: 'This revision or locator cannot be served (for example older content that was never recorded). Nothing is shown; the latest content is never substituted.' },
+  };
+
+  // Module lifecycle states (modules.dispatcher) and how they are shown.
+  const MODULE_STATES = {
+    ready: { label: 'Ready', icon: '●' },
+    starting: { label: 'Starting', icon: '◐' },
+    degraded: { label: 'Degraded', icon: '⚠' },
+    failed: { label: 'Failed', icon: '✕' },
+    stopped: { label: 'Stopped', icon: '■' },
+    disabled: { label: 'Disabled', icon: '○' },
+    registered: { label: 'Registered', icon: '○' },
+  };
+
+  // Split an FTS excerpt into text and <mark>ed parts. The excerpt comes
+  // from user corpora, so it is never parsed as HTML: only the literal
+  // <mark>/</mark> delimiters the index inserts are recognised, and every
+  // part is rendered with x-text.
+  function excerptParts(excerpt) {
+    const parts = [];
+    let marked = false;
+    for (const piece of String(excerpt || '').split(/(<mark>|<\/mark>)/)) {
+      if (piece === '<mark>') { marked = true; continue; }
+      if (piece === '</mark>') { marked = false; continue; }
+      if (piece) parts.push({ text: piece, mark: marked });
+    }
+    return parts;
+  }
+
+  function locatorSummary(loc) {
+    if (!loc) return 'whole record';
+    switch (loc.kind) {
+      case 'text': {
+        const range = `bytes [${loc.start_byte}, ${loc.end_byte})`;
+        return loc.heading ? `${range} · ${loc.heading}` : range;
+      }
+      case 'pdf': return `page ${loc.page}`;
+      case 'transcript': {
+        const span = `${loc.start_ms}–${loc.end_ms} ms`;
+        return loc.speaker ? `${span} · ${loc.speaker}` : span;
+      }
+      case 'code': {
+        let out = loc.path;
+        if (loc.start_line != null) out += `:${loc.start_line}-${loc.end_line}`;
+        if (loc.symbol) out += ` · ${loc.symbol}`;
+        if (loc.commit) out += ` @ ${String(loc.commit).slice(0, 12)}`;
+        else if (loc.snapshot_digest) out += ` @ snapshot ${String(loc.snapshot_digest).slice(0, 19)}`;
+        return out;
+      }
+      case 'unsupported': return `unsupported: ${loc.reason}`;
+      default: return String(loc.kind || 'locator');
+    }
+  }
+
+  // A typed engine error body ({detail, type, error}) as one line.
+  async function errorText(response) {
+    let body = null;
+    try { body = await response.json(); } catch { /* not JSON */ }
+    if (body && body.error && body.error.code) return `${body.error.code}: ${body.error.message}`;
+    if (body && body.detail) {
+      const detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+      return body.type ? `${body.type}: ${detail}` : detail;
+    }
+    return `HTTP ${response.status}`;
+  }
+
+  const utf8 = new TextEncoder();
+  function byteLength(text) { return utf8.encode(text).length; }
+
   // ── Alpine component ────────────────────────────────────────────
   document.addEventListener('alpine:init', () => {
     Alpine.data('dashboard', () => ({
       // ── navigation + theme ──
-      tabs: ['search', 'registry', 'board', 'config'],
+      tabs: ['search', 'registry', 'board', 'knowledge', 'modules', 'config'],
       tab: 'search',
       theme: document.documentElement.dataset.theme || 'light',
 
@@ -121,6 +203,39 @@
         },
       },
 
+      // ── scoped knowledge state (POST /knowledge/search, open, citations) ──
+      researchTypeOptions: RESEARCH_TYPES,
+      kn: {
+        loaded: false,
+        unavailable: '',
+        workspaces: [],
+        projects: [],
+        sources: [],
+        collections: [],
+        workspace: '',
+        project: '',
+        includeWorkspace: false,
+        sourceIds: [],
+        collectionIds: [],
+        researchTypes: [],
+        tags: '',
+        mode: 'fts',
+        limit: 10,
+        query: '',
+        busy: false,
+        error: '',
+        status: '',
+        envelope: null,
+        opened: null,
+        openError: '',
+        cite: null,
+        citeError: '',
+        citeStatus: '',
+      },
+
+      // ── modules state (GET /modules, board admin key) ──
+      mods: { state: 'idle', list: [], jobs: [], error: '', probing: '', status: '' },
+
       // ── config state ──
       boardKey: '',
       boardKeyStatus: '',
@@ -156,6 +271,8 @@
             this.loadKeys();
             this.loadProviders();
           }
+          if (t === 'knowledge' && !this.kn.loaded) this.loadKnowledge();
+          if (t === 'modules') this.loadModules();
         });
         // Follow the OS while the user has not picked a theme explicitly.
         if (darkQuery && darkQuery.addEventListener) {
@@ -379,6 +496,318 @@
           body: JSON.stringify({ from: acker }),
         });
         await this.reloadBoard();
+      },
+
+      // ── Scoped knowledge ──
+      async loadKnowledge() {
+        this.kn.loaded = true;
+        this.kn.unavailable = '';
+        let r;
+        try {
+          r = await apiFetch('knowledge/workspaces');
+        } catch (e) {
+          this.kn.unavailable = 'The engine is not reachable.';
+          return;
+        }
+        if (r.status === 404) {
+          this.kn.unavailable = 'Scoped knowledge is switched off on this server (KE_KNOWLEDGE_ENABLED=0).';
+          return;
+        }
+        if (!r.ok) {
+          this.kn.unavailable = `The knowledge store is not available (${await errorText(r)}).`;
+          return;
+        }
+        const data = await r.json();
+        this.kn.workspaces = data.workspaces || [];
+        if (!this.kn.workspaces.length) {
+          this.kn.unavailable = 'No workspace yet. Run `knowledge-engine knowledge migrate --apply` to register the corpus.';
+          return;
+        }
+        const preferred = this.kn.workspaces.find((w) => w.workspace_id === 'default');
+        this.kn.workspace = (preferred || this.kn.workspaces[0]).workspace_id;
+        await this.loadWorkspaceScope();
+      },
+
+      async loadWorkspaceScope() {
+        const ws = encodeURIComponent(this.kn.workspace);
+        Object.assign(this.kn, {
+          project: '', includeWorkspace: false, sourceIds: [], collectionIds: [],
+          projects: [], sources: [], collections: [], envelope: null, opened: null, cite: null,
+        });
+        const get = async (path, key) => {
+          try {
+            const r = await apiFetch(path);
+            return r.ok ? ((await r.json())[key] || []) : [];
+          } catch (e) {
+            return [];
+          }
+        };
+        const [projects, sources, collections] = await Promise.all([
+          get(`knowledge/workspaces/${ws}/projects`, 'projects'),
+          get(`knowledge/workspaces/${ws}/sources`, 'sources'),
+          get(`knowledge/workspaces/${ws}/collections`, 'collections'),
+        ]);
+        this.kn.projects = projects;
+        this.kn.sources = sources;
+        this.kn.collections = collections;
+      },
+
+      projectName(projectId) {
+        if (!projectId) return 'workspace-wide';
+        const p = this.kn.projects.find((x) => x.project_id === projectId);
+        return p ? p.display_name : projectId;
+      },
+
+      collectionName(collectionId) {
+        const c = this.kn.collections.find((x) => x.collection_id === collectionId);
+        return c ? c.display_name : collectionId;
+      },
+
+      sourceName(sourceId) {
+        const s = this.kn.sources.find((x) => x.source_id === sourceId);
+        return s ? `${s.display_name} (${s.source_id})` : sourceId;
+      },
+
+      // The query context sent to the broker. A filter with nothing ticked is
+      // omitted, so the scope profile fills it (ADR 0006); tags are ANDed.
+      knowledgeContext(forSearch) {
+        const ctx = { workspace_id: this.kn.workspace };
+        if (this.kn.project) {
+          ctx.project_id = this.kn.project;
+          if (this.kn.includeWorkspace) ctx.include_workspace = true;
+        }
+        if (!forSearch) return ctx;
+        if (this.kn.sourceIds.length) ctx.source_ids = [...this.kn.sourceIds];
+        if (this.kn.collectionIds.length) ctx.collection_ids = [...this.kn.collectionIds];
+        if (this.kn.researchTypes.length) ctx.research_types = [...this.kn.researchTypes];
+        const tags = this.kn.tags.split(',').map((t) => t.trim()).filter(Boolean);
+        if (tags.length) ctx.tags = tags;
+        ctx.mode = this.kn.mode;
+        ctx.limit = Math.min(100, Math.max(1, Number(this.kn.limit) || 10));
+        return ctx;
+      },
+
+      async knowledgeSearch() {
+        const query = this.kn.query.trim();
+        if (!query || !this.kn.workspace) return;
+        Object.assign(this.kn, { busy: true, error: '', opened: null, cite: null, openError: '' });
+        try {
+          const r = await apiFetch('knowledge/search', {
+            method: 'POST',
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ query, context: this.knowledgeContext(true) }),
+          });
+          if (!r.ok) {
+            this.kn.envelope = null;
+            this.kn.error = await errorText(r);
+            this.kn.status = `Search failed: ${this.kn.error}`;
+            return;
+          }
+          const env = await r.json();
+          this.kn.envelope = env;
+          const n = env.hits.length;
+          this.kn.status = `${n} hit${n === 1 ? '' : 's'} for ${query}${env.partial ? ' (partial: some sources failed)' : ''}`;
+        } catch (e) {
+          this.kn.error = String(e);
+          this.kn.status = `Search failed: ${this.kn.error}`;
+        } finally {
+          this.kn.busy = false;
+        }
+      },
+
+      excerptParts(excerpt) { return excerptParts(excerpt); },
+      locatorSummary(loc) { return locatorSummary(loc); },
+      verificationLabel(state) { return (VERIFICATION[state] || { label: state }).label; },
+      verificationText(state) { return (VERIFICATION[state] || { text: '' }).text; },
+
+      // GET-equivalent POST /knowledge/open at the hit's exact revision.
+      async openHit(hit) {
+        Object.assign(this.kn, { openError: '', cite: null, citeError: '' });
+        const r = await apiFetch('knowledge/open', {
+          method: 'POST',
+          headers: JSON_HEADERS,
+          body: JSON.stringify({
+            context: this.knowledgeContext(false),
+            source_id: hit.source_id,
+            record_id: hit.record_id,
+            revision_id: hit.revision_id || undefined,
+          }),
+        }).catch((e) => ({ ok: false, status: 0, json: async () => ({ detail: String(e) }) }));
+        if (!r.ok) {
+          this.kn.opened = null;
+          this.kn.openError = await errorText(r);
+          return;
+        }
+        this.kn.opened = { title: hit.title || hit.record_id, via: 'search', result: await r.json() };
+        this.focusOpened();
+      },
+
+      // POST /knowledge/evidence/open for a cited evidence id.
+      async openEvidence(check) {
+        Object.assign(this.kn, { openError: '' });
+        const body = { context: this.knowledgeContext(false) };
+        if (check.evidence_id) {
+          body.evidence_id = check.evidence_id;
+        } else {
+          Object.assign(body, {
+            source_id: check.source_id, record_id: check.record_id, revision_id: check.revision_id,
+          });
+        }
+        const r = await apiFetch('knowledge/evidence/open', {
+          method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body),
+        }).catch((e) => ({ ok: false, status: 0, json: async () => ({ detail: String(e) }) }));
+        if (!r.ok) {
+          this.kn.openError = await errorText(r);
+          return;
+        }
+        const data = await r.json();
+        this.kn.opened = {
+          title: check.evidence_id || check.record_id,
+          via: 'citation',
+          result: data.result,
+          reason: data.reason,
+          currentRevision: data.current_revision_id,
+          evidenceId: data.evidence_id,
+          notice: data.notice,
+        };
+        this.focusOpened();
+      },
+
+      focusOpened() {
+        this.$nextTick(() => {
+          const el = this.$root.querySelector('#kn-opened-title');
+          if (el) el.focus();
+        });
+      },
+
+      canCite() {
+        const o = this.kn.opened;
+        if (!o || !o.result) return false;
+        const res = o.result;
+        return typeof res.content === 'string'
+          && (res.verification === 'verified' || res.verification === 'stale')
+          && String(res.media_type || '').startsWith('text/');
+      },
+
+      // The selected text inside the opened content, as UTF-8 byte offsets.
+      selectedSpan() {
+        const pre = this.$root.querySelector('#kn-content');
+        const sel = window.getSelection ? window.getSelection() : null;
+        if (!pre || !sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+        const range = sel.getRangeAt(0);
+        if (!pre.contains(range.startContainer) || !pre.contains(range.endContainer)) return null;
+        const before = document.createRange();
+        before.selectNodeContents(pre);
+        before.setEnd(range.startContainer, range.startOffset);
+        const content = this.kn.opened.result.content;
+        const startChar = before.toString().length;
+        const quote = range.toString();
+        if (!quote || content.slice(startChar, startChar + quote.length) !== quote) return null;
+        const startByte = byteLength(content.slice(0, startChar));
+        return { quote, start_byte: startByte, end_byte: startByte + byteLength(quote) };
+      },
+
+      async citeOpened(useSelection) {
+        if (!this.canCite()) return;
+        const res = this.kn.opened.result;
+        const evidence = {
+          source_id: res.source_id, record_id: res.record_id, revision_id: res.revision_id,
+        };
+        let claim;
+        if (useSelection) {
+          const span = this.selectedSpan();
+          if (!span) {
+            this.kn.citeError = 'Select some text in the content above first.';
+            return;
+          }
+          claim = {
+            claim_id: 'q1', kind: 'quotation', quote: span.quote,
+            evidence: [{ ...evidence, locator: { kind: 'text', start_byte: span.start_byte, end_byte: span.end_byte } }],
+          };
+        } else {
+          claim = {
+            claim_id: 'd1', kind: 'paraphrase', text: this.kn.opened.title,
+            evidence: [{ ...evidence, locator: { kind: 'text', start_byte: 0, end_byte: byteLength(res.content) } }],
+          };
+        }
+        Object.assign(this.kn, { citeError: '', cite: null, citeStatus: '' });
+        const r = await apiFetch('knowledge/citations/export', {
+          method: 'POST',
+          headers: JSON_HEADERS,
+          body: JSON.stringify({ context: this.knowledgeContext(false), format: 'both', claims: [claim] }),
+        }).catch((e) => ({ ok: false, status: 0, json: async () => ({ detail: String(e) }) }));
+        if (!r.ok) {
+          this.kn.citeError = await errorText(r);
+          return;
+        }
+        this.kn.cite = await r.json();
+        this.kn.citeStatus = `Citation ${this.kn.cite.claims.map((c) => c.status).join(', ')}`;
+      },
+
+      cslText() {
+        return this.kn.cite && this.kn.cite.csl_json ? JSON.stringify(this.kn.cite.csl_json, null, 2) : '';
+      },
+
+      async copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          this.kn.citeStatus = 'Copied to the clipboard.';
+        } catch (e) {
+          this.kn.citeStatus = 'Copy failed; select the text and copy it manually.';
+        }
+      },
+
+      // ── Modules (status only; /modules needs a board admin key) ──
+      async loadModules() {
+        this.mods.state = 'loading';
+        this.mods.error = '';
+        let r;
+        try {
+          r = await boardFetch('modules');
+        } catch (e) {
+          Object.assign(this.mods, { state: 'error', error: String(e), list: [] });
+          return;
+        }
+        if (r.status === 401) { Object.assign(this.mods, { state: 'needs-key', list: [] }); return; }
+        if (r.status === 403) { Object.assign(this.mods, { state: 'denied', list: [] }); return; }
+        if (r.status === 404 || r.status === 503) {
+          Object.assign(this.mods, { state: 'unavailable', list: [], error: await errorText(r) });
+          return;
+        }
+        if (!r.ok) { Object.assign(this.mods, { state: 'error', error: await errorText(r), list: [] }); return; }
+        this.mods.list = ((await r.json()).modules || [])
+          .sort((a, b) => a.module_id.localeCompare(b.module_id));
+        this.mods.state = 'ok';
+        try {
+          const j = await boardFetch('modules/jobs');
+          this.mods.jobs = j.ok ? ((await j.json()).jobs || []) : [];
+        } catch (e) {
+          this.mods.jobs = [];
+        }
+        const degraded = this.mods.list.filter((m) => m.state === 'degraded' || m.state === 'failed').length;
+        this.mods.status = `${this.mods.list.length} module${this.mods.list.length === 1 ? '' : 's'}`
+          + (degraded ? `, ${degraded} degraded or failed` : '');
+      },
+
+      moduleStateLabel(state) { return (MODULE_STATES[state] || { label: state }).label; },
+      moduleStateIcon(state) { return (MODULE_STATES[state] || { icon: '?' }).icon; },
+
+      // The bounded health probe (POST /modules/{id}/health); enabled modules only.
+      async probeModule(m) {
+        this.mods.probing = m.module_id;
+        let message;
+        try {
+          const r = await boardFetch(`modules/${encodeURIComponent(m.module_id)}/health`, { method: 'POST' });
+          message = r.ok
+            ? `Health check of ${m.module_id} finished.`
+            : `Health check of ${m.module_id} failed: ${await errorText(r)}`;
+        } catch (e) {
+          message = `Health check of ${m.module_id} failed: ${e}`;
+        } finally {
+          this.mods.probing = '';
+        }
+        await this.loadModules();
+        this.mods.status = message;
       },
 
       // ── Config / Keys ──

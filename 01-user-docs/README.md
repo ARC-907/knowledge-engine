@@ -18,6 +18,7 @@ work down; each guide is self-contained.
 | [SERENA.md](SERENA.md) | Optional, read-only code-symbol lookup in your repositories through a separately installed Serena. |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Run the engine beyond your laptop — service, LAN, Docker, hardening, backups, upgrades. |
 | [CONFIGURATION.md](CONFIGURATION.md) | Look up every environment variable, its type and default (generated from the code). |
+| [DASHBOARD.md](DASHBOARD.md) | Use the browser dashboard: search, scoped knowledge, citations, module status. |
 | [THEMING.md](THEMING.md) | Restyle or rebuild the dashboard. |
 | [FAQ.md](FAQ.md) | Quick answers to the common questions. |
 

@@ -66,7 +66,7 @@ user-visible changes under `[Unreleased]` in the [CHANGELOG](../CHANGELOG.md).
 | 6 | P5 + P6 modules, reference utilities, ingestion ([ADR 0014](adr/0014-module-catalog-store-and-script-protocol.md), [ADR 0015](adr/0015-module-jobs-cancellation-and-ingestion.md), [MODULES.md](../01-user-docs/MODULES.md)) | Merged in [#48](https://github.com/ARC-907/knowledge-engine/pull/48) |
 | 7 | T1 tooling, observability and self-indexing ([DEV-TOOLING.md](DEV-TOOLING.md)) | Merged in [#46](https://github.com/ARC-907/knowledge-engine/pull/46) |
 | 8 | P7 Serena adapter ([ADR 0016](adr/0016-serena-read-only-adapter.md), [SERENA.md](../01-user-docs/SERENA.md)) | Implemented; PR in review |
-| 9 | P8 dashboard | After 4–6 |
+| 9 | P8 dashboard ([DASHBOARD.md](../01-user-docs/DASHBOARD.md)) | Merged in [#49](https://github.com/ARC-907/knowledge-engine/pull/49) |
 | 10 | P9 docs, migration guide and qualification | Last |
 
 Publishing (tag `v3.0.0` or later, GitHub Release, repository settings) stays a

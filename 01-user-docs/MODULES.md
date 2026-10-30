@@ -7,7 +7,9 @@ dispatcher applies the same validation, policy, limits, audit and error codes
 on every surface.
 
 Modules never come from the corpus. A corpus entry of kind `tool` is
-documentation, never permission to execute anything.
+documentation, never permission to execute anything. The dashboard's Modules
+tab shows each module's state and runs its health check
+([DASHBOARD.md](DASHBOARD.md#modules)).
 
 ## Contents
 
