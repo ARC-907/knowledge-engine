@@ -63,10 +63,10 @@ user-visible changes under `[Unreleased]` in the [CHANGELOG](../CHANGELOG.md).
 | 3 | P0 + P1 contracts and metadata store | Merged in [#43](https://github.com/ARC-907/knowledge-engine/pull/43) |
 | 4 | P2 retrieval broker and bindings ([ADR 0011](adr/0011-retrieval-broker-fusion-and-adapters.md)) | Merged in [#45](https://github.com/ARC-907/knowledge-engine/pull/45) |
 | 5 | P3 + P4 evidence and citations ([ADR 0012](adr/0012-evidence-store-and-ingestion.md), [ADR 0013](adr/0013-citation-identity-and-export.md)) | Merged in [#47](https://github.com/ARC-907/knowledge-engine/pull/47) |
-| 6 | P5 + P6 modules, reference utilities, ingestion ([ADR 0014](adr/0014-module-catalog-store-and-script-protocol.md), [ADR 0015](adr/0015-module-jobs-cancellation-and-ingestion.md), [MODULES.md](../01-user-docs/MODULES.md)) | Implemented; PR in review |
+| 6 | P5 + P6 modules, reference utilities, ingestion ([ADR 0014](adr/0014-module-catalog-store-and-script-protocol.md), [ADR 0015](adr/0015-module-jobs-cancellation-and-ingestion.md), [MODULES.md](../01-user-docs/MODULES.md)) | Merged in [#48](https://github.com/ARC-907/knowledge-engine/pull/48) |
 | 7 | T1 tooling, observability and self-indexing ([DEV-TOOLING.md](DEV-TOOLING.md)) | Merged in [#46](https://github.com/ARC-907/knowledge-engine/pull/46) |
-| 8 | P7 Serena adapter (compatibility probe of Serena 2.1.0 done) | After 4–6 |
-| 9 | P8 dashboard ([DASHBOARD.md](../01-user-docs/DASHBOARD.md)) | Implemented; PR in review |
+| 8 | P7 Serena adapter ([ADR 0016](adr/0016-serena-read-only-adapter.md), [SERENA.md](../01-user-docs/SERENA.md)) | Implemented; PR in review |
+| 9 | P8 dashboard ([DASHBOARD.md](../01-user-docs/DASHBOARD.md)) | Merged in [#49](https://github.com/ARC-907/knowledge-engine/pull/49) |
 | 10 | P9 docs, migration guide and qualification | Last |
 
 Publishing (tag `v3.0.0` or later, GitHub Release, repository settings) stays a

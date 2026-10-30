@@ -57,6 +57,7 @@ surface over several source-owned systems:
 | Retrieval broker | Scoped search/open across the corpus and linked project context (V2 P2) | `POST /knowledge/search`, `/knowledge/open`, `knowledge.search` / `knowledge.open` MCP tools, `knowledge-engine knowledge search\|open` |
 | Evidence and citations | Immutable revisions, retained bytes, aliases, typed evidence spans, derivations, tombstones; exact-revision open; claim validation and citation export (V2 P3/P4) | `knowledge-engine knowledge snapshot`, `/knowledge/evidence/open`, `/knowledge/citations/validate\|export`, `knowledge_evidence_*` / `knowledge_cite_*` MCP tools, `knowledge-engine knowledge evidence\|cite ...` |
 | Modules | Operator-registered executable utilities (script, service, external MCP) behind manifest v1, `modules.db` and one dispatcher (V2 P5) | `/modules/*` (board admin key), `<module_id>.<tool>` MCP tools, `knowledge-engine module ...` |
+| Serena adapter (`knowledge_engine.serena`) | Optional, read-only code symbols of configured repositories through a separately installed Serena: one stdio MCP process per project, verified against a pinned witness, three allowlisted read tools, code locators pinned to a commit or snapshot (V2 P7) | `serena.*` MCP tools, `serena:<project_id>` broker sources, `knowledge-engine serena ...` (only with `KE_SERENA_ENABLED=1`) |
 
 The versioned contracts (query context, hits, envelopes, source status,
 locators, typed errors, the `SourceAdapter` protocol) live in

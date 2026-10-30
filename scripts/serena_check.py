@@ -30,26 +30,13 @@ import anyio
 from mcp import Client
 from mcp.client.stdio import StdioServerParameters
 
+from knowledge_engine.serena.session import CHILD_ENV, LAUNCH_ARGS
+from knowledge_engine.serena.tools import ALLOWED_TOOLS
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
-#: Serena flags for an unattended stdio server: no dashboard, no GUI, tool interface.
-SERENA_ARGS = (
-    "start-mcp-server",
-    "--transport",
-    "stdio",
-    "--context",
-    "agent",
-    "--agent-interface",
-    "tools",
-    "--enable-web-dashboard",
-    "false",
-    "--open-web-dashboard",
-    "false",
-    "--enable-gui-log-window",
-    "false",
-    "--log-level",
-    "WARNING",
-)
-READ_TOOLS = ("find_symbol", "get_symbols_overview", "find_referencing_symbols")
+#: Serena flags for an unattended stdio server (shared with the engine's adapter).
+SERENA_ARGS = LAUNCH_ARGS
+READ_TOOLS = ALLOWED_TOOLS
 PROBE_FILE = "engine/src/knowledge_engine/retrieval/ownership.py"
 PROBE_SYMBOL = "EntryOwnership"
 
@@ -57,7 +44,7 @@ PROBE_SYMBOL = "EntryOwnership"
 def serena_env() -> dict[str, str]:
     """Child environment: the caller's, with Serena's usage reporting turned off."""
     env = dict(os.environ)
-    env["SERENA_USAGE_REPORTING"] = "false"
+    env.update(CHILD_ENV)
     if shutil.which("uvx", path=env.get("PATH")) is None:
         sys.stderr.write("warning: uvx is not on PATH; Serena starts pyright through it\n")
     return env

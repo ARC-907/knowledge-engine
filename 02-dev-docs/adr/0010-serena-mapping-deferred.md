@@ -1,6 +1,6 @@
 # ADR 0010 — Exact Serena compatibility mapping deferred to the Serena slice
 
-- **Status:** Accepted (deferral; V2 P0, issue #38)
+- **Status:** Superseded by [ADR 0016](0016-serena-read-only-adapter.md) (was: accepted deferral; V2 P0, issue #38)
 - **Date:** 2026-10
 
 ## Context

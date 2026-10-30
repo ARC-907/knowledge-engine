@@ -75,6 +75,7 @@ SECTIONS: dict[str, str] = {
     "embeddings": "Embeddings (semantic and hybrid search)",
     "knowledge": "Scoped knowledge metadata",
     "modules": "Modules (executable utilities)",
+    "serena": "Serena adapter (optional, read-only code symbols)",
     "substrate": "Pipeline and substrates",
 }
 
@@ -585,6 +586,77 @@ class Settings(BaseSettings):
         "read, write, network, process). Authoritative over manifests and operator grants.",
         section="modules",
         read_by="modules.config",
+    )
+
+    # ── Serena adapter (optional; external MCP server, never bundled) ──
+    serena_enabled: EnvBool = _env(
+        "KE_SERENA_ENABLED",
+        False,
+        "Enable the read-only Serena adapter: `serena:<project_id>` broker sources, the "
+        "`serena.*` MCP tools and `knowledge-engine serena`. Off: nothing starts Serena.",
+        section="serena",
+        read_by="serena.config",
+    )
+    serena_command: str = _env(
+        "KE_SERENA_COMMAND",
+        "serena",
+        "The Serena executable (operator-installed, e.g. from `serena-agent`), split like a "
+        "shell command line; `uv` must be on its PATH (it starts pyright through `uvx`).",
+        section="serena",
+        read_by="serena.config",
+    )
+    serena_version: str = _env(
+        "KE_SERENA_VERSION",
+        "2.1.0",
+        "The Serena version the adapter accepts. A server reporting another version, or a "
+        "mapped tool whose input schema differs from the recorded witness, is `incompatible`.",
+        section="serena",
+        read_by="serena.config",
+    )
+    serena_projects: str | None = _env(
+        "KE_SERENA_PROJECTS",
+        None,
+        "Operator project file (TOML or JSON): one entry per project with `project_id`, "
+        "`root` and optional `repository_id`. Unset: <data_dir>/serena-projects.toml.",
+        section="serena",
+        read_by="serena.config",
+    )
+    serena_request_timeout_s: float = _env(
+        "KE_SERENA_REQUEST_TIMEOUT_S",
+        60.0,
+        "Deadline of one Serena tool call, in seconds (the session restarts after a timeout).",
+        section="serena",
+        read_by="serena.config",
+        gt=0,
+        le=600,
+    )
+    serena_startup_timeout_s: float = _env(
+        "KE_SERENA_STARTUP_TIMEOUT_S",
+        300.0,
+        "Deadline for starting Serena and its language server for one project, in seconds.",
+        section="serena",
+        read_by="serena.config",
+        gt=0,
+        le=1800,
+    )
+    serena_max_sessions: int = _env(
+        "KE_SERENA_MAX_SESSIONS",
+        4,
+        "Most Serena processes running at once (one per project); the least recently used "
+        "idle session is stopped to make room.",
+        section="serena",
+        read_by="serena.config",
+        ge=1,
+        le=32,
+    )
+    serena_idle_shutdown_s: int = _env(
+        "KE_SERENA_IDLE_SHUTDOWN_S",
+        900,
+        "Stop a project's Serena process after this many idle seconds (0: never).",
+        section="serena",
+        read_by="serena.config",
+        ge=0,
+        le=86400,
     )
 
     # ── Pipeline and substrates (read directly by those modules) ──

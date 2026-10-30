@@ -15,6 +15,7 @@ a sibling module that is imported only when that subcommand runs:
 * :mod:`.knowledge`       -- ``knowledge migrate``, ``knowledge status``, the
   scoped-knowledge admin commands and ``knowledge search|open`` (the broker)
 * :mod:`.modules`         -- ``module register|configure|enable|disable|list|status|invoke|job``
+* :mod:`.serena`          -- ``serena status|check|sync|find-symbol|overview|references``
 
 :func:`main` configures stderr logging once (``-v``/``-q``), loads the
 pipeline ``.env`` (variables already set win) and runs the subcommand. A
@@ -201,7 +202,38 @@ def build_parser() -> argparse.ArgumentParser:
     abs_serve.add_argument("--port", type=int, default=None, help="default: $BOARD_PORT or 11437")
     _route(abs_serve, "serve", "cmd_board_serve")
     _add_module_parser(sub)
+    _add_serena_parser(sub)
     return parser
+
+
+def _add_serena_parser(sub: Any) -> None:
+    se = sub.add_parser(
+        "serena",
+        help="Optional read-only Serena adapter: code symbols of configured projects",
+    )
+    se_sub = se.add_subparsers(dest="serena_cmd", required=True)
+    se_sub.add_parser("status", help="Configuration and session states (starts nothing)")
+    check = se_sub.add_parser(
+        "check", help="Start Serena for each project and verify it against the witness"
+    )
+    check.add_argument("--project", dest="project_id", default=None, help="only this project")
+    se_sub.add_parser("sync", help="Register a serena:<project_id> source per configured project")
+    fs = se_sub.add_parser("find-symbol", help="Find symbols by name path (Class/method)")
+    fs.add_argument("project_id")
+    fs.add_argument("name_path_pattern")
+    fs.add_argument("--path", dest="relative_path", default="", help="file or directory")
+    fs.add_argument("--substring", action="store_true", help="substring match on the name")
+    fs.add_argument("--body", action="store_true", help="include the symbol bodies")
+    fs.add_argument("--max", dest="max_matches", type=_positive_int, default=50)
+    ov = se_sub.add_parser("overview", help="Top-level symbols of a file or directory")
+    ov.add_argument("project_id")
+    ov.add_argument("relative_path")
+    rf = se_sub.add_parser("references", help="Symbols that reference a symbol")
+    rf.add_argument("project_id")
+    rf.add_argument("name_path")
+    rf.add_argument("relative_path", help="the file defining the symbol")
+    rf.add_argument("--max", dest="max_results", type=_positive_int, default=100)
+    _route(se, "serena", "cmd_serena")
 
 
 #: ``module enable --grant`` / ``module invoke --effect`` values
