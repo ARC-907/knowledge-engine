@@ -8,6 +8,20 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 
 ## [Unreleased]
 
+### Fixed
+
+- Nested registry entries are attributed consistently in every search mode
+  ([#39](https://github.com/ARC-907/knowledge-engine/issues/39),
+  [ADR 0005](02-dev-docs/adr/0005-nested-entry-ownership.md)): the deepest
+  enabled entry containing a file owns it, a disabled nested entry falls back
+  to its enclosing entry, and a `kind` filter applies to the owner. FTS
+  indexing no longer stores a nested file under every enclosing entry, so
+  `fts` and `hybrid` searches no longer return the same file twice, and a
+  filtered `vector` search no longer re-attributes a nested file to its
+  parent. **Compatibility:** with nested entries, a file is now returned only
+  under its owning entry and `reindex` counts it once; run
+  `knowledge-engine reindex` after upgrading.
+
 ## [3.0.0] — 2026-10-24
 
 The 3.0 release modernises the whole project: Python 3.12+, `uv` and

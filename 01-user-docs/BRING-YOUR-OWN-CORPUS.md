@@ -128,6 +128,16 @@ expose. Key facts:
 You can edit `registry.json` by hand — it's plain JSON. Just keep it valid
 against the schema.
 
+### Nested entries
+
+Entries may nest — for example a library at `libraries/example` and a second
+entry at `libraries/example/research`. Each file then belongs to exactly one
+entry, the **deepest enabled** one containing it, in every search mode: a
+search returns the file once, under that entry. A disabled nested entry hands
+its files back to the enclosing enabled entry, and a `kind` filter matches the
+owning entry's kind. See
+[ADR 0005](../02-dev-docs/adr/0005-nested-entry-ownership.md).
+
 ### Validate your registry
 
 After a hand edit, check the file before starting the engine:

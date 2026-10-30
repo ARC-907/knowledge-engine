@@ -81,7 +81,7 @@ engine/                            the engine (code layer): pyproject.toml, uv.l
     mcp/                           server.py (official MCP Python SDK; stdio + streamable HTTP), http.py (/mcp mount, Host policy),
                                    options.py, tool_groups.py, toolkit.py (legacy tool-group adapter)
     generation/                    base.py (Provider, ProviderRegistry, cached probes), cloud_http.py, ollama_provider.py, factory.py
-    retrieval/                     fts5.py (FTS5 index), embeddings/ (CorpusEmbeddingIndex, providers, build/search), hybrid.py (RRF)
+    retrieval/                     fts5.py (FTS5 index), ownership.py (nested-entry ownership), embeddings/ (CorpusEmbeddingIndex, providers, build/search), hybrid.py (RRF)
     project_context/               per-project memory: config, db + migrations/, registry, fingerprints, ingest, search, pointers,
                                    git_context, logs, sanitize, scanner/, embeddings/, mcp_tools/ (46 tools), cli
     agent_board/                   schemas, store, digest, scopes, keys, provider_registry, sweeper, http/ (trust, limits, bodies,
