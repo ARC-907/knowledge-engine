@@ -117,6 +117,51 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   [ADR 0011](02-dev-docs/adr/0011-retrieval-broker-fusion-and-adapters.md).
   Snapshots `openapi.json`, `mcp_tools.json` and `cli_help.txt` gain the new
   surface; legacy `/search`, MCP `search` and CLI `search` are unchanged.
+- **Modules: manifest, catalog, dispatcher and reference utilities (V2 P5/P6, #37).**
+  `knowledge_engine.modules`: module manifest version 1 (JSON or YAML; JSON
+  Schema committed as `engine/src/knowledge_engine/modules/manifest.schema.json`)
+  validated as data before anything runs — identity, engine/contract
+  compatibility, `script`/`service`/`mcp` transports, tools with input/output
+  JSON Schemas, `effect`, `idempotent` and `long_running`, declared
+  capabilities, settings and secret *references* (embedded credential values
+  are rejected), limits and an optional health probe.
+- Module catalog `modules.db` (`KE_MODULES_DB`, default `<KE_DATA_DIR>/modules.db`;
+  own numbered migrations; ADR 0014) persisting intent/configuration apart from
+  observed health (ADR 0009), sanitized run audit, jobs and artifact records;
+  artifact bytes are content-addressed in `module-artifacts/`.
+- One dispatcher (`ModuleHost`) for CLI, HTTP and MCP: lifecycle
+  `registered → disabled → starting → ready` with `degraded`/`failed`/`stopped`;
+  input schema/size and scope validation; effects ∩ operator grants ∩ host
+  policy (`KE_MODULES_HOST_CAPABILITIES`; read-only enforced through allowed
+  effects); per-module concurrency, deadline, output and artifact budgets;
+  output schema validation; typed errors; bounded retries for declared
+  idempotent tools only; long-running tools return a workspace-scoped job id
+  with status/cancel/expiry; cancellation, timeout and disable stop the
+  module's whole process group (new `tool_host.host.run_bounded`). Secrets are
+  passed only to the module and scrubbed from results, errors and logs.
+- `knowledge-engine module discover|register|configure|enable|disable|list|status|invoke|job`.
+- Admin-gated `/modules` HTTP routes (trusted peer + `board:admin` key, like
+  the board admin routes); `KE_MODULES_ENABLED` (default on), `KE_MODULES_DIR`.
+- MCP: every enabled module's granted tools are advertised as
+  `<module_id>.<tool>` by one generic `modules` group (no per-module loader
+  edits), frozen per server process; `module_job_status` / `module_job_cancel`
+  appear when a long-running tool is advertised.
+- Reference modules under `examples/modules/`: a news/media fetcher (offline
+  `file://` fixtures, opt-in allowlisted live HTTP; canonical URL, published and
+  retrieved timestamps, rights metadata, content artifact) and a long-running
+  transcription module (approved artifact id → language, timed segments,
+  engine/model version, parent provenance; deterministic fake engine, real
+  engine = an operator-configured CLI).
+- Host ingestion interface (`modules.ingestion.EvidenceIngestion`: normalized
+  artifacts + explicit destination scope + derivation provenance) with an
+  in-memory double, and its production adapter over the evidence store
+  (`modules.evidence_ingestion`): artifacts become revisions of a per-workspace
+  `module` source (`module:<id>` in the default workspace,
+  `module:<id>--<workspace>` elsewhere) with the run's derivation and parent
+  revisions, assigned to the destination project; repeats and restarted runs
+  are idempotent; a record is never moved between projects. The server shares
+  its knowledge store with the module host; the CLI opens `knowledge.db` only
+  when a call ingests. `KE_KNOWLEDGE_ENABLED=0` keeps ingestion `unavailable`.
 
 **Logging and developer tooling (V2 T1)**
 

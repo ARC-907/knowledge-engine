@@ -56,6 +56,7 @@ surface over several source-owned systems:
 | Scoped-knowledge metadata | Workspaces, projects, sources, collections, record classification (V2 P0/P1) | `/knowledge/*`, `knowledge_*` MCP tools, `knowledge-engine knowledge ...`; no effect on `/search` |
 | Retrieval broker | Scoped search/open across the corpus and linked project context (V2 P2) | `POST /knowledge/search`, `/knowledge/open`, `knowledge.search` / `knowledge.open` MCP tools, `knowledge-engine knowledge search\|open` |
 | Evidence and citations | Immutable revisions, retained bytes, aliases, typed evidence spans, derivations, tombstones; exact-revision open; claim validation and citation export (V2 P3/P4) | `knowledge-engine knowledge snapshot`, `/knowledge/evidence/open`, `/knowledge/citations/validate\|export`, `knowledge_evidence_*` / `knowledge_cite_*` MCP tools, `knowledge-engine knowledge evidence\|cite ...` |
+| Modules | Operator-registered executable utilities (script, service, external MCP) behind manifest v1, `modules.db` and one dispatcher (V2 P5) | `/modules/*` (board admin key), `<module_id>.<tool>` MCP tools, `knowledge-engine module ...` |
 
 The versioned contracts (query context, hits, envelopes, source status,
 locators, typed errors, the `SourceAdapter` protocol) live in
@@ -106,7 +107,12 @@ engine/                            the engine (code layer): pyproject.toml, uv.l
                                    git_context, logs, sanitize, scanner/, embeddings/, mcp_tools/ (46 tools), cli
     agent_board/                   schemas, store, digest, scopes, keys, provider_registry, sweeper, http/ (trust, limits, bodies,
                                    messages, admin), service (standalone app), cli, mcp_tools/ (15 tools)
-    tool_host/                     host.py — script/service/static tool registry
+    tool_host/                     host.py — script/service/static tool registry; run_bounded (argv, own process group,
+                                   deadline, output cap, cancellation) is the module execution substrate
+    modules/                       V2 modules: manifest.py (+ manifest.schema.json), catalog.py + migrations/ (modules.db),
+                                   dispatcher.py (ModuleHost: lifecycle + the one invocation path), transports.py
+                                   (script/service/external MCP), artifacts.py, ingestion.py (P3 interface + test double),
+                                   mcp_tools.py (`<module_id>.<tool>` group), config.py
     knowledge/                     V2 contracts and metadata: contracts.py (versioned Pydantic models, locators,
                                    identity helpers), errors.py (stable codes), adapter.py (SourceAdapter protocol),
                                    scope.py (scope resolution + reference filter), store.py + migrations/ (knowledge.db),
@@ -206,6 +212,13 @@ The FastAPI app (`knowledge_engine.app:create_app`) serves the routes below;
 | `/knowledge/evidence/open` | POST | Open the exact cited revision/span after a scope recheck: `verified`, `stale`, `unavailable`, `ambiguous`, `unsupported` |
 | `/knowledge/citations/validate` | POST | Validate a claim-to-evidence map (not proof of entailment) |
 | `/knowledge/citations/export` | POST | Markdown references and/or CSL-JSON, deduplicated by evidence identity |
+| `/modules`, `/modules/discover` | GET | Registered modules (intent + observed state); manifests under `KE_MODULES_DIR` (board admin key) |
+| `/modules/register` | POST | Register a directory of `KE_MODULES_DIR` by name |
+| `/modules/{module_id}` | GET | Module status and recent sanitized runs |
+| `/modules/{module_id}/configuration` | PUT | Operator settings and secret references |
+| `/modules/{module_id}/enable`, `…/disable`, `…/health` | POST | Enable (checks), disable (drain/cancel), bounded health probe |
+| `/modules/{module_id}/tools/{tool}/invoke` | POST | Invoke through the shared dispatcher (scope, effects, ingest) |
+| `/modules/jobs`, `/modules/jobs/{job_id}`, `…/cancel` | GET / GET / POST | Long-running module jobs, scoped by workspace |
 | `/mcp` | * | MCP streamable HTTP, only with `KE_MCP_HTTP=1` |
 | `/ui/` | GET | The dashboard |
 | `/docs` | GET | OpenAPI / Swagger UI (provided by FastAPI) |
@@ -224,7 +237,18 @@ the body is parsed: a peer-trust gate (loopback and the Tailscale CGNAT range
 `100.64.0.0/10` by default; `KE_BOARD_TRUSTED_CIDRS` replaces the list; all
 other peers get 403), a write gate (`require_key_for_post`), and an admin gate
 (`X-Board-Key` with `board:admin`, always). Full trust model and route
-inventory in [`AGENT-BOARD.md`](AGENT-BOARD.md).
+inventory in [`AGENT-BOARD.md`](AGENT-BOARD.md). Every `/modules/*` route
+uses the same peer-trust + admin gate (mounted unless `KE_MODULES_ENABLED=0`).
+
+Modules (`knowledge_engine.modules`, ADR 0009, 0014, 0015) are the only path
+from a request to executing operator-installed code. A module's manifest is
+validated as data on register; nothing runs until an operator configures and
+enables it, and a module directory inside the corpus is refused. The MCP
+`modules` group advertises the tools of enabled modules once per server
+process. Module processes are **not sandboxed**: they run with the engine's
+OS user, without its environment (only `PATH`, locale, temp dirs and their
+declared secret references), in their own process group. See
+[`01-user-docs/MODULES.md`](../01-user-docs/MODULES.md).
 
 ## MCP surface
 

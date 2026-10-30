@@ -1,0 +1,3 @@
+Host: Welcome to the synthetic interview fixture.
+Guest: Thanks, glad to be offline and deterministic.
+Host: Every word lasts four hundred milliseconds here.

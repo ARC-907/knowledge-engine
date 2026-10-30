@@ -236,6 +236,16 @@ Use the existing tool host as an execution substrate and MCP toolkit as a
 registration substrate. Add one shared module catalog/dispatcher rather than
 separate HTTP, CLI and MCP implementations.
 
+Implemented in this branch (V2 P5, with the P6 ingestion interface) by
+`knowledge_engine.modules`: manifest v1, `modules.db` (ADR 0014), the shared
+`ModuleHost` dispatcher, `/modules` admin routes, the `knowledge-engine
+module` CLI, the generic MCP `modules` group, jobs/cancellation (ADR 0015) and
+the two reference modules in `examples/modules/`. Host ingestion is an
+interface with an in-memory double until the evidence store (P3) is wired
+in; the owner's real utilities were not available (see
+[MODULE-INVENTORY.md](MODULE-INVENTORY.md)). Operator guide:
+[`01-user-docs/MODULES.md`](../01-user-docs/MODULES.md).
+
 ### Manifest and lifecycle
 
 A proposed manifest version 1 contains:

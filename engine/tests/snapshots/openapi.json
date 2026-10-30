@@ -851,6 +851,26 @@
         "title": "ConfigPatchIn",
         "type": "object"
       },
+      "ConfigureBody": {
+        "additionalProperties": false,
+        "properties": {
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "secret name -> environment variable NAME (never a value)",
+            "title": "Secrets",
+            "type": "object"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "title": "ConfigureBody",
+        "type": "object"
+      },
       "CurationStatus": {
         "description": "Review maturity. Never inferred from model output.",
         "enum": [
@@ -861,6 +881,23 @@
         ],
         "title": "CurationStatus",
         "type": "string"
+      },
+      "DiscoverList": {
+        "properties": {
+          "directories": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Directories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "directories"
+        ],
+        "title": "DiscoverList",
+        "type": "object"
       },
       "EffectiveScope": {
         "additionalProperties": false,
@@ -994,6 +1031,34 @@
           "type"
         ],
         "title": "EmbeddingErrorResponse",
+        "type": "object"
+      },
+      "EnableBody": {
+        "additionalProperties": false,
+        "properties": {
+          "grants": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "read",
+                    "write",
+                    "network",
+                    "process"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Capabilities to grant (default: declared ∩ host policy).",
+            "title": "Grants"
+          }
+        },
+        "title": "EnableBody",
         "type": "object"
       },
       "EntryIn": {
@@ -1703,6 +1768,86 @@
         "title": "InfoResponse",
         "type": "object"
       },
+      "InvokeBody": {
+        "additionalProperties": false,
+        "properties": {
+          "effects": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "read",
+                    "write",
+                    "network",
+                    "process"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Effects this call allows, e.g. ['read'] for read-only.",
+            "title": "Effects"
+          },
+          "ingest": {
+            "default": false,
+            "description": "Ingest artifacts into the explicit scope.",
+            "title": "Ingest",
+            "type": "boolean"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopeBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default: the default workspace."
+          },
+          "timeout_ms": {
+            "anyOf": [
+              {
+                "maximum": 3600000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Ms"
+          }
+        },
+        "title": "InvokeBody",
+        "type": "object"
+      },
+      "JobList": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Jobs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "jobs"
+        ],
+        "title": "JobList",
+        "type": "object"
+      },
       "KeyCreateIn": {
         "additionalProperties": true,
         "description": "``POST /board/keys`` body. ``display_name`` is required (max 200 chars).",
@@ -2225,6 +2370,23 @@
           "body"
         ],
         "title": "MessageIn",
+        "type": "object"
+      },
+      "ModuleList": {
+        "properties": {
+          "modules": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Modules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "modules"
+        ],
+        "title": "ModuleList",
         "type": "object"
       },
       "OpenRequest": {
@@ -2889,6 +3051,23 @@
         "title": "RecordScope",
         "type": "object"
       },
+      "RegisterBody": {
+        "additionalProperties": false,
+        "properties": {
+          "directory": {
+            "description": "Sub-directory name inside KE_MODULES_DIR.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Directory",
+            "type": "string"
+          }
+        },
+        "required": [
+          "directory"
+        ],
+        "title": "RegisterBody",
+        "type": "object"
+      },
       "RegistryCounts": {
         "properties": {
           "kits": {
@@ -3227,6 +3406,31 @@
           }
         },
         "title": "RightsInfo",
+        "type": "object"
+      },
+      "ScopeBody": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "ScopeBody",
         "type": "object"
       },
       "ScopeProfile": {
@@ -6875,6 +7079,570 @@
         "summary": "List Sources",
         "tags": [
           "knowledge"
+        ]
+      }
+    },
+    "/modules": {
+      "get": {
+        "operationId": "list_modules_modules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Modules",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/discover": {
+      "get": {
+        "operationId": "discover_modules_discover_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Discover",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/jobs": {
+      "get": {
+        "operationId": "list_jobs_modules_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workspace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/jobs/{job_id}": {
+      "get": {
+        "operationId": "job_status_modules_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Job Status Modules Jobs  Job Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Status",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "job_cancel_modules_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Job Cancel Modules Jobs  Job Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Cancel",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/register": {
+      "post": {
+        "operationId": "register_modules_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Register Modules Register Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/{module_id}": {
+      "get": {
+        "operationId": "module_status_modules__module_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "module_id",
+            "required": true,
+            "schema": {
+              "title": "Module Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Module Status Modules  Module Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Module Status",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/{module_id}/configuration": {
+      "put": {
+        "operationId": "configure_modules__module_id__configuration_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "module_id",
+            "required": true,
+            "schema": {
+              "title": "Module Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Configure Modules  Module Id  Configuration Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Configure",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/{module_id}/disable": {
+      "post": {
+        "operationId": "disable_modules__module_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "module_id",
+            "required": true,
+            "schema": {
+              "title": "Module Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Disable Modules  Module Id  Disable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disable",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/{module_id}/enable": {
+      "post": {
+        "operationId": "enable_modules__module_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "module_id",
+            "required": true,
+            "schema": {
+              "title": "Module Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/EnableBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Enable Modules  Module Id  Enable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/{module_id}/health": {
+      "post": {
+        "operationId": "module_probe_modules__module_id__health_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "module_id",
+            "required": true,
+            "schema": {
+              "title": "Module Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Module Probe Modules  Module Id  Health Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Module Probe",
+        "tags": [
+          "modules"
+        ]
+      }
+    },
+    "/modules/{module_id}/tools/{tool}/invoke": {
+      "post": {
+        "operationId": "invoke_modules__module_id__tools__tool__invoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "module_id",
+            "required": true,
+            "schema": {
+              "title": "Module Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool",
+            "required": true,
+            "schema": {
+              "title": "Tool",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvokeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Invoke Modules  Module Id  Tools  Tool  Invoke Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invoke",
+        "tags": [
+          "modules"
         ]
       }
     },

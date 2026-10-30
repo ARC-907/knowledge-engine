@@ -1,0 +1,617 @@
+{
+  "$defs": {
+    "Configuration": {
+      "additionalProperties": false,
+      "properties": {
+        "secrets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SecretRef"
+          },
+          "title": "Secrets",
+          "type": "array"
+        },
+        "settings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SettingSpec"
+          },
+          "title": "Settings",
+          "type": "array"
+        }
+      },
+      "title": "Configuration",
+      "type": "object"
+    },
+    "EngineCompatibility": {
+      "additionalProperties": false,
+      "description": "Which engines and contracts the module supports.",
+      "properties": {
+        "contract_versions": {
+          "default": [
+            1
+          ],
+          "description": "Scoped-knowledge contract versions spoken.",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "title": "Contract Versions",
+          "type": "array"
+        },
+        "engine": {
+          "description": "Comma-separated comparators on the engine version, e.g. '>=3.0.0,<4.0.0'.",
+          "title": "Engine",
+          "type": "string"
+        },
+        "module_protocol": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Module Protocol",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "engine"
+      ],
+      "title": "EngineCompatibility",
+      "type": "object"
+    },
+    "HealthProbe": {
+      "additionalProperties": false,
+      "description": "A bounded health check, run on request (never during discovery).",
+      "properties": {
+        "command": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "script: argv of the probe.",
+          "title": "Command"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "pattern": "^/?[A-Za-z0-9._~/-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "service path.",
+          "title": "Path"
+        },
+        "timeout_ms": {
+          "default": 5000,
+          "maximum": 30000,
+          "minimum": 100,
+          "title": "Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "title": "HealthProbe",
+      "type": "object"
+    },
+    "Limits": {
+      "additionalProperties": false,
+      "description": "Per-module resource bounds; the host enforces every one of them.",
+      "properties": {
+        "concurrency": {
+          "default": 2,
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "deadline_ms": {
+          "default": 30000,
+          "maximum": 3600000,
+          "minimum": 100,
+          "title": "Deadline Ms",
+          "type": "integer"
+        },
+        "job_ttl_s": {
+          "default": 3600,
+          "description": "Job result retention.",
+          "maximum": 604800,
+          "minimum": 60,
+          "title": "Job Ttl S",
+          "type": "integer"
+        },
+        "max_artifact_bytes": {
+          "default": 8388608,
+          "maximum": 268435456,
+          "minimum": 0,
+          "title": "Max Artifact Bytes",
+          "type": "integer"
+        },
+        "max_artifacts": {
+          "default": 16,
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Max Artifacts",
+          "type": "integer"
+        },
+        "max_input_bytes": {
+          "default": 65536,
+          "maximum": 16777216,
+          "minimum": 2,
+          "title": "Max Input Bytes",
+          "type": "integer"
+        },
+        "max_output_bytes": {
+          "default": 1048576,
+          "maximum": 67108864,
+          "minimum": 64,
+          "title": "Max Output Bytes",
+          "type": "integer"
+        },
+        "max_retries": {
+          "default": 0,
+          "description": "Automatic retries; only idempotent tools use them.",
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Max Retries",
+          "type": "integer"
+        }
+      },
+      "title": "Limits",
+      "type": "object"
+    },
+    "McpTransport": {
+      "additionalProperties": false,
+      "description": "Call tools of an external MCP server (stdio argv or a streamable-HTTP URL setting).",
+      "properties": {
+        "command": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "stdio: argv of the server process.",
+          "title": "Command"
+        },
+        "connection": {
+          "enum": [
+            "stdio",
+            "streamable_http"
+          ],
+          "title": "Connection",
+          "type": "string"
+        },
+        "kind": {
+          "const": "mcp",
+          "default": "mcp",
+          "title": "Kind",
+          "type": "string"
+        },
+        "url_setting": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "streamable_http: configuration setting holding the approved URL.",
+          "title": "Url Setting"
+        }
+      },
+      "required": [
+        "connection"
+      ],
+      "title": "McpTransport",
+      "type": "object"
+    },
+    "ScriptTransport": {
+      "additionalProperties": false,
+      "description": "Run ``command`` (interpreter + script under the module directory) once per call.",
+      "properties": {
+        "command": {
+          "description": "argv, no shell: an allowlisted interpreter, then a script in the module dir.",
+          "items": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Command",
+          "type": "array"
+        },
+        "kind": {
+          "const": "script",
+          "default": "script",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "ScriptTransport",
+      "type": "object"
+    },
+    "SecretRef": {
+      "additionalProperties": false,
+      "description": "A credential the module needs, named by reference only (never a value).",
+      "properties": {
+        "description": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Description",
+          "type": "string"
+        },
+        "env": {
+          "description": "Host environment variable that holds the value (the operator may remap it).",
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Env",
+          "type": "string"
+        },
+        "header": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "service transport: send the value in this HTTP header.",
+          "title": "Header"
+        },
+        "header_prefix": {
+          "default": "",
+          "maxLength": 32,
+          "title": "Header Prefix",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "env"
+      ],
+      "title": "SecretRef",
+      "type": "object"
+    },
+    "ServiceTransport": {
+      "additionalProperties": false,
+      "description": "POST the call to an operator-approved HTTP service (URL from configuration).",
+      "properties": {
+        "kind": {
+          "const": "service",
+          "default": "service",
+          "title": "Kind",
+          "type": "string"
+        },
+        "url_setting": {
+          "description": "Configuration setting holding the approved base URL (http/https).",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Url Setting",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url_setting"
+      ],
+      "title": "ServiceTransport",
+      "type": "object"
+    },
+    "SettingSpec": {
+      "additionalProperties": false,
+      "description": "A named, non-secret configuration setting.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "integer",
+            "boolean",
+            "string_list"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SettingSpec",
+      "type": "object"
+    },
+    "ToolSpec": {
+      "additionalProperties": false,
+      "description": "One tool of a module.",
+      "properties": {
+        "artifact_inputs": {
+          "default": [],
+          "description": "Input fields holding host artifact ids the host resolves and approves.",
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "title": "Artifact Inputs",
+          "type": "array"
+        },
+        "description": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "effect": {
+          "description": "What the tool does: read, write, network or process.",
+          "enum": [
+            "read",
+            "write",
+            "network",
+            "process"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "idempotent": {
+          "default": false,
+          "description": "Safe to retry automatically.",
+          "title": "Idempotent",
+          "type": "boolean"
+        },
+        "input_schema": {
+          "additionalProperties": true,
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "long_running": {
+          "default": false,
+          "description": "Runs as a job: the call returns a job id immediately.",
+          "title": "Long Running",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Stable tool name within the module.",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "output_schema": {
+          "additionalProperties": true,
+          "title": "Output Schema",
+          "type": "object"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "pattern": "^/?[A-Za-z0-9._~/-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "service transport: path below the service URL (default /<tool name>).",
+          "title": "Path"
+        },
+        "remote_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "mcp transport: the upstream tool name.",
+          "title": "Remote Name"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "input_schema",
+        "output_schema",
+        "effect"
+      ],
+      "title": "ToolSpec",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/ARC-907/knowledge-engine/module-manifest-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Manifest version 1 of a module (see the module docstring).",
+  "properties": {
+    "capabilities": {
+      "items": {
+        "enum": [
+          "read",
+          "write",
+          "network",
+          "process"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "configuration": {
+      "$ref": "#/$defs/Configuration"
+    },
+    "description": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "engine_compatibility": {
+      "$ref": "#/$defs/EngineCompatibility"
+    },
+    "health": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HealthProbe"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "license": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "License",
+      "type": "string"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    },
+    "manifest_version": {
+      "const": 1,
+      "title": "Manifest Version",
+      "type": "integer"
+    },
+    "module_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_]*(?:[.-][a-z0-9_]+)*$",
+      "title": "Module Id",
+      "type": "string"
+    },
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/ToolSpec"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Tools",
+      "type": "array"
+    },
+    "transport": {
+      "discriminator": {
+        "mapping": {
+          "mcp": "#/$defs/McpTransport",
+          "script": "#/$defs/ScriptTransport",
+          "service": "#/$defs/ServiceTransport"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ScriptTransport"
+        },
+        {
+          "$ref": "#/$defs/ServiceTransport"
+        },
+        {
+          "$ref": "#/$defs/McpTransport"
+        }
+      ],
+      "title": "Transport"
+    },
+    "version": {
+      "maxLength": 64,
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "manifest_version",
+    "module_id",
+    "version",
+    "license",
+    "description",
+    "engine_compatibility",
+    "transport",
+    "tools",
+    "capabilities"
+  ],
+  "title": "ModuleManifest",
+  "type": "object"
+}

@@ -1,0 +1,27 @@
+{
+  "manifest_version": 1,
+  "module_id": "test.probe",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Test fixture: behaviour selected by the input 'mode'.",
+  "engine_compatibility": {"engine": ">=0.0.0", "contract_versions": [1]},
+  "transport": {"kind": "script", "command": ["python", "probe.py"]},
+  "capabilities": ["read", "write", "process"],
+  "tools": [
+    {"name": "run", "description": "Run a mode.", "effect": "read",
+     "input_schema": {"type": "object", "properties": {"mode": {"type": "string"}, "seconds": {"type": "number"}, "pid_file": {"type": "string"}, "marker": {"type": "string"}, "count": {"type": "integer"}, "size": {"type": "integer"}}, "required": ["mode"]},
+     "output_schema": {"type": "object", "required": ["mode"]}},
+    {"name": "run_idem", "description": "Run a mode (idempotent).", "effect": "read", "idempotent": true,
+     "input_schema": {"type": "object", "properties": {"mode": {"type": "string"}, "marker": {"type": "string"}}, "required": ["mode"]},
+     "output_schema": {"type": "object"}},
+    {"name": "write_thing", "description": "Pretend to write.", "effect": "write",
+     "input_schema": {"type": "object", "properties": {"mode": {"type": "string"}}},
+     "output_schema": {"type": "object"}},
+    {"name": "slow_job", "description": "Long-running mode runner.", "effect": "read", "long_running": true,
+     "input_schema": {"type": "object", "properties": {"mode": {"type": "string"}, "seconds": {"type": "number"}, "pid_file": {"type": "string"}}, "required": ["mode"]},
+     "output_schema": {"type": "object"}}
+  ],
+  "configuration": {"secrets": [{"name": "api_token", "env": "PROBE_TOKEN", "required": false}]},
+  "limits": {"deadline_ms": 10000, "concurrency": 1, "max_output_bytes": 4096, "max_artifact_bytes": 2048, "max_artifacts": 2, "max_retries": 2, "job_ttl_s": 60},
+  "health": {"command": ["python", "probe.py", "--health"], "timeout_ms": 3000}
+}

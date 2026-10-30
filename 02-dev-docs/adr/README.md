@@ -20,3 +20,5 @@ both ways.
 | [0011](0011-retrieval-broker-fusion-and-adapters.md) | Retrieval broker: candidate caps, fusion, filtering and source mapping | Accepted |
 | [0012](0012-evidence-store-and-ingestion.md) | Evidence store layout, idempotent ingestion and rename detection | Accepted |
 | [0013](0013-citation-identity-and-export.md) | Citation identity, claim validation and export formats | Accepted |
+| [0014](0014-module-catalog-store-and-script-protocol.md) | Module catalog in its own `modules.db`; script wire protocol v1 | Accepted |
+| [0015](0015-module-jobs-cancellation-and-ingestion.md) | Module jobs, cancellation and the host-ingestion interface | Accepted |

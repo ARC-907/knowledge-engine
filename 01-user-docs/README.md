@@ -14,6 +14,7 @@ work down; each guide is self-contained.
 | [SCOPED-KNOWLEDGE.md](SCOPED-KNOWLEDGE.md) | Organise content into workspaces, projects and collections; migrate the corpus metadata. |
 | [KNOWLEDGE-SEARCH.md](KNOWLEDGE-SEARCH.md) | Scoped search and open across the corpus and linked project context (the retrieval broker). |
 | [CITATIONS.md](CITATIONS.md) | Record corpus revisions, open exact evidence, validate claims and export citations. |
+| [MODULES.md](MODULES.md) | Register, configure and run executable utilities (modules) through CLI, HTTP and MCP; author your own. |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Run the engine beyond your laptop — service, LAN, Docker, hardening, backups, upgrades. |
 | [CONFIGURATION.md](CONFIGURATION.md) | Look up every environment variable, its type and default (generated from the code). |
 | [THEMING.md](THEMING.md) | Restyle or rebuild the dashboard. |

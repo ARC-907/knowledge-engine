@@ -117,6 +117,15 @@ def _mount_board(app: FastAPI) -> None:
         _logger.exception("agent board failed to mount; continuing without it")
 
 
+def _mount_modules(app: FastAPI) -> None:
+    try:
+        from .api import module_routes  # noqa: PLC0415 - optional subsystem
+
+        app.include_router(module_routes.router, prefix="/modules", tags=["modules"])
+    except Exception:
+        _logger.exception("module routes failed to mount; continuing without them")
+
+
 def _mount_mcp(app: FastAPI, settings: Settings) -> None:
     try:
         # Optional surface, imported lazily: the MCP SDK is only loaded when enabled.
@@ -154,6 +163,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(generate_routes.router, prefix="/generate", tags=["generate"])
     if settings.knowledge_enabled:
         app.include_router(knowledge_routes.router, prefix="/knowledge", tags=["knowledge"])
+    if settings.modules_enabled:
+        _mount_modules(app)
     app.add_middleware(
         BodySizeLimitMiddleware,
         max_bytes=generate_routes.MAX_REQUEST_BODY_BYTES,

@@ -1,0 +1,71 @@
+{
+  "manifest_version": 1,
+  "module_id": "example.transcribe",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Reference transcription module: accepts an approved artifact id and returns language, timed segments, engine/model version and parent provenance. A deterministic fake engine is built in; a real engine is an operator-installed CLI named in configuration.",
+  "engine_compatibility": {"engine": ">=3.0.0,<4.0.0", "contract_versions": [1], "module_protocol": 1},
+  "transport": {"kind": "script", "command": ["python", "transcribe.py"]},
+  "capabilities": ["read", "process"],
+  "tools": [
+    {
+      "name": "transcribe",
+      "description": "Transcribe one approved media artifact into timed segments (runs as a job).",
+      "effect": "read",
+      "idempotent": true,
+      "long_running": true,
+      "artifact_inputs": ["artifact_id"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {"type": "string", "pattern": "^art_[0-9a-f]{32}$"},
+          "language": {"type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$"}
+        },
+        "required": ["artifact_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "language": {"type": "string"},
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start_ms": {"type": "integer", "minimum": 0},
+                "end_ms": {"type": "integer", "minimum": 0},
+                "speaker": {"type": ["string", "null"]},
+                "text": {"type": "string"}
+              },
+              "required": ["start_ms", "end_ms", "speaker", "text"],
+              "additionalProperties": false
+            }
+          },
+          "engine": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}, "version": {"type": "string"}, "model": {"type": "string"}},
+            "required": ["name", "version", "model"]
+          },
+          "parent": {
+            "type": "object",
+            "properties": {"artifact_id": {"type": "string"}, "digest": {"type": "string"}, "canonical_uri": {"type": ["string", "null"]}},
+            "required": ["artifact_id", "digest"]
+          }
+        },
+        "required": ["language", "segments", "engine", "parent"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "configuration": {
+    "settings": [
+      {"name": "engine", "type": "string", "default": "fake", "description": "fake (deterministic, offline) or command (an operator-installed CLI)."},
+      {"name": "command", "type": "string_list", "default": [], "description": "argv of the real engine; {input} is replaced by the media file path. Must print the segment JSON."},
+      {"name": "default_language", "type": "string", "default": "en"},
+      {"name": "fake_delay_ms", "type": "integer", "default": 0, "description": "Fake engine only: simulated processing time."}
+    ]
+  },
+  "limits": {"deadline_ms": 600000, "concurrency": 1, "max_input_bytes": 1024, "max_output_bytes": 4194304, "max_artifact_bytes": 4194304, "max_artifacts": 1, "max_retries": 1, "job_ttl_s": 3600},
+  "health": {"command": ["python", "transcribe.py", "--health"], "timeout_ms": 5000}
+}

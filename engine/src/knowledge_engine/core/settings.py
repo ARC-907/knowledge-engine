@@ -74,6 +74,7 @@ SECTIONS: dict[str, str] = {
     "generation": "Generation providers",
     "embeddings": "Embeddings (semantic and hybrid search)",
     "knowledge": "Scoped knowledge metadata",
+    "modules": "Modules (executable utilities)",
     "substrate": "Pipeline and substrates",
 }
 
@@ -548,6 +549,42 @@ class Settings(BaseSettings):
         read_by="knowledge.config",
         ge=1,
         le=256 * 1024 * 1024,
+    )
+
+    # ── Modules (catalog, dispatcher; modules.db) ────────────────
+    modules_enabled: EnvBool = _env(
+        "KE_MODULES_ENABLED",
+        True,
+        "Expose the module surfaces: the admin-gated /modules HTTP routes and the MCP tools "
+        "of enabled modules. Nothing runs until an operator registers and enables a module; "
+        "the `knowledge-engine module` CLI always works.",
+        section="modules",
+        read_by="server.app, server.lifespan, mcp.server",
+    )
+    modules_dir: str | None = _env(
+        "KE_MODULES_DIR",
+        None,
+        "Operator directory of module packages (one sub-directory per module with a "
+        "module.json/module.yaml). `module discover` reads it; HTTP registration only accepts "
+        "directories inside it. Never a watched corpus folder.",
+        section="modules",
+        read_by="modules.config",
+    )
+    modules_db: str | None = _env(
+        "KE_MODULES_DB",
+        None,
+        "Module catalog (intent, configuration, observed health, runs, jobs, artifacts). "
+        "Unset: <data_dir>/modules.db; artifact bytes go next to it in module-artifacts/.",
+        section="modules",
+        read_by="modules.config",
+    )
+    modules_host_capabilities: str = _env(
+        "KE_MODULES_HOST_CAPABILITIES",
+        "read,network,process",
+        "Host policy: the capabilities any module may be granted (comma-separated subset of "
+        "read, write, network, process). Authoritative over manifests and operator grants.",
+        section="modules",
+        read_by="modules.config",
     )
 
     # ── Pipeline and substrates (read directly by those modules) ──
