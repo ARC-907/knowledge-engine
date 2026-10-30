@@ -23,10 +23,15 @@ from .contracts import (
     Description,
     DisplayName,
     EffectiveScope,
+    EvidenceId,
+    Locator,
+    OpenResult,
     Project,
     ProjectId,
     RecordId,
     ResearchType,
+    Revision,
+    RevisionId,
     ScopeProfile,
     Source,
     SourceId,
@@ -37,6 +42,17 @@ from .contracts import (
     validation_messages,
 )
 from .errors import InvalidInputError
+from .evidence.citations import (
+    CitationExportRequest,
+    CitationExportResult,
+    CitationRequest,
+    ValidationReport,
+    export_citations,
+    validate_claims,
+)
+from .evidence.policy import EvidencePolicy
+from .evidence.resolve import open_evidence, open_span
+from .evidence.store import EVIDENCE_SCHEMA_VERSION, EvidenceStore
 from .store import MAX_PAGE, UNSET, KnowledgeStore
 
 
@@ -148,6 +164,24 @@ class ProjectContextUnlinkInput(_Input):
     project_id: ProjectId
 
 
+class EvidenceOpenInput(_Input):
+    """Open the exact cited revision: a stored ``evidence_id``, or record + revision (+ locator)."""
+
+    context: dict[str, Any] = Field(
+        description="A QueryContext (workspace_id required); the record must be in its scope."
+    )
+    evidence_id: EvidenceId | None = None
+    source_id: SourceId | None = None
+    record_id: RecordId | None = None
+    revision_id: RevisionId | None = None
+    locator: Locator | None = Field(default=None, description="A typed locator (ADR 0007).")
+
+
+class EvidenceRevisionsInput(_Input):
+    source_id: SourceId
+    record_id: RecordId
+
+
 # ── Outputs ──────────────────────────────────────────────────────────
 
 
@@ -194,6 +228,34 @@ class ProjectContextLink(BaseModel):
     linked: bool
 
 
+class EvidenceOpenResult(BaseModel):
+    """The P0 ``OpenResult`` plus why it is not verified and the evidence identity."""
+
+    result: OpenResult
+    reason: str | None = None
+    evidence_id: str | None = None
+    excerpt_digest: str | None = None
+    current_revision_id: str | None = None
+    notice: str = "Verification states describe evidence resolution, not the truth of any claim."
+
+
+class RevisionEntry(BaseModel):
+    revision: Revision
+    current: bool
+    deleted_at: str | None = None
+    external_locator: str | None = None
+
+
+class EvidenceRevisions(BaseModel):
+    source_id: str
+    record_id: str
+    logical_path: str | None
+    aliases: list[str]
+    current_revision_id: str | None
+    deleted_at: str | None
+    revisions: list[RevisionEntry]
+
+
 class StatusCounts(BaseModel):
     workspaces: int
     projects: int
@@ -210,6 +272,11 @@ class KnowledgeStatus(BaseModel):
     records_by_research_type: dict[str, int]
     records_by_curation_status: dict[str, int]
     last_backfill: dict[str, Any] | None = None
+    evidence: dict[str, int] | None = Field(
+        default=None,
+        description="Evidence store counts (revisions, spans, tombstones, pending outbox); "
+        "absent before schema version 2.",
+    )
 
 
 # ── Service ──────────────────────────────────────────────────────────
@@ -218,12 +285,22 @@ class KnowledgeStatus(BaseModel):
 class KnowledgeService:
     """The admin operations around one store; every method returns a model."""
 
-    def __init__(self, store: KnowledgeStore, *, profile: str = "default") -> None:
+    def __init__(
+        self,
+        store: KnowledgeStore,
+        *,
+        profile: str = "default",
+        evidence_policy: EvidencePolicy | None = None,
+    ) -> None:
         self.store = store
         self.profile = profile
+        self.evidence = EvidenceStore(store, evidence_policy)
 
     def status(self, _: NoInput | None = None) -> KnowledgeStatus:
-        return KnowledgeStatus.model_validate(self.store.status())
+        status = self.store.status()
+        if status["schema_version"] >= EVIDENCE_SCHEMA_VERSION:
+            status["evidence"] = self.evidence.stats()
+        return KnowledgeStatus.model_validate(status)
 
     def workspace_create(self, data: WorkspaceCreate) -> Workspace:
         return self.store.create_workspace(
@@ -334,6 +411,63 @@ class KnowledgeService:
         return ProjectContextLink.model_validate(
             unlink_project(self.store, data.workspace_id, data.project_id)
         )
+
+    def evidence_open(self, data: EvidenceOpenInput) -> EvidenceOpenResult:
+        context = parse_query_context(data.context)
+        explicit = (data.source_id, data.record_id, data.revision_id)
+        if data.evidence_id is not None:
+            if any(v is not None for v in (*explicit, data.locator)):
+                raise InvalidInputError("give either evidence_id or source/record/revision")
+            res = open_span(
+                self.evidence, context, data.evidence_id, configured_profile=self.profile
+            )
+        else:
+            if any(v is None for v in explicit):
+                raise InvalidInputError("source_id, record_id and revision_id are required")
+            res = open_evidence(
+                self.evidence,
+                context,
+                source_id=str(data.source_id),
+                record_id=str(data.record_id),
+                revision_id=str(data.revision_id),
+                locator=data.locator,
+                configured_profile=self.profile,
+            )
+        return EvidenceOpenResult(
+            result=res.result,
+            reason=res.reason,
+            evidence_id=res.evidence_id,
+            excerpt_digest=res.excerpt_digest,
+            current_revision_id=res.current_revision_id,
+        )
+
+    def evidence_revisions(self, data: EvidenceRevisionsInput) -> EvidenceRevisions:
+        with self.evidence.snapshot():
+            state = self.evidence.record_state(data.source_id, data.record_id)
+            infos = self.evidence.list_revisions(data.source_id, data.record_id)
+        return EvidenceRevisions(
+            source_id=data.source_id,
+            record_id=data.record_id,
+            logical_path=state.record.logical_path,
+            aliases=list(state.record.aliases),
+            current_revision_id=state.current_revision_id,
+            deleted_at=state.deleted_at,
+            revisions=[
+                RevisionEntry(
+                    revision=info.revision,
+                    current=info.revision.revision_id == state.current_revision_id,
+                    deleted_at=info.deleted_at,
+                    external_locator=info.external_locator,
+                )
+                for info in infos
+            ],
+        )
+
+    def cite_validate(self, data: CitationRequest) -> ValidationReport:
+        return validate_claims(self.evidence, data, configured_profile=self.profile)
+
+    def cite_export(self, data: CitationExportRequest) -> CitationExportResult:
+        return export_citations(self.evidence, data, configured_profile=self.profile)
 
 
 @dataclass(frozen=True)
@@ -457,6 +591,42 @@ OPERATIONS: tuple[Operation, ...] = (
         "project_context_unlink",
         False,
     ),
+    Operation(
+        "evidence_open",
+        "Open the exact cited revision of a record (by evidence_id, or source/record/"
+        "revision plus an optional typed locator) after rechecking the scope. Returns "
+        "verified, stale (a newer revision exists; the cited one is returned), unavailable "
+        "(bytes deleted or not retained), ambiguous or unsupported -- never the latest "
+        "revision silently.",
+        EvidenceOpenInput,
+        "evidence_open",
+        True,
+    ),
+    Operation(
+        "evidence_revisions",
+        "List the revisions of a record (oldest first), its current revision, aliases "
+        "(former paths) and deletion state.",
+        EvidenceRevisionsInput,
+        "evidence_revisions",
+        True,
+    ),
+    Operation(
+        "cite_validate",
+        "Validate a claim-to-evidence map: every cited span must resolve in scope, "
+        "quotations must match their spans exactly, claims without resolvable evidence are "
+        "reported. Not proof that the evidence entails the claims.",
+        CitationRequest,
+        "cite_validate",
+        False,
+    ),
+    Operation(
+        "cite_export",
+        "Validate a claim-to-evidence map and export deterministic Markdown references "
+        "and/or CSL-JSON, deduplicated by evidence identity (scope rechecked).",
+        CitationExportRequest,
+        "cite_export",
+        False,
+    ),
 )
 
 OPERATIONS_BY_NAME: dict[str, Operation] = {op.name: op for op in OPERATIONS}
@@ -486,6 +656,10 @@ __all__ = [
     "CollectionCreate",
     "CollectionList",
     "CollectionListInput",
+    "EvidenceOpenInput",
+    "EvidenceOpenResult",
+    "EvidenceRevisions",
+    "EvidenceRevisionsInput",
     "KnowledgeService",
     "KnowledgeStatus",
     "MembershipInput",
@@ -502,6 +676,7 @@ __all__ = [
     "RecordPage",
     "RecordQueryInput",
     "RecordRefIn",
+    "RevisionEntry",
     "SourceList",
     "WorkspaceCreate",
     "WorkspaceList",

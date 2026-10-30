@@ -22,6 +22,7 @@ from typing import Any
 
 from .config import KnowledgeConfig
 from .errors import InternalError, KnowledgeError, UnavailableError
+from .evidence.policy import EvidencePolicy
 from .service import OPERATIONS, KnowledgeService, invoke
 from .store import KnowledgeStore
 
@@ -36,9 +37,12 @@ _CONTEXTS_LOCK = threading.Lock()
 class KnowledgeToolContext:
     """Opens the configured store on first use; :meth:`close` releases it."""
 
-    def __init__(self, db_path: Path, *, profile: str) -> None:
+    def __init__(
+        self, db_path: Path, *, profile: str, evidence_policy: EvidencePolicy | None = None
+    ) -> None:
         self.db_path = db_path
         self.profile = profile
+        self.evidence_policy = evidence_policy
         self._lock = threading.Lock()
         self._service: KnowledgeService | None = None
         with _CONTEXTS_LOCK:
@@ -46,7 +50,7 @@ class KnowledgeToolContext:
 
     @classmethod
     def from_config(cls, config: KnowledgeConfig) -> KnowledgeToolContext:
-        return cls(config.db_path, profile=config.profile)
+        return cls(config.db_path, profile=config.profile, evidence_policy=config.evidence)
 
     def service(self) -> KnowledgeService:
         with self._lock:
@@ -58,7 +62,9 @@ class KnowledgeToolContext:
                 except Exception as exc:
                     _logger.exception("cannot open the knowledge store %s", self.db_path)
                     raise UnavailableError("the knowledge store cannot be opened") from exc
-                self._service = KnowledgeService(store, profile=self.profile)
+                self._service = KnowledgeService(
+                    store, profile=self.profile, evidence_policy=self.evidence_policy
+                )
             return self._service
 
     def close(self) -> None:

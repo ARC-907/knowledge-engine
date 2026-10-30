@@ -216,7 +216,9 @@ def _open_knowledge(app: FastAPI, settings: Settings) -> None:
 
         config = KnowledgeConfig.from_settings(settings)
         app.state.knowledge = KnowledgeService(
-            KnowledgeStore.open(config.db_path), profile=config.profile
+            KnowledgeStore.open(config.db_path),
+            profile=config.profile,
+            evidence_policy=config.evidence,
         )
     except Exception:
         _logger.exception("knowledge store could not be opened; /knowledge will answer 503")

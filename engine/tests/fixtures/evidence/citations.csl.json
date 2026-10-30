@@ -1,0 +1,61 @@
+[
+  {
+    "id": "ev_383cb9358e718a622151dc835abedf6a",
+    "type": "article-journal",
+    "title": "Deep *Learning* [draft] <v2>",
+    "author": [
+      {
+        "literal": "Ada Lovelace"
+      },
+      {
+        "literal": "Alan Turing"
+      }
+    ],
+    "issued": {
+      "date-parts": [
+        [
+          2024,
+          5
+        ]
+      ]
+    },
+    "container-title": "Journal of Tests",
+    "publisher": "Test Press",
+    "URL": "https://example.org/a%20b?x=%3C1%3E",
+    "DOI": "10.1000/xyz",
+    "note": "module:papers paper-1 revision rev_220497e39f20239baa7234cfba03942b; bytes [12, 35); verification verified",
+    "custom": {
+      "evidence_id": "ev_383cb9358e718a622151dc835abedf6a",
+      "source_id": "module:papers",
+      "record_id": "paper-1",
+      "revision_id": "rev_220497e39f20239baa7234cfba03942b",
+      "canonical_uri": "https://example.org/a b?x=<1>",
+      "locator": {
+        "kind": "text",
+        "heading": null,
+        "start_byte": 12,
+        "end_byte": 35
+      },
+      "verification": "verified"
+    }
+  },
+  {
+    "id": "ev_d8a4f9abf697d5c2e2439b7c5b4f2583",
+    "type": "document",
+    "note": "module:papers note-1 revision rev_1a9caeeee02b723f898cd63b7735da85; bytes [0, 29); verification verified",
+    "custom": {
+      "evidence_id": "ev_d8a4f9abf697d5c2e2439b7c5b4f2583",
+      "source_id": "module:papers",
+      "record_id": "note-1",
+      "revision_id": "rev_1a9caeeee02b723f898cd63b7735da85",
+      "canonical_uri": "javascript:alert(1)",
+      "locator": {
+        "kind": "text",
+        "heading": null,
+        "start_byte": 0,
+        "end_byte": 29
+      },
+      "verification": "verified"
+    }
+  }
+]
