@@ -196,9 +196,10 @@ def test_entry_resolver_matches_fts_attribution() -> None:
 
 def test_ownership_keys_survive_windows_normcase(monkeypatch: pytest.MonkeyPatch) -> None:
     """On Windows os.path.normcase lowercases *and* turns "/" into "\\"."""
-    import knowledge_engine.retrieval.ownership as ownership_mod
-
-    monkeypatch.setattr(ownership_mod.os.path, "normcase", lambda p: p.replace("/", "\\").lower())
+    monkeypatch.setattr(
+        "knowledge_engine.retrieval.ownership.os.path.normcase",
+        lambda p: p.replace("/", "\\").lower(),
+    )
     ownership = EntryOwnership(
         [
             {"id": "outer", "kind": "library", "path": "Libraries/Zoo"},
