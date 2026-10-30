@@ -19,7 +19,8 @@ under random ordering:
   from probing generation providers (an HTTP call to a local Ollama) on a
   background thread; tests stay offline and deterministic. A test that needs
   the probe sets it itself.
-* **Module state** -- the default sweeper is stopped and cleared, and this
+* **Module state** -- the default sweeper is stopped and cleared, the
+  process-default module host is closed, and this
   thread's cached pipeline-DB connections are closed, before and after each
   test.
 """
@@ -35,9 +36,11 @@ import pytest
 
 def _reset_engine_state() -> None:
     from knowledge_engine.agent_board import sweeper
+    from knowledge_engine.modules import dispatcher as modules_dispatcher
     from knowledge_engine.runtime.foundation import db
 
     sweeper.reset_for_tests()
+    modules_dispatcher.close_default_host()
     db.close_all()
     # One-shot FTS backfill guard is per DB path; tmp paths are never reused,
     # but clearing it keeps each test's first connection on the full init path.

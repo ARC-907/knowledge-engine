@@ -1,0 +1,58 @@
+{
+  "manifest_version": 1,
+  "module_id": "example.news",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Reference news/media fetcher: fetches an approved public input and returns its canonical URL, timestamps, rights metadata and a content artifact. Offline by default (file fixtures); live HTTP is opt-in configuration.",
+  "engine_compatibility": {"engine": ">=3.0.0,<4.0.0", "contract_versions": [1], "module_protocol": 1},
+  "transport": {"kind": "script", "command": ["python", "fetch.py"]},
+  "capabilities": ["read", "network", "process"],
+  "tools": [
+    {
+      "name": "fetch",
+      "description": "Fetch one approved article (file fixture, or an allowlisted http(s) host when live HTTP is enabled).",
+      "effect": "read",
+      "idempotent": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": {"type": "string", "minLength": 1, "maxLength": 2048, "description": "file:// fixture URL or allowlisted http(s) URL"}
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "canonical_url": {"type": "string"},
+          "title": {"type": ["string", "null"]},
+          "published_at": {"type": ["string", "null"]},
+          "retrieved_at": {"type": "string"},
+          "media_type": {"type": "string"},
+          "byte_length": {"type": "integer", "minimum": 0},
+          "rights": {
+            "type": "object",
+            "properties": {
+              "license": {"type": ["string", "null"]},
+              "retention": {"enum": ["retain", "digest_only", "tombstone"]},
+              "notes": {"type": ["string", "null"]}
+            },
+            "required": ["retention"]
+          }
+        },
+        "required": ["canonical_url", "retrieved_at", "published_at", "rights", "media_type"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "configuration": {
+    "settings": [
+      {"name": "fixture_roots", "type": "string_list", "default": ["fixtures"], "description": "Directories (relative to the module) file:// inputs may come from."},
+      {"name": "allow_live_http", "type": "boolean", "default": false, "description": "Opt in to fetching http(s) URLs."},
+      {"name": "allowed_hosts", "type": "string_list", "default": [], "description": "Hosts live HTTP may fetch from."},
+      {"name": "default_license", "type": "string", "default": "unknown", "description": "License recorded when a live page declares none."}
+    ]
+  },
+  "limits": {"deadline_ms": 20000, "concurrency": 2, "max_input_bytes": 4096, "max_output_bytes": 4194304, "max_artifact_bytes": 2097152, "max_artifacts": 1, "max_retries": 1},
+  "health": {"command": ["python", "fetch.py", "--health"], "timeout_ms": 5000}
+}

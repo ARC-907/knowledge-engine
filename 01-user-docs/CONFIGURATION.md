@@ -85,6 +85,15 @@ is used instead.
 | `KE_KNOWLEDGE_DEFAULT_WORKSPACE` | string | `default` | Id of the default workspace `knowledge migrate --apply` creates and registers the existing corpus in (lowercase letters, digits, `.`, `_`, `-`). | `knowledge.config` |
 | `KE_KNOWLEDGE_PROFILE` | string | `default` | Scope profile used for every selection a knowledge query omits. `default` (built in unless stored): every source of the workspace, no other constraint. | `knowledge.config` |
 
+## Modules (executable utilities)
+
+| Variable | Type | Default | Description | Read by |
+|---|---|---|---|---|
+| `KE_MODULES_ENABLED` | bool | `1` | Expose the module surfaces: the admin-gated /modules HTTP routes and the MCP tools of enabled modules. Nothing runs until an operator registers and enables a module; the `knowledge-engine module` CLI always works. | `server.app, server.lifespan, mcp.server` |
+| `KE_MODULES_DIR` | string (optional) | *(unset)* | Operator directory of module packages (one sub-directory per module with a module.json/module.yaml). `module discover` reads it; HTTP registration only accepts directories inside it. Never a watched corpus folder. | `modules.config` |
+| `KE_MODULES_DB` | string (optional) | *(unset)* | Module catalog (intent, configuration, observed health, runs, jobs, artifacts). Unset: <data_dir>/modules.db; artifact bytes go next to it in module-artifacts/. | `modules.config` |
+| `KE_MODULES_HOST_CAPABILITIES` | string | `read,network,process` | Host policy: the capabilities any module may be granted (comma-separated subset of read, write, network, process). Authoritative over manifests and operator grants. | `modules.config` |
+
 ## Pipeline and substrates
 
 | Variable | Type | Default | Description | Read by |
