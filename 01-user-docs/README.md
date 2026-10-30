@@ -6,6 +6,7 @@ work down; each guide is self-contained.
 | Guide | Read it when you want to… |
 | --- | --- |
 | [QUICKSTART.md](QUICKSTART.md) | Install, run, and see search working in about ten minutes. |
+| [UPGRADING.md](UPGRADING.md) | Upgrade from 3.0 to 3.1, turn on the new features, roll back. |
 | [BRING-YOUR-OWN-CORPUS.md](BRING-YOUR-OWN-CORPUS.md) | Replace the demo content with your own. |
 | [LIBRARY-AUTHORING.md](LIBRARY-AUTHORING.md) | Author a domain library with the three-lens framework. |
 | [SKILL-AUTHORING.md](SKILL-AUTHORING.md) | Add skill packages the engine can index and surface. |

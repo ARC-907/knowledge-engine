@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org)
-[![Version 3.0.0](https://img.shields.io/badge/version-3.0.0-blue.svg)](CHANGELOG.md)
+[![Version 3.1.0](https://img.shields.io/badge/version-3.1.0-blue.svg)](CHANGELOG.md)
 [![MCP protocol](https://img.shields.io/badge/MCP-2026--07--28-7C3AED.svg)](https://modelcontextprotocol.io)
 ![FTS5 + bge-m3](https://img.shields.io/badge/search-FTS5%20%2B%20bge--m3-003B57.svg?logo=sqlite&logoColor=white)
 
@@ -119,8 +119,10 @@ commands (`serve`, `board-serve`, `mcp`, `watch`) default to `KE_LOG_LEVEL`
 ## Documentation
 
 - **User guides** — [`01-user-docs/`](01-user-docs/README.md): Quickstart,
-  bring your own corpus, library and skill authoring, MCP wiring, embeddings,
-  deployment (including Docker), configuration reference, theming, FAQ.
+  [upgrading from 3.0](01-user-docs/UPGRADING.md), bring your own corpus,
+  library and skill authoring, MCP wiring, embeddings, scoped knowledge and
+  search, citations, modules, Serena, the dashboard, deployment (including
+  Docker), configuration reference, theming, FAQ.
 - **Engine internals** — [ARCHITECTURE.md](02-dev-docs/ARCHITECTURE.md),
   [CATALOG.md](02-dev-docs/CATALOG.md), [AGENT-BOARD.md](02-dev-docs/AGENT-BOARD.md),
   [DEPENDENCIES.md](02-dev-docs/DEPENDENCIES.md), [GLOSSARY.md](02-dev-docs/GLOSSARY.md),

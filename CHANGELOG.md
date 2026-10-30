@@ -8,6 +8,21 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-10-30
+
+The V2 roadmap: scoped knowledge, a retrieval broker, revision-bound evidence
+and citations, modules, an optional Serena adapter, new dashboard views and
+developer tooling. Every addition is opt-in; `search` over HTTP, MCP and the
+CLI, the registry, the indexes and existing settings are unchanged.
+
+### Upgrading from 3.0
+
+No action is required: 3.1 keeps its new state in new files (`knowledge.db`,
+`modules.db`) that 3.0 never reads, so rolling back is reinstalling 3.0. To
+turn the features on, run `knowledge-engine knowledge migrate --apply` and
+`knowledge-engine knowledge snapshot --apply`, then follow
+[01-user-docs/UPGRADING.md](01-user-docs/UPGRADING.md).
+
 ### Added
 
 - CI job `dashboard (browser smoke)` runs the Playwright dashboard tests on
@@ -1135,7 +1150,8 @@ read-only when no keys are present.
   valid JSON-RPC 2.0 responses.
 - `pytest`: 4/4 pass.
 
-[Unreleased]: https://github.com/ARC-907/knowledge-engine/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/ARC-907/knowledge-engine/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/ARC-907/knowledge-engine/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/ARC-907/knowledge-engine/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/ARC-907/knowledge-engine/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/ARC-907/knowledge-engine/compare/v1.1.0...v1.2.0

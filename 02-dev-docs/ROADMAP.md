@@ -1,8 +1,9 @@
 # Roadmap — V2 planning revision
 
-Updated 2026-10-30. V2 names this roadmap revision; the engine package remains
-3.0.0. The modernization is substantially complete; the capabilities below
-are proposed follow-on work, not implemented features.
+Updated 2026-10-30. V2 names this roadmap revision. It is **implemented** and
+prepared for release as **3.1.0** (`engine/pyproject.toml`, CHANGELOG
+`[3.1.0]`); every step below links the pull request that delivered it. Tags
+and GitHub Releases (`v3.0.0`, `v3.1.0`) remain maintainer actions.
 
 The implementation contract is [V2-DESIGN.md](V2-DESIGN.md). It covers scoped
 knowledge organization, evidence and citations, modular utilities, and optional
@@ -18,11 +19,11 @@ the [ADRs](adr/README.md).
 
 | Item | State |
 | --- | --- |
-| Code and docs for 3.0.0 | Merged on `main` |
-| Package version | `3.0.0` (`engine/pyproject.toml`) |
-| `v3.0.0` tag and GitHub Release | **Not published** (held by the maintainer) |
-| Test suite | Prior train report: 1177 passed, 2 opt-in browser tests skipped; not rerun for this planning revision |
-| CI | Prior train report: green on `main`; check the exact candidate's current runs before promotion |
+| Code and docs for 3.0.0 and the V2 roadmap | Merged on `main` |
+| Package version | `3.1.0` (`engine/pyproject.toml`), release commit prepared in V2 P9 |
+| `v3.0.0` / `v3.1.0` tags and GitHub Releases | **Not published** (held by the maintainer) |
+| Test suite | 1629 passed, 8 opt-in tests skipped (browser and live Serena; both run in their own CI job or locally) on the P9 candidate |
+| CI | Green on every V2 slice (Linux 3.12–3.14 required, macOS/Windows advisory, browser, tooling, CodeQL, zizmor, docs) |
 
 
 ## V2 delivery sequence
@@ -65,12 +66,15 @@ user-visible changes under `[Unreleased]` in the [CHANGELOG](../CHANGELOG.md).
 | 5 | P3 + P4 evidence and citations ([ADR 0012](adr/0012-evidence-store-and-ingestion.md), [ADR 0013](adr/0013-citation-identity-and-export.md)) | Merged in [#47](https://github.com/ARC-907/knowledge-engine/pull/47) |
 | 6 | P5 + P6 modules, reference utilities, ingestion ([ADR 0014](adr/0014-module-catalog-store-and-script-protocol.md), [ADR 0015](adr/0015-module-jobs-cancellation-and-ingestion.md), [MODULES.md](../01-user-docs/MODULES.md)) | Merged in [#48](https://github.com/ARC-907/knowledge-engine/pull/48) |
 | 7 | T1 tooling, observability and self-indexing ([DEV-TOOLING.md](DEV-TOOLING.md)) | Merged in [#46](https://github.com/ARC-907/knowledge-engine/pull/46) |
-| 8 | P7 Serena adapter ([ADR 0016](adr/0016-serena-read-only-adapter.md), [SERENA.md](../01-user-docs/SERENA.md)) | Implemented; PR in review |
+| 8 | P7 Serena adapter ([ADR 0016](adr/0016-serena-read-only-adapter.md), [SERENA.md](../01-user-docs/SERENA.md)) | Merged in [#50](https://github.com/ARC-907/knowledge-engine/pull/50) |
 | 9 | P8 dashboard ([DASHBOARD.md](../01-user-docs/DASHBOARD.md)) | Merged in [#49](https://github.com/ARC-907/knowledge-engine/pull/49) |
-| 10 | P9 docs, migration guide and qualification | Last |
+| 10 | P9 qualification: clean-install run, module-evidence search fix (B-030), [UPGRADING.md](../01-user-docs/UPGRADING.md), 3.1.0 release commit | Implemented; PR in review |
 
 Publishing (tag `v3.0.0` or later, GitHub Release, repository settings) stays a
-maintainer decision and is not part of this plan.
+maintainer decision and is not part of this plan. Remaining maintainer
+actions: push the `v3.0.0` and `v3.1.0` tags (the release workflow builds the
+GitHub Releases from them), update the repository description, and delete the
+merged `train/*` branches.
 
 P0 and R0 may proceed together, but P0 cannot close without the ownership
 decision. After P1, retrieval and evidence work can proceed independently.
@@ -91,6 +95,17 @@ catalog mutations; parallel implementation uses separate branches.
   meet the gates in [V2-DESIGN.md](V2-DESIGN.md).
 - Every claimed implementation result links an exact PR/commit and validation
   result. Open plans remain labelled proposed until that evidence exists.
+
+Evidence for each criterion (all PRs passed the local gate and green CI before
+merge):
+
+| Criterion | Delivered by | Validation |
+| --- | --- | --- |
+| Scope stays explicit; projects never broaden | [#43](https://github.com/ARC-907/knowledge-engine/pull/43), [#45](https://github.com/ARC-907/knowledge-engine/pull/45) | Two-project fixtures with identical names and text (`test_knowledge_broker.py`) |
+| Exact source and revision in search/open/citations | [#45](https://github.com/ARC-907/knowledge-engine/pull/45), [#47](https://github.com/ARC-907/knowledge-engine/pull/47) | Edit/rename/delete resolution fixtures; golden Markdown and CSL-JSON |
+| Two utilities through the shared surface, with ingestion and provenance | [#48](https://github.com/ARC-907/knowledge-engine/pull/48), V2 P9 | Reference modules over CLI/HTTP/MCP; artifacts ingested, searched and opened as evidence (`test_evidence_ingestion.py`, `test_evidence_source_adapter.py`) |
+| Pinned optional Serena; corpus works without it | [#50](https://github.com/ARC-907/knowledge-engine/pull/50) | Fake-Serena suite in CI; live run against serena-agent 2.1.0 |
+| Migration, restart, rollback, compatibility, docs | [#43](https://github.com/ARC-907/knowledge-engine/pull/43), [#49](https://github.com/ARC-907/knowledge-engine/pull/49), V2 P9 | Legacy `search` byte-identical; additive-only snapshots; clean-install run of the whole V2 flow; [UPGRADING.md](../01-user-docs/UPGRADING.md) |
 
 ### Risks and deferred work
 

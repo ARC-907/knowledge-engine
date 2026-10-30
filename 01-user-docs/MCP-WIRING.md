@@ -83,8 +83,8 @@ variable telling the engine where the corpus is. Pick one launcher:
 | Launcher | `command` | Needs |
 | --- | --- | --- |
 | **Checkout venv** (recommended) | `ABSOLUTE_PATH/engine/.venv/bin/knowledge-engine` (Windows: `ABSOLUTE_PATH\\engine\\.venv\\Scripts\\knowledge-engine.exe`) | `uv sync --project engine` has been run |
-| **Global tool** | `knowledge-engine` | `uv tool install "git+https://github.com/ARC-907/knowledge-engine@v3.0.0#subdirectory=engine"` |
-| **No install** | `uvx` with args `--from git+https://github.com/ARC-907/knowledge-engine@v3.0.0#subdirectory=engine knowledge-engine mcp` | `uv` on PATH (first start downloads and builds the package) |
+| **Global tool** | `knowledge-engine` | `uv tool install "git+https://github.com/ARC-907/knowledge-engine@v3.1.0#subdirectory=engine"` |
+| **No install** | `uvx` with args `--from git+https://github.com/ARC-907/knowledge-engine@v3.1.0#subdirectory=engine knowledge-engine mcp` | `uv` on PATH (first start downloads and builds the package) |
 
 In every case the args are `["mcp"]` (the `uvx` form puts `mcp` last), and the
 engine locates the corpus through **`KE_HOME`**: the directory that contains
@@ -226,7 +226,7 @@ knowledge-engine mcp
 ```
 
 (the console script from the checkout venv, a `uv tool install`, or
-`uvx --from "git+https://github.com/ARC-907/knowledge-engine@v3.0.0#subdirectory=engine" knowledge-engine mcp`;
+`uvx --from "git+https://github.com/ARC-907/knowledge-engine@v3.1.0#subdirectory=engine" knowledge-engine mcp`;
 `python -m knowledge_engine.mcp.server` with the venv's interpreter is
 equivalent) with this environment:
 
