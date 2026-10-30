@@ -11,7 +11,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/ARC-907/knowledge-engine@v3.0.0#subdirectory=engine",
+        "git+https://github.com/ARC-907/knowledge-engine@v3.1.0#subdirectory=engine",
         "knowledge-engine",
         "mcp"
       ],

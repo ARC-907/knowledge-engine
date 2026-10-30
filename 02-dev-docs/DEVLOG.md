@@ -5,6 +5,37 @@ does not fit in a commit message or a CHANGELOG line. Newest first. Decisions
 with lasting effect also get an [ADR](adr/README.md); defects get a row in the
 [bug log](BUGLOG.md).
 
+## 2026-10-30 — V2 qualification (P9) and 3.1.0 release commit
+
+- **Clean install.** Built the wheel from a fresh clone of `main`, installed it
+  into a new virtual environment and ran the whole V2 flow against the shipped
+  sample corpus:
+  - reindex, `knowledge migrate`, `knowledge snapshot` (6 first revisions);
+  - broker search, and exact-revision open (`verified`);
+  - citation validate and export in Markdown and CSL-JSON;
+  - module register, enable, and fetch with ingest, then evidence open
+    (`verified`);
+  - the server: `/health`, the dashboard tabs, HTTP search, `/modules`
+    refusing requests without the admin key, and JSON log lines.
+- **Found B-030 that way.** After the module fetch, every default-scope search
+  was `partial`: ingestion had registered a `module` source the broker could
+  not serve. Module evidence is now searched (BM25 over current revisions,
+  bounded scan with warnings) and opened through the evidence store.
+- **Lesson.** A citation needs a locator: a whole revision has no evidence
+  identity (ADR 0013). The CLI walk-through first tried without one and got a
+  clear `unsupported` reason, which is the intended behaviour; the guide shows
+  a locator in its example.
+- **Release commit.** V2 is additive (legacy surfaces byte-identical, new state
+  in new files), so semantic versioning makes it 3.1.0. Version, lockfile,
+  CHANGELOG section with an upgrade note, and pinned install references are
+  updated; [UPGRADING.md](../01-user-docs/UPGRADING.md) covers turning the
+  features on and rolling back. The tags stay with the maintainer.
+- **Parallel slices.** P7 (Serena) and P8 (dashboard) were built at the same
+  time on separate branches from the P5 tip and from `main`. Each merged
+  `main` in (never rebasing after push), and both touched the broker's
+  adapter factory. The factory now serves corpus, project-context, module
+  evidence and Serena sources.
+
 ## 2026-10-30 — V2 implementation begins
 
 - **Plan.** The V2 design ([V2-DESIGN.md](V2-DESIGN.md)) is implemented as a

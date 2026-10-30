@@ -147,7 +147,9 @@ def build_broker(
         evidence=EvidenceStore(store, evidence_policy),
         profile=profile,
     )
-    return KnowledgeBroker(store, build_adapter_factory(backend, serena=serena), profile=profile)
+    return KnowledgeBroker(
+        store, build_adapter_factory(backend, serena=serena, profile=profile), profile=profile
+    )
 
 
 def serena_for(settings: Settings, store: KnowledgeStore) -> Callable[[], Any] | None:

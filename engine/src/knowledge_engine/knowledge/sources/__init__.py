@@ -4,6 +4,8 @@
   registry (:class:`~.corpus.CorpusAdapter`);
 * :mod:`.project_context` -- ``project_context:<workspace>``: linked
   project-context stores (:class:`~.project_context.ProjectContextAdapter`);
+* :mod:`.evidence` -- ``module:<id>`` sources, whose records exist only in the
+  evidence store (:class:`~.evidence.EvidenceSourceAdapter`);
 * ``serena:<project_id>``: code symbols of a configured repository through the
   optional, read-only Serena adapter (:mod:`knowledge_engine.serena.adapter`;
   ``unavailable`` unless ``KE_SERENA_ENABLED=1``);
@@ -20,7 +22,7 @@ adapter; the broker calls it once per selected source and request.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..adapter import SourceAdapter
 from ..backfill import CORPUS_SOURCE_ID
@@ -28,7 +30,11 @@ from ..broker import AdapterFactory
 from ..errors import UnavailableError
 from ..store import ScopeSnapshot, SnapshotSource
 from .corpus import CorpusAdapter, CorpusBackend
+from .evidence import EVIDENCE_SOURCE_KINDS, EvidenceSourceAdapter
 from .project_context import SOURCE_KIND as PROJECT_CONTEXT_KIND, ProjectContextAdapter
+
+if TYPE_CHECKING:
+    from ..evidence.store import EvidenceStore
 
 #: The board is not a broker source by default (explicit opt-in; no adapter yet).
 BOARD_SOURCE_AVAILABLE = False
@@ -39,12 +45,17 @@ def build_adapter_factory(
     *,
     project_context: bool = True,
     serena: Callable[[], Any] | None = None,
+    evidence: EvidenceStore | None = None,
+    profile: str = "default",
 ) -> AdapterFactory:
-    """The default factory: corpus, project-context and (when enabled) Serena adapters.
+    """The default factory: corpus, project-context, evidence-only and Serena adapters.
 
+    ``evidence`` (default: the corpus backend's) serves ``module`` sources.
     ``serena`` returns the process's Serena manager; ``None`` (the adapter is
-    disabled) makes every ``serena`` source ``unavailable``.
+    disabled) makes every ``serena`` source ``unavailable``. Any other kind
+    without an adapter is reported ``unavailable``.
     """
+    evidence_store = evidence if evidence is not None else (corpus.evidence if corpus else None)
 
     def factory(source: SnapshotSource, snapshot: ScopeSnapshot) -> SourceAdapter:
         if source.kind == "corpus":
@@ -56,6 +67,10 @@ def build_adapter_factory(
             return CorpusAdapter(source.source_id, corpus, snapshot)
         if source.kind == PROJECT_CONTEXT_KIND and project_context:
             return ProjectContextAdapter(source.source_id, snapshot)
+        if source.kind in EVIDENCE_SOURCE_KINDS and evidence_store is not None:
+            return EvidenceSourceAdapter(
+                source.source_id, source.kind, evidence_store, snapshot, profile=profile
+            )
         if source.kind == "serena":
             from ...serena.adapter import adapter_factory_entry  # noqa: PLC0415 - optional
 
@@ -82,6 +97,7 @@ __all__ = [
     "BOARD_SOURCE_AVAILABLE",
     "CorpusAdapter",
     "CorpusBackend",
+    "EvidenceSourceAdapter",
     "ProjectContextAdapter",
     "build_adapter_factory",
 ]
