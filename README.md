@@ -34,18 +34,22 @@ docs at <http://127.0.0.1:9210/docs>. `knowledge-engine serve --port <n>` (or
 retrieval and capability surfaces of the installation (including substrates
 that are available but empty).
 
-Prefer a global `knowledge-engine` command instead of a checkout? Releases are
-published on GitHub (the package is not on PyPI, where the name belongs to an
-unrelated project):
+Prefer a global `knowledge-engine` command? Until the first GitHub Release is
+published, install from a source checkout (the package is not on PyPI, where the
+name belongs to an unrelated project):
 
 ```bash
-uv tool install "git+https://github.com/ARC-907/knowledge-engine@v3.0.0#subdirectory=engine"
+git clone https://github.com/ARC-907/knowledge-engine.git
+cd knowledge-engine
+uv tool install ./engine
 cd /path/to/your/checkout-or-corpus-root   # the directory containing corpus/registry.json, or set KE_HOME
 knowledge-engine serve
 ```
 
 `uv tool install` also accepts the wheel attached to a
-[GitHub Release](https://github.com/ARC-907/knowledge-engine/releases). The
+[GitHub Release](https://github.com/ARC-907/knowledge-engine/releases) once one
+is available. For reproducible source installs, check out a reviewed commit
+before installation. The
 installed command resolves its paths from `KE_HOME` (default: the nearest
 directory at or above the working directory that contains
 `corpus/registry.json`), or from `KE_CORPUS_ROOT` / `KE_DATA_DIR` /
@@ -123,7 +127,9 @@ commands (`serve`, `board-serve`, `mcp`, `watch`) default to `KE_LOG_LEVEL`
   decision records under [`02-dev-docs/adr/`](02-dev-docs/adr/).
 - **Project** — [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md),
   [SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
-  [RELEASING.md](02-dev-docs/RELEASING.md).
+  [RELEASING.md](02-dev-docs/RELEASING.md); status and plans in
+  [ROADMAP.md](02-dev-docs/ROADMAP.md) and the proposed
+  [V2 implementation design](02-dev-docs/V2-DESIGN.md).
 
 ## What this does NOT give you
 
