@@ -3,6 +3,11 @@
 > How Knowledge-Engine is built and why. Read this after the README to
 > understand what you can change, what you can replace, and how the pieces fit.
 
+The proposed next development sequence and contracts are in
+[ROADMAP.md](ROADMAP.md) and [V2-DESIGN.md](V2-DESIGN.md). Those documents
+separate planned broker/module/citation/Serena capabilities from the behavior
+implemented here.
+
 ## Three layers
 
 Knowledge-Engine is deliberately layered so each layer can be changed
@@ -184,7 +189,7 @@ returned as `isError` tool results; a failing tool never takes the server down.
 Base tools, generated from typed signatures:
 
 - `search(query, limit=10, kind=None, mode="fts")` — search enabled entries;
-  `kind` scopes to one entry type (omit for all; `""` is rejected), `mode`
+  `kind` scopes to one entry type (omit or pass `""` for all), `mode`
   selects `fts` / `vector` / `hybrid`; `_meta.syntax_fallback` reports a query
   that was retried as a phrase.
 - `registry_list(kind=None, enabled_only=False)` — list registry entries.
