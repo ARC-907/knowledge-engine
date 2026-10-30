@@ -79,21 +79,17 @@ class SourceAdapter(Protocol):
     @property
     def source_id(self) -> str:
         """The namespaced id of the source this adapter serves."""
-        ...
 
     def describe_capabilities(self) -> AdapterCapabilities:
         """Static capabilities (no I/O beyond reading configuration)."""
-        ...
 
     def health(self) -> SourceStatus:
         """A bounded health probe, separate from discovery."""
-        ...
 
     def search(
         self, context: QueryContext, scope: EffectiveScope, query: str
     ) -> AdapterSearchResult:
         """Search within ``scope`` (already validated); filters apply before limits."""
-        ...
 
     def open(
         self,
@@ -104,7 +100,6 @@ class SourceAdapter(Protocol):
         locator: Locator | None = None,
     ) -> OpenResult:
         """Return the exact revision (never silently the latest); recheck scope first."""
-        ...
 
 
 __all__ = [

@@ -5,7 +5,8 @@ bindings, the metadata store, the retrieval broker, source adapters, the
 evidence resolver and modules. They are pure data: importing this module does
 no I/O. The JSON Schema of every public model is pinned in
 ``engine/tests/snapshots/knowledge_contracts.json``
-(:func:`contract_json_schema`); a change there is a contract change.
+(:func:`knowledge_engine.knowledge.schema.contract_json_schema`); a change there is a
+contract change.
 
 Rules every model follows:
 
@@ -828,30 +829,6 @@ PUBLIC_MODELS: tuple[type[BaseModel], ...] = (
 )
 
 
-def contract_json_schema() -> dict[str, Any]:
-    """JSON Schema of every public model plus the controlled vocabularies (deterministic)."""
-    from .adapter import AdapterCapabilities, AdapterSearchResult  # noqa: PLC0415 - avoid cycle
-
-    models: dict[str, Any] = {}
-    exported: list[type[BaseModel]] = [*PUBLIC_MODELS, AdapterCapabilities, AdapterSearchResult]
-    for model in exported:
-        models[model.__name__] = model.model_json_schema(mode="validation")
-    from .errors import ERROR_CODES  # noqa: PLC0415
-
-    return {
-        "contract_version": CONTRACT_VERSION,
-        "vocabularies": {
-            "ResearchType": [item.value for item in ResearchType],
-            "CurationStatus": [item.value for item in CurationStatus],
-            "VerificationState": [item.value for item in VerificationState],
-            "SourceState": [item.value for item in SourceState],
-            "SearchMode": list(SEARCH_MODES),
-            "ErrorCode": list(ERROR_CODES),
-        },
-        "models": models,
-    }
-
-
 __all__ = [
     "CONTRACT_VERSION",
     "FAILED_SOURCE_STATES",
@@ -906,7 +883,6 @@ __all__ = [
     "Workspace",
     "WorkspaceId",
     "canonical_json",
-    "contract_json_schema",
     "derive_evidence_id",
     "derive_revision_id",
     "normalize_tag",

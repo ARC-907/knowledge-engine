@@ -219,14 +219,14 @@ def test_failed_write_rolls_back(store: KnowledgeStore) -> None:
 
 
 def test_store_is_safe_across_threads(store: KnowledgeStore) -> None:
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
 
     def work(n: int) -> None:
         try:
             for i in range(10):
                 store.create_project("lab", f"P{n}-{i}")
                 store.list_projects("lab")
-        except BaseException as exc:  # pragma: no cover - reported below
+        except Exception as exc:  # pragma: no cover - reported below
             errors.append(exc)
 
     threads = [threading.Thread(target=work, args=(n,)) for n in range(4)]

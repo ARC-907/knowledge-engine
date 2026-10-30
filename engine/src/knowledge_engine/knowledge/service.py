@@ -10,7 +10,6 @@ boundary in front.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -39,8 +38,6 @@ from .contracts import (
 )
 from .errors import InvalidInputError
 from .store import MAX_PAGE, UNSET, KnowledgeStore
-
-_logger = logging.getLogger(__name__)
 
 
 class _Input(BaseModel):

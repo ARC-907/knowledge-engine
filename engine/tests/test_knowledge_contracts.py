@@ -51,7 +51,6 @@ from knowledge_engine.knowledge.contracts import (
     TextLocator,
     TranscriptLocator,
     VerificationState,
-    contract_json_schema,
     derive_evidence_id,
     derive_revision_id,
     normalize_tag,
@@ -59,6 +58,7 @@ from knowledge_engine.knowledge.contracts import (
     sha256_digest,
 )
 from knowledge_engine.knowledge.errors import InvalidInputError, KnowledgeError
+from knowledge_engine.knowledge.schema import contract_json_schema
 
 SNAPSHOT = Path(__file__).parent / "snapshots" / "knowledge_contracts.json"
 LOCATOR = TypeAdapter(Locator)
