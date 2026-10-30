@@ -8,6 +8,14 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 
 ## [Unreleased]
 
+### Added
+
+- CI job `dashboard (browser smoke)` runs the Playwright dashboard tests on
+  Ubuntu with the locked Playwright's Chromium
+  ([#40](https://github.com/ARC-907/knowledge-engine/issues/40)). It fails if the
+  tests are skipped or not collected, has a 15-minute timeout, and uploads a
+  screenshot and the page's console errors for each failing test.
+
 ### Fixed
 
 - Nested registry entries are attributed consistently in every search mode
@@ -21,6 +29,9 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   parent. **Compatibility:** with nested entries, a file is now returned only
   under its owning entry and `reindex` counts it once; run
   `knowledge-engine reindex` after upgrading.
+- The dashboard browser tests built their FTS index through `app.state`, which
+  only exists inside the app lifespan since 3.0, so they errored before
+  reaching the browser; they now build the index the way `reindex` does.
 
 ## [3.0.0] — 2026-10-24
 

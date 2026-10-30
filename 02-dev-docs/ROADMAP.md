@@ -187,5 +187,6 @@ candidate and release prerequisites before taking these actions.
 - The project-context subsystem keeps its historical `project_docs` /
   `project_docs_fts` SQLite table names. Renaming live tables needs its own
   migration.
-- The Playwright dashboard tests are opt-in (`KE_UI_TESTS=1`) and no CI job
-  runs them yet; adding an Ubuntu job for them is a 3.1 candidate.
+- The Playwright dashboard tests run in the `dashboard (browser smoke)` CI job
+  ([#40](https://github.com/ARC-907/knowledge-engine/issues/40)); locally they stay opt-in
+  (`KE_UI_TESTS=1`).

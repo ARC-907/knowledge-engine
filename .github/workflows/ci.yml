@@ -89,6 +89,56 @@ jobs:
           path: engine/coverage.xml
           retention-days: 14
 
+  ui:
+    name: dashboard (browser smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.11.x"
+          python-version: "3.13"
+          enable-cache: true
+      - name: Install
+        run: uv sync --group test --group ui
+      - name: Install Chromium for the locked Playwright version
+        run: uv run playwright install --with-deps chromium
+        working-directory: engine
+      - name: Browser smoke tests
+        working-directory: engine
+        env:
+          KE_UI_TESTS: "1"
+        run: |
+          set -euo pipefail
+          export KE_UI_ARTIFACT_DIR="$RUNNER_TEMP/ui-artifacts"
+          uv run pytest -m ui tests/ui -p no:randomly -rs --junitxml="$RUNNER_TEMP/ui-junit.xml"
+      - name: The browser tests ran (none skipped)
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/ui-junit.xml" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(sys.argv[1]).getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          tests = int(suite.get("tests", 0))
+          skipped = int(suite.get("skipped", 0))
+          print(f"browser tests: {tests} collected, {skipped} skipped")
+          if tests == 0 or skipped:
+              sys.exit("::error::the dashboard browser tests were skipped or not collected")
+          PY
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-failure-artifacts
+          path: ${{ runner.temp }}/ui-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
   build:
     name: build (sdist, wheel, install smoke)
     runs-on: ubuntu-latest

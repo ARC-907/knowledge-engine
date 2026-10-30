@@ -56,7 +56,7 @@ add your own under `corpus/` and register them (see
 - Agent board: `test_agent_board.py`, `test_board_http.py`, `test_board_security.py`, `test_board_substrate.py`, `test_board_sweeper.py`, `test_board_cli.py`, `test_sweeper_lease.py`
 - Substrates: `test_runtime_config.py`, `test_runtime_pipeline.py`, `test_foundation_migrations.py`, `test_sqlite_migrations.py`, `test_connection_lifecycle.py`, `test_tool_host_crud.py`, `test_tool_host_hardening.py`, `test_host_allowlist.py`
 - `project_context/` — the project-context suite (config, db, ingest, scanner, embeddings, pointers, git context, MCP tools), with fixtures under `fixtures/sample_project/`
-- `ui/` — opt-in Playwright smoke test (`KE_UI_TESTS=1`)
+- `ui/` — Playwright smoke tests of the dashboard; opt-in locally (`KE_UI_TESTS=1`), run by the `dashboard (browser smoke)` CI job (screenshots of failures under `KE_UI_ARTIFACT_DIR`)
 - `snapshots/` — `cli_help.txt`, `openapi.json`, `mcp_tools.json`
 - `fixtures/` — `sample_project/`, `registry/` (valid and invalid registries), `pipeline_db/legacy_inline_schema.sql`
 
