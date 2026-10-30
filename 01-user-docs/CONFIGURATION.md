@@ -76,6 +76,15 @@ is used instead.
 | `KE_EMBED_ALLOW_REMOTE` | bool | `0` | Opt-in gate of the `remote` embedding provider: corpus text is sent off-machine only when this is on. | `retrieval.embeddings.factory` |
 | `KE_EMBEDDINGS_DB` | string (optional) | *(unset)* | Corpus embedding index (SQLite). Unset: <data_dir>/embeddings.db. | `retrieval.embeddings.factory` |
 
+## Scoped knowledge metadata
+
+| Variable | Type | Default | Description | Read by |
+|---|---|---|---|---|
+| `KE_KNOWLEDGE_ENABLED` | bool | `1` | Expose the scoped-knowledge admin surface: the /knowledge HTTP routes and the `knowledge_*` MCP tools. The `knowledge-engine knowledge` CLI always works. | `server.app, server.lifespan, mcp.server` |
+| `KE_KNOWLEDGE_DB` | string (optional) | *(unset)* | Scoped-knowledge metadata store (workspaces, projects, sources, collections, classification). Unset: <data_dir>/knowledge.db. | `knowledge.config` |
+| `KE_KNOWLEDGE_DEFAULT_WORKSPACE` | string | `default` | Id of the default workspace `knowledge migrate --apply` creates and registers the existing corpus in (lowercase letters, digits, `.`, `_`, `-`). | `knowledge.config` |
+| `KE_KNOWLEDGE_PROFILE` | string | `default` | Scope profile used for every selection a knowledge query omits. `default` (built in unless stored): every source of the workspace, no other constraint. | `knowledge.config` |
+
 ## Pipeline and substrates
 
 | Variable | Type | Default | Description | Read by |

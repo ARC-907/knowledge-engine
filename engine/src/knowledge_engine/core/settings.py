@@ -71,6 +71,7 @@ SECTIONS: dict[str, str] = {
     "board": "Agent board",
     "generation": "Generation providers",
     "embeddings": "Embeddings (semantic and hybrid search)",
+    "knowledge": "Scoped knowledge metadata",
     "substrate": "Pipeline and substrates",
 }
 
@@ -461,6 +462,42 @@ class Settings(BaseSettings):
         "Corpus embedding index (SQLite). Unset: <data_dir>/embeddings.db.",
         section="embeddings",
         read_by="retrieval.embeddings.factory",
+    )
+
+    # ── Scoped knowledge metadata (knowledge.db) ─────────────────
+    knowledge_enabled: EnvBool = _env(
+        "KE_KNOWLEDGE_ENABLED",
+        True,
+        "Expose the scoped-knowledge admin surface: the /knowledge HTTP routes and the "
+        "`knowledge_*` MCP tools. The `knowledge-engine knowledge` CLI always works.",
+        section="knowledge",
+        read_by="server.app, server.lifespan, mcp.server",
+    )
+    knowledge_db: str | None = _env(
+        "KE_KNOWLEDGE_DB",
+        None,
+        "Scoped-knowledge metadata store (workspaces, projects, sources, collections, "
+        "classification). Unset: <data_dir>/knowledge.db.",
+        section="knowledge",
+        read_by="knowledge.config",
+    )
+    knowledge_default_workspace: str = _env(
+        "KE_KNOWLEDGE_DEFAULT_WORKSPACE",
+        "default",
+        "Id of the default workspace `knowledge migrate --apply` creates and registers the "
+        "existing corpus in (lowercase letters, digits, `.`, `_`, `-`).",
+        section="knowledge",
+        read_by="knowledge.config",
+        pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$",
+    )
+    knowledge_profile: str = _env(
+        "KE_KNOWLEDGE_PROFILE",
+        "default",
+        "Scope profile used for every selection a knowledge query omits. `default` "
+        "(built in unless stored): every source of the workspace, no other constraint.",
+        section="knowledge",
+        read_by="knowledge.config",
+        pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$",
     )
 
     # ── Pipeline and substrates (read directly by those modules) ──
