@@ -2,7 +2,7 @@
 """Check that the Markdown docs point at things that exist.
 
 Standard library only. Two checks over every ``*.md`` file in the repository
-(the ``.git``, virtualenv, ``node_modules`` and test-fixture trees are skipped):
+(the ``.git``, virtualenv, ``.nox``, ``node_modules`` and test-fixture trees are skipped):
 
 1. Every backticked dotted path that starts with ``knowledge_engine.`` must
    resolve: either as a module (``importlib.util.find_spec``) or as a module
@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 #: Directories never scanned (relative to the repository root, or by name).
 SKIP_DIR_NAMES = frozenset(
-    {".git", ".venv", "venv", "node_modules", "__pycache__", ".knowledge-engine"}
+    {".git", ".venv", "venv", ".nox", "node_modules", "__pycache__", ".knowledge-engine"}
 )
 SKIP_TREES = (ROOT / "engine" / "tests" / "fixtures",)
 

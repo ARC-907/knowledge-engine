@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from ..core.registry import Registry
     from ..core.settings import Settings
     from ..retrieval.fts5 import Indexer
+    from .evidence.policy import EvidencePolicy
     from .store import KnowledgeStore
 
 _logger = logging.getLogger(__name__)
@@ -124,8 +125,14 @@ def build_broker(
     embeddings: Any = None,
     embeddings_error: str | None = None,
     profile: str = "default",
+    evidence_policy: EvidencePolicy | None = None,
 ) -> KnowledgeBroker:
-    """A broker over existing engine objects (owned by the caller, except the pool)."""
+    """A broker over existing engine objects (owned by the caller, except the pool).
+
+    The corpus adapter reads recorded revisions from the evidence store in the
+    same ``knowledge.db`` (``evidence_policy``: the operator's retention policy).
+    """
+    from .evidence.store import EvidenceStore  # noqa: PLC0415
     from .sources import CorpusBackend, build_adapter_factory  # noqa: PLC0415 - heavy imports
 
     backend = CorpusBackend(
@@ -134,6 +141,8 @@ def build_broker(
         corpus_root=corpus_root,
         embeddings=embeddings,
         embeddings_error=embeddings_error,
+        evidence=EvidenceStore(store, evidence_policy),
+        profile=profile,
     )
     return KnowledgeBroker(store, build_adapter_factory(backend), profile=profile)
 
@@ -178,6 +187,7 @@ class BrokerEngine:
                 embeddings=embeddings,
                 embeddings_error=error,
                 profile=knowledge.profile,
+                evidence_policy=knowledge.evidence,
             )
         except Exception:
             for resource in reversed(opened):

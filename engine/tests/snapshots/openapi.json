@@ -115,6 +115,376 @@
         "title": "BoundingBox",
         "type": "object"
       },
+      "Citation": {
+        "additionalProperties": false,
+        "description": "A citation of one evidence span and its last verification state.",
+        "properties": {
+          "evidence_id": {
+            "pattern": "^ev_[0-9a-f]{32}$",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "export": {
+            "$ref": "#/components/schemas/CitationExport"
+          },
+          "locator": {
+            "discriminator": {
+              "mapping": {
+                "code": "#/components/schemas/CodeLocator",
+                "pdf": "#/components/schemas/PdfLocator",
+                "text": "#/components/schemas/TextLocator",
+                "transcript": "#/components/schemas/TranscriptLocator",
+                "unsupported": "#/components/schemas/UnsupportedLocator"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TextLocator"
+              },
+              {
+                "$ref": "#/components/schemas/PdfLocator"
+              },
+              {
+                "$ref": "#/components/schemas/TranscriptLocator"
+              },
+              {
+                "$ref": "#/components/schemas/CodeLocator"
+              },
+              {
+                "$ref": "#/components/schemas/UnsupportedLocator"
+              }
+            ],
+            "title": "Locator"
+          },
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "pattern": "^rev_[0-9a-f]{32}$",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/VerificationState"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "source_id",
+          "record_id",
+          "revision_id",
+          "locator",
+          "verification"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "CitationExport": {
+        "additionalProperties": false,
+        "description": "Bibliographic fields for export; missing values stay ``None``.",
+        "properties": {
+          "authors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "published": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          }
+        },
+        "title": "CitationExport",
+        "type": "object"
+      },
+      "CitationExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Claims",
+            "type": "array"
+          },
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext (workspace_id required); every cited record must be in it.",
+            "title": "Context",
+            "type": "object"
+          },
+          "format": {
+            "default": "both",
+            "enum": [
+              "markdown",
+              "csl-json",
+              "both"
+            ],
+            "title": "Format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "context",
+          "claims"
+        ],
+        "title": "CitationExportRequest",
+        "type": "object"
+      },
+      "CitationExportResult": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimReport"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "csl_json": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csl Json"
+          },
+          "format": {
+            "enum": [
+              "markdown",
+              "csl-json",
+              "both"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markdown"
+          },
+          "notice": {
+            "default": "Validation checks that cited evidence resolves to its exact revision and that quotations match their spans exactly. It is not proof that the evidence entails the claims; semantic support must be judged by a reader.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ValidationSummary"
+          }
+        },
+        "required": [
+          "format",
+          "summary",
+          "claims",
+          "citations"
+        ],
+        "title": "CitationExportResult",
+        "type": "object"
+      },
+      "CitationRequest": {
+        "additionalProperties": false,
+        "description": "A claim-to-evidence map within one scope.",
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Claims",
+            "type": "array"
+          },
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext (workspace_id required); every cited record must be in it.",
+            "title": "Context",
+            "type": "object"
+          }
+        },
+        "required": [
+          "context",
+          "claims"
+        ],
+        "title": "CitationRequest",
+        "type": "object"
+      },
+      "Claim": {
+        "additionalProperties": false,
+        "description": "One claim of a generated answer and the evidence it cites.",
+        "properties": {
+          "claim_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$",
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "maxItems": 50,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "default": "paraphrase",
+            "enum": [
+              "quotation",
+              "paraphrase"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The verbatim passage (quotations only).",
+            "title": "Quote"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 20000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_id"
+        ],
+        "title": "Claim",
+        "type": "object"
+      },
+      "ClaimReport": {
+        "properties": {
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceCheck"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "quotation",
+              "paraphrase"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "unresolved",
+              "unsupported"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_id",
+          "kind",
+          "status"
+        ],
+        "title": "ClaimReport",
+        "type": "object"
+      },
       "ClassificationPatch": {
         "additionalProperties": false,
         "description": "The HTTP body of a classification change (the record comes from the path).",
@@ -799,6 +1169,450 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "EvidenceCheck": {
+        "description": "How one cited reference resolved.",
+        "properties": {
+          "current_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Revision Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "quote_matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Matches"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Id"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "1-based reference number.",
+            "title": "Reference"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerificationState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "EvidenceCheck",
+        "type": "object"
+      },
+      "EvidenceOpenInput": {
+        "additionalProperties": false,
+        "description": "Open the exact cited revision: a stored ``evidence_id``, or record + revision (+ locator).",
+        "properties": {
+          "context": {
+            "additionalProperties": true,
+            "description": "A QueryContext (workspace_id required); the record must be in its scope.",
+            "title": "Context",
+            "type": "object"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "pattern": "^ev_[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "code": "#/components/schemas/CodeLocator",
+                    "pdf": "#/components/schemas/PdfLocator",
+                    "text": "#/components/schemas/TextLocator",
+                    "transcript": "#/components/schemas/TranscriptLocator",
+                    "unsupported": "#/components/schemas/UnsupportedLocator"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TextLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PdfLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TranscriptLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CodeLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UnsupportedLocator"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A typed locator (ADR 0007).",
+            "title": "Locator"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Id"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "pattern": "^rev_[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          }
+        },
+        "required": [
+          "context"
+        ],
+        "title": "EvidenceOpenInput",
+        "type": "object"
+      },
+      "EvidenceOpenResult": {
+        "description": "The P0 ``OpenResult`` plus why it is not verified and the evidence identity.",
+        "properties": {
+          "current_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Revision Id"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "excerpt_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt Digest"
+          },
+          "notice": {
+            "default": "Verification states describe evidence resolution, not the truth of any claim.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "result": {
+            "$ref": "#/components/schemas/OpenResult"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "EvidenceOpenResult",
+        "type": "object"
+      },
+      "EvidenceRef": {
+        "additionalProperties": false,
+        "description": "A cited evidence span: a stored ``evidence_id``, or an explicit revision + locator.",
+        "properties": {
+          "evidence_id": {
+            "anyOf": [
+              {
+                "pattern": "^ev_[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "code": "#/components/schemas/CodeLocator",
+                    "pdf": "#/components/schemas/PdfLocator",
+                    "text": "#/components/schemas/TextLocator",
+                    "transcript": "#/components/schemas/TranscriptLocator",
+                    "unsupported": "#/components/schemas/UnsupportedLocator"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TextLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PdfLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TranscriptLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CodeLocator"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UnsupportedLocator"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Id"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "pattern": "^rev_[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          }
+        },
+        "title": "EvidenceRef",
+        "type": "object"
+      },
+      "EvidenceRevisions": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "current_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Revision Id"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "logical_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Path"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/RevisionEntry"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "record_id",
+          "logical_path",
+          "aliases",
+          "current_revision_id",
+          "deleted_at",
+          "revisions"
+        ],
+        "title": "EvidenceRevisions",
+        "type": "object"
+      },
       "GenIn": {
         "properties": {
           "max_tokens": {
@@ -1278,6 +2092,21 @@
         "properties": {
           "counts": {
             "$ref": "#/components/schemas/StatusCounts"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Evidence store counts (revisions, spans, tombstones, pending outbox); absent before schema version 2.",
+            "title": "Evidence"
           },
           "last_backfill": {
             "anyOf": [
@@ -2402,6 +3231,147 @@
         "title": "RetentionMode",
         "type": "string"
       },
+      "Revision": {
+        "additionalProperties": false,
+        "description": "Immutable bytes of a record at one point in time.",
+        "properties": {
+          "byte_length": {
+            "minimum": 0.0,
+            "title": "Byte Length",
+            "type": "integer"
+          },
+          "bytes_retained": {
+            "default": true,
+            "title": "Bytes Retained",
+            "type": "boolean"
+          },
+          "digest": {
+            "description": "SHA-256 of the retained bytes.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Digest",
+            "type": "string"
+          },
+          "media_type": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Media Type",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "record_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "pattern": "^rev_[0-9a-f]{32}$",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "description": "Contract schema version; payloads of another version are rejected.",
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_id": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "upstream_date": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Date"
+          },
+          "upstream_version": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Version"
+          }
+        },
+        "required": [
+          "revision_id",
+          "source_id",
+          "record_id",
+          "digest",
+          "byte_length",
+          "media_type",
+          "observed_at"
+        ],
+        "title": "Revision",
+        "type": "object"
+      },
+      "RevisionEntry": {
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "external_locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Locator"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Revision"
+          }
+        },
+        "required": [
+          "revision",
+          "current"
+        ],
+        "title": "RevisionEntry",
+        "type": "object"
+      },
       "RightsInfo": {
         "additionalProperties": false,
         "description": "Rights and retention metadata as recorded by the operator or the source.",
@@ -3135,6 +4105,100 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValidationReport": {
+        "properties": {
+          "citations": {
+            "description": "Deduplicated by evidence identity, in order.",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimReport"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "effective_scope": {
+            "$ref": "#/components/schemas/EffectiveScope"
+          },
+          "notice": {
+            "default": "Validation checks that cited evidence resolves to its exact revision and that quotations match their spans exactly. It is not proof that the evidence entails the claims; semantic support must be judged by a reader.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "paraphrases": {
+            "description": "Claim ids of paraphrases (never compared).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Paraphrases",
+            "type": "array"
+          },
+          "quotations": {
+            "description": "Claim ids of verbatim quotations.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Quotations",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ValidationSummary"
+          }
+        },
+        "required": [
+          "effective_scope",
+          "summary",
+          "claims",
+          "quotations",
+          "paraphrases",
+          "citations"
+        ],
+        "title": "ValidationReport",
+        "type": "object"
+      },
+      "ValidationSummary": {
+        "properties": {
+          "claims": {
+            "title": "Claims",
+            "type": "integer"
+          },
+          "references": {
+            "title": "References",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "integer"
+          },
+          "stale_references": {
+            "title": "Stale References",
+            "type": "integer"
+          },
+          "unresolved": {
+            "title": "Unresolved",
+            "type": "integer"
+          },
+          "unsupported": {
+            "title": "Unsupported",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claims",
+          "resolved",
+          "unresolved",
+          "unsupported",
+          "references",
+          "stale_references"
+        ],
+        "title": "ValidationSummary",
         "type": "object"
       },
       "VerificationState": {
@@ -4891,6 +5955,90 @@
         "summary": "Info"
       }
     },
+    "/knowledge/citations/export": {
+      "post": {
+        "description": "Validate and export Markdown references and/or CSL-JSON (scope rechecked).",
+        "operationId": "export_citations_knowledge_citations_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CitationExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitationExportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Citations",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/citations/validate": {
+      "post": {
+        "description": "Validate a claim-to-evidence map (not proof of entailment).",
+        "operationId": "validate_citations_knowledge_citations_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Citations",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
     "/knowledge/collections/{collection_id}/members": {
       "post": {
         "operationId": "add_members_knowledge_collections__collection_id__members_post",
@@ -4990,6 +6138,48 @@
           }
         },
         "summary": "Remove Members",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/evidence/open": {
+      "post": {
+        "description": "Open the exact cited revision (scope rechecked); never follows to the latest one.",
+        "operationId": "open_evidence_knowledge_evidence_open_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceOpenInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceOpenResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Evidence",
         "tags": [
           "knowledge"
         ]
@@ -5255,6 +6445,57 @@
           }
         },
         "summary": "Classify Record",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/knowledge/records/{source_id}/{record_id}/revisions": {
+      "get": {
+        "operationId": "list_revisions_knowledge_records__source_id___record_id__revisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceRevisions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Revisions",
         "tags": [
           "knowledge"
         ]

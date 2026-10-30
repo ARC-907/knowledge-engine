@@ -40,9 +40,18 @@ from ...knowledge.contracts import (
     SourceRecord,
     Workspace,
 )
+from ...knowledge.evidence.citations import (
+    CitationExportRequest,
+    CitationExportResult,
+    CitationRequest,
+    ValidationReport,
+)
 from ...knowledge.service import (
     ClassificationPatch,
     CollectionList,
+    EvidenceOpenInput,
+    EvidenceOpenResult,
+    EvidenceRevisions,
     KnowledgeStatus,
     MembershipResult,
     ProfileList,
@@ -267,6 +276,32 @@ def broker_open_get(
             }
         ),
     )
+
+
+# ── Evidence and citations (V2 P3/P4) ────────────────────────────────
+
+
+@router.post("/evidence/open", response_model=EvidenceOpenResult)
+def open_evidence(payload: EvidenceOpenInput, service: KnowledgeDep) -> dict[str, Any]:
+    """Open the exact cited revision (scope rechecked); never follows to the latest one."""
+    return invoke(service, "evidence_open", payload.model_dump(mode="json", exclude_none=True))
+
+
+@router.get("/records/{source_id}/{record_id}/revisions", response_model=EvidenceRevisions)
+def list_revisions(source_id: str, record_id: str, service: KnowledgeDep) -> dict[str, Any]:
+    return invoke(service, "evidence_revisions", {"source_id": source_id, "record_id": record_id})
+
+
+@router.post("/citations/validate", response_model=ValidationReport)
+def validate_citations(payload: CitationRequest, service: KnowledgeDep) -> dict[str, Any]:
+    """Validate a claim-to-evidence map (not proof of entailment)."""
+    return invoke(service, "cite_validate", payload.model_dump(mode="json", exclude_none=True))
+
+
+@router.post("/citations/export", response_model=CitationExportResult)
+def export_citations(payload: CitationExportRequest, service: KnowledgeDep) -> dict[str, Any]:
+    """Validate and export Markdown references and/or CSL-JSON (scope rechecked)."""
+    return invoke(service, "cite_export", payload.model_dump(mode="json", exclude_none=True))
 
 
 __all__ = ["router"]

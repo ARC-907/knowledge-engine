@@ -193,10 +193,10 @@ options:
                         <data_dir>/embeddings.db)
 ### knowledge-engine knowledge --help
 usage: knowledge-engine knowledge [-h]
-                                  {migrate,status,workspace,project,source,collection,record,profile,project-context,search,open} ...
+                                  {migrate,status,workspace,project,source,collection,record,profile,project-context,search,open,snapshot,evidence,cite} ...
 
 positional arguments:
-  {migrate,status,workspace,project,source,collection,record,profile,project-context,search,open}
+  {migrate,status,workspace,project,source,collection,record,profile,project-context,search,open,snapshot,evidence,cite}
     migrate             Register the existing corpus in knowledge.db (dry run,
                         or backup + resumable apply)
     status              Workspace/project/collection/source/record counts
@@ -210,6 +210,10 @@ positional arguments:
     search              Scoped search across a workspace's sources (the
                         retrieval broker)
     open                Open one in-scope record at an exact revision
+    snapshot            Record the corpus files as immutable evidence
+                        revisions (dry run or apply)
+    evidence            Open exact revisions, list revisions, delete records
+    cite                Validate claims against evidence and export citations
 
 options:
   -h, --help            show this help message and exit

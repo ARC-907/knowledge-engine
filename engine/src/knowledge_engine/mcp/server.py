@@ -57,7 +57,10 @@ AND/OR/NOT, prefix*), `kind` restricts results to one entry kind, `limit` caps t
 enables or disables one (disabled entries drop out of the index on the next reindex).
 - `project_context.*` and `board_*` tools are present when those subsystems are enabled.
 - `knowledge_*` tools administer scoped-knowledge metadata (workspaces, projects, \
-collections, classification); they do not change `search`.
+collections, classification); they do not change `search`. \
+`knowledge_evidence_open` opens the exact cited revision of a record and \
+`knowledge_cite_validate` / `knowledge_cite_export` check claims against evidence \
+(resolution and exact quotes, not proof of entailment) and export references.
 - `knowledge.search` / `knowledge.open` are the scoped retrieval broker: search a \
 workspace's sources (corpus, linked project context) with explicit scope, and open \
 a hit's exact revision. They do not change `search`.

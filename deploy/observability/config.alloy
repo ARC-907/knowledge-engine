@@ -1,0 +1,66 @@
+// Grafana Alloy: tail the engine's JSON log files (KE_LOG_FORMAT=json,
+// KE_LOG_FILE=<dir>/*.jsonl) and push them to Loki.
+//
+// Labels stay low-cardinality: job, level and the top-level logger package
+// (`knowledge_engine.retrieval.fts5` -> `retrieval`). The full logger name,
+// process and module are kept as structured metadata, so they are queryable
+// without multiplying streams.
+
+local.file_match "engine" {
+	path_targets = [{
+		"__path__" = "/var/log/knowledge-engine/*.jsonl",
+		"job"      = "knowledge-engine",
+	}]
+	sync_period = "5s"
+}
+
+loki.source.file "engine" {
+	targets       = local.file_match.engine.targets
+	forward_to    = [loki.process.engine.receiver]
+	tail_from_end = false
+}
+
+loki.process "engine" {
+	stage.json {
+		expressions = {
+			ts      = "ts",
+			level   = "level",
+			logger  = "logger",
+			process = "process",
+			module  = "module",
+		}
+	}
+
+	stage.regex {
+		source     = "logger"
+		expression = "^(?:knowledge_engine\\.)?(?P<component>[^.]+)"
+	}
+
+	stage.timestamp {
+		source = "ts"
+		format = "RFC3339"
+	}
+
+	stage.labels {
+		values = {
+			level     = "",
+			component = "",
+		}
+	}
+
+	stage.structured_metadata {
+		values = {
+			logger  = "",
+			process = "",
+			module  = "",
+		}
+	}
+
+	forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+	endpoint {
+		url = sys.env("LOKI_URL")
+	}
+}

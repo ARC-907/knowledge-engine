@@ -26,6 +26,8 @@ is used instead.
 | `KE_BIND_HOST` | string | `127.0.0.1` | Address the HTTP app is bound to; selects the /mcp Host-header policy. `knowledge-engine serve --host` sets it. | `server.app` |
 | `KE_CORS_ORIGINS` | string | *(empty)* | Comma-separated browser origins allowed to call the engine API. Empty: loopback origins only. `*` allows any origin. | `server.app` |
 | `KE_LOG_LEVEL` | string | `INFO` | Log level of the long-running commands (`serve`, `board-serve`, `mcp`, `watch`); `-v`/`-q` override it. One-shot commands log at WARNING. | `core.logging_config, mcp.server` |
+| `KE_LOG_FORMAT` | string | `text` | Log record format of the CLI and the servers: `text` (human-readable lines) or `json` (one JSON object per line, for log shippers such as Grafana Alloy/Loki). | `core.logging_config` |
+| `KE_LOG_FILE` | string | *(empty)* | Also write log records to this file (size-rotated: 10 MiB x 5 backups), in KE_LOG_FORMAT. Empty: stderr only. | `core.logging_config` |
 | `KE_MCP_HTTP` | bool | `0` | Mount the MCP streamable-HTTP endpoint at /mcp on the engine app. | `server.app` |
 | `KE_MCP_ALLOWED_HOSTS` | string | *(empty)* | Extra Host-header names accepted by /mcp (comma-separated; `*` disables the check). | `mcp.http` |
 | `KE_TRUST_PROXY` | bool | `0` | Honour X-Forwarded-For from KE_TRUSTED_PROXIES (board trust gate and uvicorn). | `core.http, agent_board.http` |
@@ -84,6 +86,9 @@ is used instead.
 | `KE_KNOWLEDGE_DB` | string (optional) | *(unset)* | Scoped-knowledge metadata store (workspaces, projects, sources, collections, classification). Unset: <data_dir>/knowledge.db. | `knowledge.config` |
 | `KE_KNOWLEDGE_DEFAULT_WORKSPACE` | string | `default` | Id of the default workspace `knowledge migrate --apply` creates and registers the existing corpus in (lowercase letters, digits, `.`, `_`, `-`). | `knowledge.config` |
 | `KE_KNOWLEDGE_PROFILE` | string | `default` | Scope profile used for every selection a knowledge query omits. `default` (built in unless stored): every source of the workspace, no other constraint. | `knowledge.config` |
+| `KE_EVIDENCE_ON_DELETE` | string | `tombstone` | What deleting a record leaves in the evidence store: `tombstone` (bytes and derived rows removed; identity, digest, time and reason kept, so citations resolve `unavailable`) or `purge` (nothing kept). | `knowledge.config` |
+| `KE_EVIDENCE_RETENTION` | string | `retain` | Retention of records the evidence store creates: `retain` (keep revision bytes) or `digest_only` (keep the digest and an external locator, not the bytes). | `knowledge.config` |
+| `KE_EVIDENCE_MAX_BYTES` | int | `16777216` | Largest revision whose bytes the evidence store retains; larger files are recorded digest-only with the reason (max 268435456). | `knowledge.config` |
 
 ## Modules (executable utilities)
 

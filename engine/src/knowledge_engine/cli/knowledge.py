@@ -93,14 +93,127 @@ def cmd_knowledge_status(args: argparse.Namespace, _parser: argparse.ArgumentPar
     return 0
 
 
-def _run(operation: str, arguments: dict[str, Any]) -> int:
+def _invoke(operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
     from ..knowledge.service import KnowledgeService, invoke
     from ..knowledge.store import KnowledgeStore
 
     config = _config()
     with _typed_errors(), KnowledgeStore.open(config.db_path) as store:
-        result = invoke(KnowledgeService(store, profile=config.profile), operation, arguments)
+        service = KnowledgeService(store, profile=config.profile, evidence_policy=config.evidence)
+        return invoke(service, operation, arguments)
+
+
+def _run(operation: str, arguments: dict[str, Any]) -> int:
+    _emit(_invoke(operation, arguments))
+    return 0
+
+
+def _json_arg(text: str | None, flag: str) -> Any:
+    if text is None:
+        return None
+    try:
+        return json.loads(text)
+    except ValueError as exc:
+        raise CommandError(f"{flag} is not valid JSON: {exc}", 2) from exc
+
+
+def _read_json_input(path: str) -> dict[str, Any]:
+    import sys
+
+    try:
+        text = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CommandError(f"cannot read {path}: {exc}", 2) from exc
+    data = _json_arg(text, path)
+    if not isinstance(data, dict):
+        raise CommandError(f"{path} must hold a JSON object", 2)
+    return data
+
+
+def cmd_knowledge_snapshot(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
+    """``knowledge snapshot --dry-run|--apply [--delete-missing]``."""
+    from ..knowledge.evidence.snapshot import snapshot
+    from ..knowledge.evidence.store import EvidenceStore
+    from ..knowledge.store import KnowledgeStore
+
+    config = _config()
+    if not config.db_path.is_file():
+        raise CommandError(
+            "error[unknown_scope]: the knowledge store does not exist; run "
+            "`knowledge-engine knowledge migrate --apply` first",
+            2,
+        )
+    with _typed_errors(), KnowledgeStore.open(config.db_path) as store:
+        report = snapshot(
+            EvidenceStore(store, config.evidence),
+            corpus_root=config.corpus_root,
+            registry_path=config.registry_path,
+            apply=bool(args.apply),
+            delete_missing=bool(args.delete_missing),
+        )
+    _emit(report)
+    return 0
+
+
+def cmd_knowledge_evidence_open(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
+    """``knowledge evidence open`` (scope from --context or --workspace-id/--project)."""
+    context = _json_arg(args.context, "--context")
+    if context is None:
+        context = _clean(
+            workspace_id=args.workspace_id or _config().default_workspace,
+            project_id=args.project,
+        )
+    arguments = _clean(
+        context=context,
+        evidence_id=args.evidence_id,
+        source_id=args.source_id,
+        record_id=args.record_id,
+        revision_id=args.revision_id,
+        locator=_json_arg(args.locator, "--locator"),
+    )
+    return _run("evidence_open", arguments)
+
+
+def cmd_knowledge_evidence_delete(
+    args: argparse.Namespace, _parser: argparse.ArgumentParser
+) -> int:
+    """``knowledge evidence delete SOURCE RECORD --reason R --yes``."""
+    from ..knowledge.evidence.store import EvidenceStore
+    from ..knowledge.store import KnowledgeStore
+
+    if not args.yes:
+        raise CommandError("refusing to delete without --yes", 2)
+    config = _config()
+    with _typed_errors(), KnowledgeStore.open(config.db_path) as store:
+        result = EvidenceStore(store, config.evidence).delete_record(
+            args.source_id, args.record_id, reason=args.reason
+        )
     _emit(result)
+    return 0
+
+
+def cmd_knowledge_cite_validate(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
+    """``knowledge cite validate FILE``: the validation report (JSON)."""
+    payload = _read_json_input(args.input)
+    payload.pop("format", None)
+    return _run("cite_validate", payload)
+
+
+def cmd_knowledge_cite_export(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
+    """``knowledge cite export FILE [--format F] [--raw]``."""
+    payload = _read_json_input(args.input)
+    if args.format:
+        payload["format"] = args.format
+    result = _invoke("cite_export", payload)
+    if not args.raw:
+        _emit(result)
+        return 0
+    if result.get("markdown") is not None:
+        print(result["markdown"], end="")
+    if result.get("csl_json") is not None:
+        if result.get("markdown") is not None:
+            print()
+        print(json.dumps(result["csl_json"], indent=2, ensure_ascii=False))
     return 0
 
 
@@ -204,6 +317,10 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], tuple[str, dict[str, Any]]]] 
         "project_context_unlink",
         {"workspace_id": a.workspace_id, "project_id": a.project_id},
     ),
+    "evidence_revisions": lambda a: (
+        "evidence_revisions",
+        {"source_id": a.source_id, "record_id": a.record_id},
+    ),
     "profile_set": lambda a: (
         "profile_set",
         {
@@ -277,8 +394,13 @@ def cmd_knowledge_admin(args: argparse.Namespace, _parser: argparse.ArgumentPars
 __all__ = [
     "HANDLERS",
     "cmd_knowledge_admin",
+    "cmd_knowledge_cite_export",
+    "cmd_knowledge_cite_validate",
+    "cmd_knowledge_evidence_delete",
+    "cmd_knowledge_evidence_open",
     "cmd_knowledge_migrate",
     "cmd_knowledge_open",
     "cmd_knowledge_search",
+    "cmd_knowledge_snapshot",
     "cmd_knowledge_status",
 ]

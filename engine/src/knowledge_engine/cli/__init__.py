@@ -557,6 +557,7 @@ def _add_knowledge_parser(sub: Any) -> None:
     _scope_options(ko)
     ko.add_argument("--timeout-ms", type=_positive_int, default=None, help="deadline")
     _route(ko, "knowledge", "cmd_knowledge_open")
+    _add_evidence_parsers(kn_sub)
 
 
 def _scope_options(parser: argparse.ArgumentParser) -> None:
@@ -574,6 +575,77 @@ def _scope_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--context", default=None, help="a full QueryContext as JSON (overrides the flags)"
     )
+
+
+def _add_evidence_parsers(kn_sub: Any) -> None:
+    snap = kn_sub.add_parser(
+        "snapshot",
+        help="Record the corpus files as immutable evidence revisions (dry run or apply)",
+    )
+    snap_mode = snap.add_mutually_exclusive_group(required=True)
+    snap_mode.add_argument(
+        "--dry-run", action="store_true", help="report what --apply would record; write nothing"
+    )
+    snap_mode.add_argument("--apply", action="store_true", help="record new revisions")
+    snap.add_argument(
+        "--delete-missing",
+        action="store_true",
+        help="delete records whose file is gone (KE_EVIDENCE_ON_DELETE: tombstone or purge)",
+    )
+    _route(snap, "knowledge", "cmd_knowledge_snapshot")
+
+    ev = kn_sub.add_parser("evidence", help="Open exact revisions, list revisions, delete records")
+    ev_sub = ev.add_subparsers(dest="knowledge_evidence_cmd", required=True)
+    ev_open = ev_sub.add_parser(
+        "open", help="Open the exact cited revision (verified/stale/unavailable/...)"
+    )
+    ev_open.add_argument("--workspace-id", default=None, help="workspace (default: configured)")
+    ev_open.add_argument("--project", default=None, help="project id of the scope")
+    ev_open.add_argument("--evidence-id", default=None, help="a stored evidence span id")
+    ev_open.add_argument("--source-id", default=None)
+    ev_open.add_argument("--record-id", default=None)
+    ev_open.add_argument("--revision-id", default=None)
+    ev_open.add_argument("--locator", default=None, help="a typed locator as JSON")
+    ev_open.add_argument(
+        "--context", default=None, help="a full QueryContext as JSON (overrides the scope flags)"
+    )
+    _route(ev_open, "knowledge", "cmd_knowledge_evidence_open")
+    ev_revs = ev_sub.add_parser("revisions", help="List the revisions and aliases of a record")
+    ev_revs.add_argument("source_id")
+    ev_revs.add_argument("record_id")
+    _admin(ev_revs, "evidence_revisions")
+    ev_del = ev_sub.add_parser(
+        "delete", help="Delete a record's bytes per KE_EVIDENCE_ON_DELETE (tombstone or purge)"
+    )
+    ev_del.add_argument("source_id")
+    ev_del.add_argument("record_id")
+    ev_del.add_argument("--reason", required=True, help="why (kept in the tombstone)")
+    ev_del.add_argument("--yes", action="store_true", help="confirm the deletion")
+    _route(ev_del, "knowledge", "cmd_knowledge_evidence_delete")
+
+    cite = kn_sub.add_parser("cite", help="Validate claims against evidence and export citations")
+    cite_sub = cite.add_subparsers(dest="knowledge_cite_cmd", required=True)
+    for verb, text in (
+        ("validate", "Validate a claim-to-evidence map (JSON); not proof of entailment"),
+        ("export", "Export Markdown references and/or CSL-JSON for a claim-to-evidence map"),
+    ):
+        cmd = cite_sub.add_parser(verb, help=text)
+        cmd.add_argument(
+            "input", help="JSON file with {context, claims} ('-' reads standard input)"
+        )
+        if verb == "export":
+            cmd.add_argument(
+                "--format",
+                choices=("markdown", "csl-json", "both"),
+                default=None,
+                help="output format (default: the file's 'format', else both)",
+            )
+            cmd.add_argument(
+                "--raw",
+                action="store_true",
+                help="print only the rendered Markdown or CSL-JSON instead of the JSON report",
+            )
+        _route(cmd, "knowledge", f"cmd_knowledge_cite_{verb}")
 
 
 def _load_handler(module: str, func: str) -> Handler:

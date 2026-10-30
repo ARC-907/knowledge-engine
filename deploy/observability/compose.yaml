@@ -1,0 +1,117 @@
+# Local log observability for knowledge-engine: Loki stores the engine's JSON
+# log lines, Grafana Alloy ships them, Grafana shows them.
+#
+#   # 1. Run the engine with JSON logs written to ./logs (from the repo root):
+#   KE_LOG_FORMAT=json KE_LOG_FILE=deploy/observability/logs/engine.jsonl \
+#     uv --project engine run knowledge-engine serve
+#   # 2. Start the stack (from this directory):
+#   docker compose up -d
+#   # 3. Open Grafana: http://127.0.0.1:3000  (dashboard "knowledge-engine logs")
+#
+# Or run the engine container too, writing into the same directory:
+#   docker compose --profile engine up -d --build
+#
+# Every port binds to loopback. Grafana's admin password comes from
+# GRAFANA_ADMIN_PASSWORD (default "admin"; Grafana asks to change it on first
+# login). See 02-dev-docs/DEV-TOOLING.md ("Observability").
+
+name: knowledge-engine-observability
+
+x-logs-dir: &logs-dir ${KE_LOG_DIR:-./logs}
+
+services:
+  loki:
+    image: grafana/loki:3.5.5
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3100/ready | grep -q ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.11.3
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    ports:
+      - "127.0.0.1:12345:12345"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - type: bind
+        source: *logs-dir
+        target: /var/log/knowledge-engine
+        read_only: true
+        bind:
+          create_host_path: true
+      - alloy-data:/var/lib/alloy/data
+    environment:
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+    depends_on:
+      loki:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/knowledge-engine-logs.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/api/health | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  # Optional: the engine itself, logging JSON into the directory Alloy tails.
+  engine:
+    profiles: ["engine"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: knowledge-engine:local
+    ports:
+      - "127.0.0.1:9210:9210"
+    volumes:
+      - ../../corpus:/data/corpus:ro
+      - ke-data:/data/.knowledge-engine
+      - type: bind
+        source: *logs-dir
+        target: /var/log/knowledge-engine
+        bind:
+          create_host_path: true
+    environment:
+      KE_HOME: /data
+      KE_CORPUS_ROOT: /data/corpus
+      KE_LOG_FORMAT: json
+      KE_LOG_FILE: /var/log/knowledge-engine/engine.jsonl
+    restart: unless-stopped
+
+volumes:
+  loki-data:
+  alloy-data:
+  grafana-data:
+  ke-data:

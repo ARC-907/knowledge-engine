@@ -54,6 +54,45 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 - Snapshots extended for the added surface only (`openapi.json`,
   `mcp_tools.json`, `cli_help.txt`); legacy `/search`, MCP `search` and CLI
   `search` are unchanged.
+- **Evidence and citations (P3/P4, #36).** Evidence store in `knowledge.db`
+  (schema version 2, migration `002_evidence.sql`): immutable content-addressed
+  revisions with retained bytes (or digest + external locator + reason),
+  record aliases, typed evidence spans, derivation lineage, tombstones,
+  idempotent ingestion (`EvidenceStore.ingest`: idempotency key + inputs, one
+  transaction) and an outbox for cross-store index work.
+- `knowledge-engine knowledge snapshot --dry-run|--apply [--delete-missing]`
+  records the corpus files as revisions: edits create revisions, renames keep
+  the record id and add an alias, deletions follow `KE_EVIDENCE_ON_DELETE`
+  (`tombstone` or `purge`) and are skipped while registry content is missing.
+- Typed locator extraction: Markdown heading sections and plain-text spans
+  (UTF-8 byte offsets), transcript segments (milliseconds, speaker), Python
+  code symbols (commit or dirty-snapshot digest, 1-based exclusive lines);
+  PDF positions are reported `unsupported` (no extractor is bundled).
+- Exact-revision open (`knowledge_engine.knowledge.evidence.resolve.open_evidence`,
+  the function the retrieval broker calls): scope recheck, digest and span
+  verification, `verified` / `stale` / `unavailable` / `ambiguous` /
+  `unsupported`; never follows to the latest revision.
+- Citation validation and export: claim-to-evidence maps with exact quotation
+  matching, quotations kept apart from paraphrases, unresolved/unsupported
+  claims reported (explicitly not proof of entailment), deterministic Markdown
+  references and CSL-JSON deduplicated by evidence identity, scope rechecked
+  on export.
+- Surfaces: `POST /knowledge/evidence/open`, `GET
+  /knowledge/records/{source_id}/{record_id}/revisions`, `POST
+  /knowledge/citations/validate|export`; MCP `knowledge_evidence_open`,
+  `knowledge_evidence_revisions`, `knowledge_cite_validate`,
+  `knowledge_cite_export`; CLI `knowledge evidence open|revisions|delete` and
+  `knowledge cite validate|export`. `knowledge status` reports evidence counts.
+- Settings `KE_EVIDENCE_ON_DELETE`, `KE_EVIDENCE_RETENTION`,
+  `KE_EVIDENCE_MAX_BYTES`; ADRs 0012 (evidence store and ingestion) and 0013
+  (citation identity and export); operator guide `01-user-docs/CITATIONS.md`.
+  Snapshots (`openapi.json`, `mcp_tools.json`, `cli_help.txt`) extended for the
+  added surface only.
+- The retrieval broker's `knowledge open` / `knowledge.open` / `POST
+  /knowledge/open` now serve a corpus revision recorded by `knowledge
+  snapshot` after the file changed (`stale`, with the cited bytes) instead of
+  `unsupported`; unrecorded revisions are still refused and the newer file is
+  never substituted.
 
 - **Retrieval broker (P2, #35).** Scoped search and open across a workspace's
   sources, one service behind three bindings: `POST /knowledge/search`,
@@ -118,6 +157,34 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   in-memory double; without the evidence store (V2 P3) ingestion answers
   `unavailable`.
 
+**Logging and developer tooling (V2 T1)**
+
+- `KE_LOG_FORMAT=json` writes one JSON object per log line (`ts`, `level`,
+  `logger`, `message`, `process`, `thread`, `module`, `line`, `exc`/`stack`
+  and `extra=` fields) for the CLI and both servers, uvicorn's access and
+  error lines included. `KE_LOG_FILE` also writes the records to a
+  size-rotated file (10 MiB x 5); an unwritable path is reported and skipped.
+  Default output is unchanged.
+- `deploy/observability/`: Docker Compose stack with Loki 3.5, Grafana Alloy
+  1.11 (tails the engine's JSON log files; `level`/`component` labels) and
+  Grafana 12.2 with a provisioned Loki data source and a logs dashboard.
+  Loopback ports only; optional `engine` profile runs the engine container.
+- `noxfile.py` (uv backend): `lint`, `typecheck`, `tests-3.12/3.13/3.14`,
+  `ui`, `docs`, `build`, `lock` mirror the CI jobs; `self_index`, `serena`
+  and `observability` run the developer services. `just nox|self-index|serena|observability`.
+- `.serena/project.yml` and `scripts/serena_check.py`: Serena (tested with
+  2.1.0, installed separately, never bundled) for this checkout with the tool
+  interface forced and usage reporting off; `nox -s serena -- --check` starts
+  it and runs read-only symbol queries.
+- `scripts/index_repo.py`: indexes this repository's documentation with the
+  engine itself (FTS plus a local Ollama embedding model, default `bge-m3`)
+  into the git-ignored `.knowledge-engine/self-index/`; `--provider fake` for
+  offline runs, `--print-env` to serve or query the index.
+- CI job `tooling (nox, observability, Serena)`: the noxfile loads, the
+  Compose file validates, Loki verifies its configuration, the Alloy file is
+  in `alloy fmt` form, and Serena answers symbol queries for the repository.
+- Guide: `02-dev-docs/DEV-TOOLING.md`.
+
 ### Fixed
 
 - Nested registry entries are attributed consistently in every search mode
@@ -134,6 +201,10 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 - The dashboard browser tests built their FTS index through `app.state`, which
   only exists inside the app lifespan since 3.0, so they errored before
   reaching the browser; they now build the index the way `reindex` does.
+- `knowledge migrate` silently skipped a new file created at the old path of a
+  record that `knowledge snapshot` had detected as renamed (the derived record
+  id was already held by the renamed record); it now allocates a distinct id,
+  the same one `snapshot` would choose.
 
 ## [3.0.0] — 2026-10-24
 

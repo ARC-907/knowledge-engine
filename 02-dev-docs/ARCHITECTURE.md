@@ -55,6 +55,7 @@ surface over several source-owned systems:
 | Execution adapter | Execution delegated to an external or sandboxed agent runtime | `runtime/sandbox/` factory hook (`get_sandbox()`); bring your own executor |
 | Scoped-knowledge metadata | Workspaces, projects, sources, collections, record classification (V2 P0/P1) | `/knowledge/*`, `knowledge_*` MCP tools, `knowledge-engine knowledge ...`; no effect on `/search` |
 | Retrieval broker | Scoped search/open across the corpus and linked project context (V2 P2) | `POST /knowledge/search`, `/knowledge/open`, `knowledge.search` / `knowledge.open` MCP tools, `knowledge-engine knowledge search\|open` |
+| Evidence and citations | Immutable revisions, retained bytes, aliases, typed evidence spans, derivations, tombstones; exact-revision open; claim validation and citation export (V2 P3/P4) | `knowledge-engine knowledge snapshot`, `/knowledge/evidence/open`, `/knowledge/citations/validate\|export`, `knowledge_evidence_*` / `knowledge_cite_*` MCP tools, `knowledge-engine knowledge evidence\|cite ...` |
 | Modules | Operator-registered executable utilities (script, service, external MCP) behind manifest v1, `modules.db` and one dispatcher (V2 P5) | `/modules/*` (board admin key), `<module_id>.<tool>` MCP tools, `knowledge-engine module ...` |
 
 The versioned contracts (query context, hits, envelopes, source status,
@@ -68,6 +69,12 @@ linked project-context stores; the board is not a source) concurrently under
 the request deadline, rechecks visibility, deduplicates and fuses the
 per-source rankings by reciprocal rank. Operator guide:
 [`01-user-docs/KNOWLEDGE-SEARCH.md`](../01-user-docs/KNOWLEDGE-SEARCH.md).
+The evidence store (`knowledge_engine.knowledge.evidence`, ADR 0012) records
+source bytes as content-addressed revisions in `knowledge.db`; `open_evidence`
+is the exact-revision open path, and the broker's corpus adapter falls back to
+it when a requested revision is no longer the file's current content (the
+retained bytes are returned as `stale`, never the newer file). Citations
+(ADR 0013) are identified by evidence identity, never by row ids.
 The broker normalises and governs these existing surfaces.
 It should not flatten all stores into one database. Each source keeps
 ownership of its full/original content and exposes allowed open modes through
@@ -112,7 +119,10 @@ engine/                            the engine (code layer): pyproject.toml, uv.l
                                    backfill.py (`knowledge migrate`), service.py (admin operation catalog), mcp_tools.py,
                                    config.py; broker.py (retrieval broker), broker_api.py (request models shared by
                                    HTTP/MCP/CLI), broker_mcp.py (`knowledge.search`/`knowledge.open`), sources/
-                                   (corpus and project-context adapters, default adapter factory)
+                                   (corpus and project-context adapters, default adapter factory);
+                                   evidence/ (V2 P3/P4: policy.py retention/deletion, extract.py typed
+                                   locators, store.py revisions + idempotent ingestion + outbox, resolve.py exact-revision
+                                   open, citations.py claim validation + Markdown/CSL-JSON, snapshot.py `knowledge snapshot`)
     runtime/                       foundation/ (config.py YAML + .env loader; db/ versioned SQLite backbone, schema/001–008_*.sql),
                                    pipeline/ (queue, message_board, worker_registry, task_classifier), sandbox/ (NoopSandbox hook)
   tests/                           pytest suite; snapshots/ (cli_help.txt, openapi.json, mcp_tools.json,
@@ -198,6 +208,10 @@ The FastAPI app (`knowledge_engine.app:create_app`) serves the routes below;
 | `/knowledge/workspaces/{workspace_id}/project-context/links/{project_id}` | PUT / DELETE | Link / unlink a project to a project-context store |
 | `/knowledge/search` | POST | Retrieval broker: scoped search across sources (`SearchEnvelope`) |
 | `/knowledge/open` | GET / POST | Retrieval broker: open an in-scope record at an exact revision (`OpenResult`) |
+| `/knowledge/records/{source_id}/{record_id}/revisions` | GET | Revisions (oldest first), current revision, aliases, deletion state |
+| `/knowledge/evidence/open` | POST | Open the exact cited revision/span after a scope recheck: `verified`, `stale`, `unavailable`, `ambiguous`, `unsupported` |
+| `/knowledge/citations/validate` | POST | Validate a claim-to-evidence map (not proof of entailment) |
+| `/knowledge/citations/export` | POST | Markdown references and/or CSL-JSON, deduplicated by evidence identity |
 | `/modules`, `/modules/discover` | GET | Registered modules (intent + observed state); manifests under `KE_MODULES_DIR` (board admin key) |
 | `/modules/register` | POST | Register a directory of `KE_MODULES_DIR` by name |
 | `/modules/{module_id}` | GET | Module status and recent sanitized runs |
@@ -284,15 +298,15 @@ schema); a group that is disabled or fails to initialise is logged and skipped.
   of bodies, `board_status`, `board_channels`, `board_message_types`), scope
   (`board_scopes`), search (`board_search`), sweep (`board_sweep_now`).
 
-- **knowledge** (`knowledge/mcp_tools.py`, 16 tools, unless
+- **knowledge** (`knowledge/mcp_tools.py`, 20 tools, unless
   `KE_KNOWLEDGE_ENABLED=0`): one `knowledge_<operation>` tool per entry of the
   admin operation catalog in `knowledge/service.py` (`status`,
   `workspace_list`/`_create`, `project_list`/`_create`, `source_list`,
   `collection_list`/`_create`/`_add`/`_remove`, `record_classify`,
-  `record_query`, `profile_list`/`_set`, `project_context_link`/`_unlink`), the
-  same operations as the `/knowledge` routes and the `knowledge` CLI. The store
-  opens on the first call; typed failures are `isError` results carrying
-  `{"error": {...}}`.
+  `record_query`, `profile_list`/`_set`, `project_context_link`/`_unlink`,
+  `evidence_open`, `evidence_revisions`, `cite_validate`, `cite_export`), the
+  same operations as the `/knowledge` routes and the `knowledge` CLI. The store opens on the first
+  call; typed failures are `isError` results carrying `{"error": {...}}`.
 - **knowledge_broker** (`knowledge/broker_mcp.py`, 2 tools, unless
   `KE_KNOWLEDGE_ENABLED=0`): `knowledge.search` and `knowledge.open`, the same
   request models and JSON as `POST /knowledge/search` / `/knowledge/open` and
@@ -321,7 +335,8 @@ nearest directory at or above the working directory with
 `corpus/registry.json`), `KE_CORPUS_ROOT`, `KE_REGISTRY_PATH`, and
 `KE_DATA_DIR` (default `<KE_HOME>/.knowledge-engine/data`), which holds
 `index.db` (FTS5), `embeddings.db`, `pipeline.db` (board, keys, pipeline
-tables), `knowledge.db` (scoped-knowledge metadata, `KE_KNOWLEDGE_DB`) and
+tables), `knowledge.db` (scoped-knowledge metadata and the evidence store:
+revisions, retained bytes, spans, tombstones; `KE_KNOWLEDGE_DB`) and
 `board-scopes/*.db`. Schema changes to the pipeline/board,
 project-context and knowledge databases are numbered SQL migrations run by
 `core.util.sqlite` (one transaction each, recorded in `schema_version`;

@@ -156,6 +156,15 @@ bindings around one broker service and freeze schemas before dashboard work.
 
 ## Source identity, evidence and citations
 
+Implemented in this branch (P3/P4): the evidence store, ingestion API,
+corpus snapshot, locator extraction, exact-revision open and citation
+validation/export in `knowledge_engine.knowledge.evidence` (ADRs
+[0012](adr/0012-evidence-store-and-ingestion.md) and
+[0013](adr/0013-citation-identity-and-export.md); operator guide
+[CITATIONS.md](../01-user-docs/CITATIONS.md)). Module-produced artifacts (P6)
+and the broker's open binding (P2) call these functions; disposable index
+generations consume the evidence outbox later.
+
 ### Proposed records
 
 | Record | Required identity and metadata |

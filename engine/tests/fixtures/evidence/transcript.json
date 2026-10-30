@@ -1,0 +1,7 @@
+{
+  "segments": [
+    {"start_ms": 0, "end_ms": 1500, "speaker": "Host", "text": "Welcome to the show."},
+    {"start_ms": 1500, "end_ms": 4200, "speaker": "Guest", "text": "Thanks for having me."},
+    {"start_ms": 4200, "end_ms": 6000, "speaker": "Guest", "text": "Let us begin."}
+  ]
+}
