@@ -157,4 +157,5 @@ A file whose embedding failed is retried by the next `--incremental` run.
 | "model not found" | Pull the model: `ollama pull bge-m3` (or whatever `KE_EMBED_MODEL` names). |
 | `embedding_unavailable` | `remote` is selected without `KE_EMBED_ALLOW_REMOTE=1` or without `KE_EMBED_REMOTE_URL`. (An unknown `KE_EMBED_PROVIDER` name is not an error: it is logged as a WARNING and `ollama` is used.) |
 | Build is slow | Expected on the first full build. Use `--incremental` after; raise `KE_EMBED_BATCH` if your machine copes. |
+| Build fails with `timed out after 60s` | Each embedding request must finish within 60 s. A CPU-only Ollama embeds `bge-m3` at roughly 1–2 s per chunk, so lower `KE_EMBED_BATCH` (or `--batch`) to 8–16. |
 | Results feel off | Different embedding models suit different content. Try another model and `--rebuild`. |

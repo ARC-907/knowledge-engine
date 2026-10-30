@@ -79,6 +79,34 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
   Snapshots `openapi.json`, `mcp_tools.json` and `cli_help.txt` gain the new
   surface; legacy `/search`, MCP `search` and CLI `search` are unchanged.
 
+**Logging and developer tooling (V2 T1)**
+
+- `KE_LOG_FORMAT=json` writes one JSON object per log line (`ts`, `level`,
+  `logger`, `message`, `process`, `thread`, `module`, `line`, `exc`/`stack`
+  and `extra=` fields) for the CLI and both servers, uvicorn's access and
+  error lines included. `KE_LOG_FILE` also writes the records to a
+  size-rotated file (10 MiB x 5); an unwritable path is reported and skipped.
+  Default output is unchanged.
+- `deploy/observability/`: Docker Compose stack with Loki 3.5, Grafana Alloy
+  1.11 (tails the engine's JSON log files; `level`/`component` labels) and
+  Grafana 12.2 with a provisioned Loki data source and a logs dashboard.
+  Loopback ports only; optional `engine` profile runs the engine container.
+- `noxfile.py` (uv backend): `lint`, `typecheck`, `tests-3.12/3.13/3.14`,
+  `ui`, `docs`, `build`, `lock` mirror the CI jobs; `self_index`, `serena`
+  and `observability` run the developer services. `just nox|self-index|serena|observability`.
+- `.serena/project.yml` and `scripts/serena_check.py`: Serena (tested with
+  2.1.0, installed separately, never bundled) for this checkout with the tool
+  interface forced and usage reporting off; `nox -s serena -- --check` starts
+  it and runs read-only symbol queries.
+- `scripts/index_repo.py`: indexes this repository's documentation with the
+  engine itself (FTS plus a local Ollama embedding model, default `bge-m3`)
+  into the git-ignored `.knowledge-engine/self-index/`; `--provider fake` for
+  offline runs, `--print-env` to serve or query the index.
+- CI job `tooling (nox, observability, Serena)`: the noxfile loads, the
+  Compose file validates, Loki verifies its configuration, the Alloy file is
+  in `alloy fmt` form, and Serena answers symbol queries for the repository.
+- Guide: `02-dev-docs/DEV-TOOLING.md`.
+
 ### Fixed
 
 - Nested registry entries are attributed consistently in every search mode
