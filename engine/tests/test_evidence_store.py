@@ -50,7 +50,7 @@ def corpus(tmp_path: Path) -> dict[str, Path]:
     root = tmp_path / "corpus"
     for rel, text in FILES.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
-        (root / rel).write_text(text, encoding="utf-8")
+        (root / rel).write_text(text, encoding="utf-8", newline="\n")
     registry = {
         "version": 1,
         "libraries": [{"id": "lib-a", "kind": "library", "name": "A", "path": "libs/a"}],
@@ -58,7 +58,7 @@ def corpus(tmp_path: Path) -> dict[str, Path]:
         "kits": [],
         "tools": [],
     }
-    (root / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+    (root / "registry.json").write_text(json.dumps(registry), encoding="utf-8", newline="\n")
     data = tmp_path / "data"
     backfill.apply(
         corpus_root=root,
@@ -70,11 +70,8 @@ def corpus(tmp_path: Path) -> dict[str, Path]:
 
 
 def _evidence(corpus: dict[str, Path], **policy: Any) -> Iterator[EvidenceStore]:
-    store = KnowledgeStore.open(corpus["db"])
-    try:
+    with KnowledgeStore.open(corpus["db"]) as store:
         yield EvidenceStore(store, EvidencePolicy(**policy))
-    finally:
-        store.close()
 
 
 @pytest.fixture
@@ -176,7 +173,9 @@ def test_edit_makes_the_old_citation_stale_and_still_verifiable(
 ) -> None:
     _snap(evidence, corpus)
     evidence_id, old_revision = _usage_span(evidence, GUIDE_ID)
-    (corpus["root"] / "libs/a/guide.md").write_text(GUIDE + "\nMore.\n", encoding="utf-8")
+    (corpus["root"] / "libs/a/guide.md").write_text(
+        GUIDE + "\nMore.\n", encoding="utf-8", newline="\n"
+    )
     report = _snap(evidence, corpus)
     assert report["edited"] == 1 and report["revisions_created"] == 1
     res = open_span(evidence, CTX, evidence_id)
@@ -227,7 +226,7 @@ def test_deletion_is_skipped_while_an_entry_has_no_content(
     _snap(evidence, corpus)
     registry = json.loads(corpus["registry"].read_text(encoding="utf-8"))
     registry["libraries"].append({"id": "gone", "kind": "library", "name": "G", "path": "nope"})
-    corpus["registry"].write_text(json.dumps(registry), encoding="utf-8")
+    corpus["registry"].write_text(json.dumps(registry), encoding="utf-8", newline="\n")
     (corpus["root"] / "libs/a/notes.txt").unlink()
     report = _snap(evidence, corpus, delete_missing=True)
     assert report["deletion_blocked_by_missing_entries"] == ["gone"]
@@ -253,7 +252,7 @@ def test_rename_keeps_identity_through_an_alias(
     res = open_span(evidence, CTX, evidence_id)
     assert res.verification == VerificationState.VERIFIED and res.result.revision_id == revision_id
     # A new file at the old path is a different record, not the renamed one.
-    (root / "libs/a/guide.md").write_text("# New guide\n", encoding="utf-8")
+    (root / "libs/a/guide.md").write_text("# New guide\n", encoding="utf-8", newline="\n")
     later = _snap(evidence, corpus)
     assert later["new_records"] == 1
     matches = evidence.find_records(CORPUS_SOURCE_ID, "libs/a/guide.md")
@@ -268,7 +267,7 @@ def test_migrate_registers_a_new_file_at_a_renamed_path(
     root = corpus["root"]
     (root / "libs/a/guide.md").rename(root / "libs/a/handbook.md")
     _snap(evidence, corpus)
-    (root / "libs/a/guide.md").write_text("# New guide\n", encoding="utf-8")
+    (root / "libs/a/guide.md").write_text("# New guide\n", encoding="utf-8", newline="\n")
 
     report = backfill.apply(
         corpus_root=root,
@@ -341,13 +340,10 @@ def test_upgrade_from_schema_1_keeps_records(tmp_path: Path) -> None:
 
 @pytest.fixture
 def lab(tmp_path: Path) -> Iterator[EvidenceStore]:
-    store = KnowledgeStore.open(tmp_path / "lab.db")
-    store.create_workspace("Lab", workspace_id="lab")
-    store.register_source("lab", "module:papers", kind="module", display_name="Papers")
-    try:
+    with KnowledgeStore.open(tmp_path / "lab.db") as store:
+        store.create_workspace("Lab", workspace_id="lab")
+        store.register_source("lab", "module:papers", kind="module", display_name="Papers")
         yield EvidenceStore(store, EvidencePolicy(max_bytes=1000))
-    finally:
-        store.close()
 
 
 def _req(**kw: Any) -> IngestRequest:

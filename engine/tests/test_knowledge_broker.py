@@ -88,7 +88,7 @@ class World:
 
 def _write(corpus: Path, rel: str, text: str) -> None:
     (corpus / rel).parent.mkdir(parents=True, exist_ok=True)
-    (corpus / rel).write_text(text, encoding="utf-8")
+    (corpus / rel).write_text(text, encoding="utf-8", newline="\n")
 
 
 @pytest.fixture
@@ -550,7 +550,9 @@ def test_open_returns_the_exact_verified_revision(world: World) -> None:
 def test_open_never_substitutes_the_latest_revision(world: World) -> None:
     hit = world.broker.search(world.ctx(), "owls").hits[0]
     assert hit.revision_id is not None
-    (world.corpus / "libs/b/owl.md").write_text("# Owls\n\nEdited.\n", encoding="utf-8")
+    (world.corpus / "libs/b/owl.md").write_text(
+        "# Owls\n\nEdited.\n", encoding="utf-8", newline="\n"
+    )
     stale = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, hit.record_id, hit.revision_id)
     assert stale.verification == VerificationState.UNSUPPORTED
     assert stale.content is None and stale.revision_id == hit.revision_id
@@ -688,7 +690,9 @@ def test_project_context_open_and_revisions(linked: World) -> None:
 
 def test_project_context_full_content_gate(linked: World, monkeypatch: pytest.MonkeyPatch) -> None:
     toml = linked.root / "ke.toml"
-    toml.write_text("[project_context.mcp]\nallow_full_content = false\n", encoding="utf-8")
+    toml.write_text(
+        "[project_context.mcp]\nallow_full_content = false\n", encoding="utf-8", newline="\n"
+    )
     monkeypatch.setenv("KE_CONFIG_PATH", str(toml))
     with pytest.raises(DeniedError):
         linked.broker.open(linked.ctx(), PC, "alpha:a1")
@@ -772,7 +776,7 @@ def test_open_serves_recorded_revisions_from_the_evidence_store(world: World) ->
     evidence = EvidenceStore(world.store)
     world.rebuild_broker(replace(world.backend, evidence=evidence))
     owl = world.corpus / "libs/b/owl.md"
-    original = owl.read_text(encoding="utf-8")
+    original = owl.read_bytes().decode("utf-8")
 
     def record() -> None:
         snapshot(
@@ -786,7 +790,7 @@ def test_open_serves_recorded_revisions_from_the_evidence_store(world: World) ->
     first = world.broker.search(world.ctx(), "owls").hits[0]
     assert first.revision_id is not None
 
-    owl.write_text("# Owls\n\nOwls hunt mice at night.\n", encoding="utf-8")
+    owl.write_text("# Owls\n\nOwls hunt mice at night.\n", encoding="utf-8", newline="\n")
     # The file changed but no newer revision was recorded: the store still calls it current.
     current = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, first.record_id, first.revision_id)
     assert current.verification == VerificationState.VERIFIED
@@ -800,10 +804,10 @@ def test_open_serves_recorded_revisions_from_the_evidence_store(world: World) ->
         world.broker.open(world.ctx(project_id="beta"), CORPUS_SOURCE_ID, first.record_id)
 
     # A revision the store never recorded is still refused, never replaced by the file.
-    owl.write_text("# Owls\n\nThird version.\n", encoding="utf-8")
+    owl.write_text("# Owls\n\nThird version.\n", encoding="utf-8", newline="\n")
     third = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, first.record_id)
     assert third.verification == VerificationState.VERIFIED
-    owl.write_text("# Owls\n\nFourth version.\n", encoding="utf-8")
+    owl.write_text("# Owls\n\nFourth version.\n", encoding="utf-8", newline="\n")
     never = world.broker.open(world.ctx(), CORPUS_SOURCE_ID, first.record_id, third.revision_id)
     assert never.verification == VerificationState.UNSUPPORTED and never.content is None
 

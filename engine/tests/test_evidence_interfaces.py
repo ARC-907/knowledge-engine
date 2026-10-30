@@ -26,8 +26,8 @@ NOTE_ID = corpus_record_id("libs/a/note.txt")
 def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     corpus = tmp_path / "corpus"
     (corpus / "libs/a").mkdir(parents=True)
-    (corpus / "libs/a/doc.md").write_text(DOC, encoding="utf-8")
-    (corpus / "libs/a/note.txt").write_text("note text\n", encoding="utf-8")
+    (corpus / "libs/a/doc.md").write_text(DOC, encoding="utf-8", newline="\n")
+    (corpus / "libs/a/note.txt").write_text("note text\n", encoding="utf-8", newline="\n")
     registry = {
         "version": 1,
         "libraries": [{"id": "lib-a", "kind": "library", "name": "A", "path": "libs/a"}],
@@ -35,7 +35,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
         "kits": [],
         "tools": [],
     }
-    (corpus / "registry.json").write_text(json.dumps(registry), encoding="utf-8")
+    (corpus / "registry.json").write_text(json.dumps(registry), encoding="utf-8", newline="\n")
     data = tmp_path / "data"
     monkeypatch.setenv("KE_CORPUS_ROOT", str(corpus))
     monkeypatch.setenv("KE_REGISTRY_PATH", str(corpus / "registry.json"))
@@ -151,7 +151,9 @@ def test_cli_errors(env: dict[str, Path], capsys: pytest.CaptureFixture[str]) ->
     code, _, err = _cli(capsys, "cite", "validate", str(env["tmp"] / "missing.json"))
     assert code == 2 and "cannot read" in err
     bad = env["tmp"] / "bad.json"
-    bad.write_text('{"context": {"workspace_id": "default"}, "claims": []}', encoding="utf-8")
+    bad.write_text(
+        '{"context": {"workspace_id": "default"}, "claims": []}', encoding="utf-8", newline="\n"
+    )
     code, _, err = _cli(capsys, "cite", "validate", str(bad))
     assert code == 2 and "error[invalid_input]" in err
     code, _, err = _cli(capsys, "evidence", "open", "--evidence-id", "ev_" + "1" * 32)

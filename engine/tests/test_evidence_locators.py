@@ -156,13 +156,10 @@ def test_locator_media_mismatch_is_unsupported() -> None:
 
 @pytest.fixture
 def lab(tmp_path: Path) -> Iterator[EvidenceStore]:
-    store = KnowledgeStore.open(tmp_path / "lab.db")
-    store.create_workspace("Lab", workspace_id="lab")
-    store.register_source("lab", "module:media", kind="module", display_name="Media")
-    try:
+    with KnowledgeStore.open(tmp_path / "lab.db") as store:
+        store.create_workspace("Lab", workspace_id="lab")
+        store.register_source("lab", "module:media", kind="module", display_name="Media")
         yield EvidenceStore(store)
-    finally:
-        store.close()
 
 
 CTX = QueryContext(workspace_id="lab")

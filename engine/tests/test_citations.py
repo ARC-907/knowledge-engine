@@ -36,44 +36,41 @@ QUOTE = "Run the tool with care."
 
 @pytest.fixture
 def lab(tmp_path: Path) -> Iterator[dict[str, Any]]:
-    store = KnowledgeStore.open(tmp_path / "lab.db")
-    store.create_workspace("Lab", workspace_id="lab")
-    store.create_project("lab", "Thesis", project_id="thesis")
-    store.register_source("lab", "module:papers", kind="module", display_name="Papers")
-    ev = EvidenceStore(store)
-    paper = ev.ingest(
-        {
-            "source_id": "module:papers",
-            "record_id": "paper-1",
-            "logical_path": "papers/findings.md",
-            "canonical_uri": "https://example.org/a b?x=<1>",
-            "title": "Deep *Learning* [draft] <v2>",
-            "media_type": "text/markdown",
-            "content": PAPER,
-            "bibliographic": Bibliographic(
-                authors=("Ada Lovelace", "Alan Turing"),
-                published="2024-05",
-                publisher="Test Press",
-                container_title="Journal of Tests",
-                identifiers={"doi": "10.1000/xyz"},
-            ),
-        }
-    )
-    store.classify("module:papers", "paper-1", research_type="paper")
-    note = ev.ingest(
-        {
-            "source_id": "module:papers",
-            "record_id": "note-1",
-            "logical_path": "notes/n.md",
-            "canonical_uri": "javascript:alert(1)",
-            "media_type": "text/plain",
-            "content": NOTE,
-        }
-    )
-    try:
+    with KnowledgeStore.open(tmp_path / "lab.db") as store:
+        store.create_workspace("Lab", workspace_id="lab")
+        store.create_project("lab", "Thesis", project_id="thesis")
+        store.register_source("lab", "module:papers", kind="module", display_name="Papers")
+        ev = EvidenceStore(store)
+        paper = ev.ingest(
+            {
+                "source_id": "module:papers",
+                "record_id": "paper-1",
+                "logical_path": "papers/findings.md",
+                "canonical_uri": "https://example.org/a b?x=<1>",
+                "title": "Deep *Learning* [draft] <v2>",
+                "media_type": "text/markdown",
+                "content": PAPER,
+                "bibliographic": Bibliographic(
+                    authors=("Ada Lovelace", "Alan Turing"),
+                    published="2024-05",
+                    publisher="Test Press",
+                    container_title="Journal of Tests",
+                    identifiers={"doi": "10.1000/xyz"},
+                ),
+            }
+        )
+        store.classify("module:papers", "paper-1", research_type="paper")
+        note = ev.ingest(
+            {
+                "source_id": "module:papers",
+                "record_id": "note-1",
+                "logical_path": "notes/n.md",
+                "canonical_uri": "javascript:alert(1)",
+                "media_type": "text/plain",
+                "content": NOTE,
+            }
+        )
         yield {"ev": ev, "paper": paper, "note": note, "store": store}
-    finally:
-        store.close()
 
 
 def _quote_locator() -> dict[str, Any]:
@@ -178,7 +175,7 @@ def test_stale_and_unavailable_evidence(lab: dict[str, Any]) -> None:
 def _golden(name: str, rendered: str) -> None:
     path = FIXTURES / name
     if os.environ.get("UPDATE_SNAPSHOTS") == "1":
-        path.write_text(rendered, encoding="utf-8")
+        path.write_text(rendered, encoding="utf-8", newline="\n")
     assert path.is_file(), f"missing golden file {name}; run with UPDATE_SNAPSHOTS=1"
     assert rendered == path.read_text(encoding="utf-8"), (
         f"{name} changed; if intended, regenerate with UPDATE_SNAPSHOTS=1"
