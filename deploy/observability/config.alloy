@@ -7,60 +7,60 @@
 // without multiplying streams.
 
 local.file_match "engine" {
-  path_targets = [{
-    "__path__" = "/var/log/knowledge-engine/*.jsonl",
-    "job"      = "knowledge-engine",
-  }]
-  sync_period = "5s"
+	path_targets = [{
+		"__path__" = "/var/log/knowledge-engine/*.jsonl",
+		"job"      = "knowledge-engine",
+	}]
+	sync_period = "5s"
 }
 
 loki.source.file "engine" {
-  targets       = local.file_match.engine.targets
-  forward_to    = [loki.process.engine.receiver]
-  tail_from_end = false
+	targets       = local.file_match.engine.targets
+	forward_to    = [loki.process.engine.receiver]
+	tail_from_end = false
 }
 
 loki.process "engine" {
-  stage.json {
-    expressions = {
-      ts      = "ts",
-      level   = "level",
-      logger  = "logger",
-      process = "process",
-      module  = "module",
-    }
-  }
+	stage.json {
+		expressions = {
+			ts      = "ts",
+			level   = "level",
+			logger  = "logger",
+			process = "process",
+			module  = "module",
+		}
+	}
 
-  stage.regex {
-    source     = "logger"
-    expression = "^(?:knowledge_engine\\.)?(?P<component>[^.]+)"
-  }
+	stage.regex {
+		source     = "logger"
+		expression = "^(?:knowledge_engine\\.)?(?P<component>[^.]+)"
+	}
 
-  stage.timestamp {
-    source = "ts"
-    format = "RFC3339"
-  }
+	stage.timestamp {
+		source = "ts"
+		format = "RFC3339"
+	}
 
-  stage.labels {
-    values = {
-      level     = "",
-      component = "",
-    }
-  }
+	stage.labels {
+		values = {
+			level     = "",
+			component = "",
+		}
+	}
 
-  stage.structured_metadata {
-    values = {
-      logger  = "",
-      process = "",
-      module  = "",
-    }
-  }
+	stage.structured_metadata {
+		values = {
+			logger  = "",
+			process = "",
+			module  = "",
+		}
+	}
 
-  forward_to = [loki.write.local.receiver]
+	forward_to = [loki.write.local.receiver]
 }
 
 loki.write "local" {
-  endpoint {
-    url = sys.env("LOKI_URL")
-  }
+	endpoint {
+		url = sys.env("LOKI_URL")
+	}
 }

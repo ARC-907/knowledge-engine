@@ -1,0 +1,52 @@
+# Serena project configuration for this repository (development tooling).
+#
+# Serena (https://github.com/oraios/serena, GPL-3.0-or-later) is an optional,
+# separately installed MCP server that gives coding agents symbol-level
+# navigation and editing over a language server. Nothing here is bundled with
+# the engine. Start it for this checkout with `nox -s serena` (stdio MCP); see
+# 02-dev-docs/DEV-TOOLING.md ("Serena"). Tested with serena-agent 2.1.0.
+#
+# Per-machine overrides go in .serena/project.local.yml (git-ignored).
+
+project_name: "knowledge-engine"
+
+# Pyright (started by Serena through `uvx`, so `uv` must be on PATH).
+language_servers: ["python"]
+encoding: "utf-8"
+line_ending: "lf"
+
+# Use the explicit tool interface. Serena's default `agent` context otherwise
+# exposes only a Python REPL tool instead of the symbol tools.
+agent_interface: "tools"
+
+ignore_all_files_in_gitignore: true
+ls_workspace_folders: ["."]
+ls_additional_workspace_folders: []
+# Generated and vendored content that only slows symbol indexing down.
+ignored_paths:
+  - "engine/src/knowledge_engine/server/static/vendor"
+  - "engine/tests/snapshots"
+  - "ui-src/node_modules"
+
+read_only: false
+excluded_tools: []
+included_optional_tools: []
+fixed_tools: []
+excluded_apis: []
+included_apis: []
+
+initial_prompt: |
+  This is knowledge-engine: a Python 3.12+ package under engine/src/knowledge_engine
+  (uv project in engine/, tests in engine/tests). Before proposing a change, read
+  CONTRIBUTING.md; run `nox -s lint typecheck tests-3.12` (or `just check`) after it.
+  Architecture: 02-dev-docs/ARCHITECTURE.md. Decisions: 02-dev-docs/adr/.
+
+activation_command:
+activation_command_timeout: 180
+language_backend:
+ls_specific_settings: {}
+default_modes:
+added_modes:
+symbol_info_budget:
+read_only_memory_patterns: []
+ignored_memory_patterns: []
