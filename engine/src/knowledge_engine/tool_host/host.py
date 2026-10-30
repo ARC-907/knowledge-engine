@@ -21,6 +21,9 @@ Security posture (defensive defaults; every feature is still available):
   forwarded. Hop-by-hop headers are always stripped, and ``Authorization`` is
   stripped unless explicitly allowed. Redirects may only go to http/https, and
   credentials are dropped when a redirect changes host.
+* :func:`run_bounded` is the bounded argv runner the module dispatcher
+  (:mod:`knowledge_engine.modules`) builds on: own process group, deadline,
+  output cap, cancellation that reaches every owned subprocess.
 * Every invocation is logged at INFO (tool id, interpreter/script or
   method + URL, outcome). Refusals are logged at WARNING.
 
@@ -29,15 +32,20 @@ Depends on `knowledge_engine.runtime.foundation.{config, db}`.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import mimetypes
 import os
 import re
 import shlex
+import signal
 import subprocess
+import threading
+import time
 import uuid as _uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from http.client import HTTPMessage
 from pathlib import Path
 from typing import IO, Any
@@ -841,3 +849,193 @@ def _urlopen(req: urllib_request.Request, timeout: float) -> Any:
     """Open ``req`` with the redirect-restricting opener (patched in tests)."""
     opener = urllib_request.build_opener(_SafeRedirectHandler)
     return opener.open(req, timeout=timeout)
+
+
+# ── Bounded argv execution (shared with the module dispatcher) ──
+
+
+#: Seconds between SIGTERM and SIGKILL when a process group is stopped.
+KILL_GRACE_SECONDS = 1.0
+#: How often :func:`run_bounded` checks its deadline and cancellation hooks.
+POLL_INTERVAL_SECONDS = 0.05
+_READ_CHUNK = 65536
+
+
+@dataclass(frozen=True)
+class ProcessOutcome:
+    """What :func:`run_bounded` observed. ``returncode`` is ``None`` when it was killed."""
+
+    returncode: int | None
+    stdout: bytes
+    stderr: bytes
+    timed_out: bool = False
+    cancelled: bool = False
+    output_exceeded: bool = False
+    elapsed_ms: int = 0
+
+
+def resolve_script_argv(argv: Sequence[str], working_dir: str | Path) -> list[str]:
+    """Validate a script argv with the same rules as :func:`invoke_script`.
+
+    The interpreter must be allowlisted (``allowed_script_interpreters`` in
+    ``tool-host.yaml``) and the first argument must be a script with an
+    allowed extension under ``working_dir`` (or ``PIPELINE_ROOT``); inline
+    code flags are refused. Returns the argv with the script resolved.
+
+    Raises:
+        ValueError: the argv is refused (the message says why).
+    """
+    cfg = _load_tool_host_config()
+    allowed = cfg.get("allowed_script_interpreters", list(DEFAULT_ALLOWED_INTERPRETERS))
+    args = [str(part) for part in argv]
+    if not args:
+        raise ValueError("empty command")
+    if args[0] not in allowed:
+        raise ValueError(f"Interpreter '{args[0]}' not in allowed list")
+    extensions = cfg.get("allowed_script_extensions", list(DEFAULT_SCRIPT_EXTENSIONS))
+    checked = _check_script_argv(args, working_dir, extensions)
+    if isinstance(checked, str):
+        raise ValueError(checked)
+    return [args[0], str(checked), *args[2:]]
+
+
+def _kill_group(proc: subprocess.Popen[bytes]) -> None:
+    """Stop ``proc`` and every process in its group (POSIX), else the process itself."""
+    if os.name == "nt":  # pragma: no cover - exercised on Windows only
+        with contextlib.suppress(OSError):
+            proc.kill()
+        return
+    for sig, grace in ((signal.SIGTERM, KILL_GRACE_SECONDS), (signal.SIGKILL, 0.0)):
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(proc.pid, sig)
+        if grace:
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                proc.wait(timeout=grace)
+
+
+def _reap_group(proc: subprocess.Popen[bytes]) -> None:
+    """After the leader exited, kill what is left of its process group (POSIX)."""
+    if os.name == "nt":  # pragma: no cover - Windows has no process groups here
+        return
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(proc.pid, signal.SIGKILL)
+
+
+def _pump(stream: IO[bytes], sink: bytearray, cap: int, overflow: threading.Event) -> None:
+    """Copy ``stream`` into ``sink`` up to ``cap`` bytes; set ``overflow`` beyond it."""
+    try:
+        while True:
+            chunk = stream.read1(_READ_CHUNK) if hasattr(stream, "read1") else stream.read(4096)
+            if not chunk:
+                return
+            room = cap - len(sink)
+            if len(chunk) > room:
+                sink.extend(chunk[: max(room, 0)])
+                overflow.set()
+                return
+            sink.extend(chunk)
+    except (OSError, ValueError):
+        return
+    finally:
+        with contextlib.suppress(OSError):
+            stream.close()
+
+
+def _feed(stream: IO[bytes], data: bytes) -> None:
+    try:
+        stream.write(data)
+    except (BrokenPipeError, OSError, ValueError):
+        logger.debug("child closed stdin before reading all input")
+    finally:
+        with contextlib.suppress(OSError, ValueError):
+            stream.close()
+
+
+def run_bounded(
+    argv: Sequence[str],
+    *,
+    cwd: str | Path,
+    stdin: bytes,
+    env: Mapping[str, str],
+    timeout_s: float,
+    max_stdout_bytes: int,
+    max_stderr_bytes: int = 65536,
+    should_cancel: Callable[[], bool] | None = None,
+) -> ProcessOutcome:
+    """Run ``argv`` (no shell) with a deadline, an output cap and cancellation.
+
+    The child starts in its own session (a new process group on POSIX), so a
+    timeout, a cancellation (``should_cancel()`` returning true, polled every
+    :data:`POLL_INTERVAL_SECONDS`) or stdout beyond ``max_stdout_bytes`` stops
+    the whole group: SIGTERM, then SIGKILL after :data:`KILL_GRACE_SECONDS`.
+    Processes the child left behind in its group are killed when it exits.
+    Only ``env`` is passed to the child (nothing is inherited).
+
+    Raises:
+        OSError: the interpreter cannot be started.
+    """
+    started = time.monotonic()
+    popen_kwargs: dict[str, Any] = {}
+    if os.name == "nt":  # pragma: no cover - Windows only
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        popen_kwargs["start_new_session"] = True
+    proc = subprocess.Popen(  # noqa: S603 - argv list validated by the caller, no shell
+        list(argv),
+        cwd=str(cwd),
+        env=dict(env),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        shell=False,
+        **popen_kwargs,
+    )
+    out, err = bytearray(), bytearray()
+    out_over, err_over = threading.Event(), threading.Event()
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None  # noqa: S101
+    threads = [
+        threading.Thread(target=_feed, args=(proc.stdin, stdin), daemon=True),
+        threading.Thread(
+            target=_pump, args=(proc.stdout, out, max_stdout_bytes, out_over), daemon=True
+        ),
+        threading.Thread(
+            target=_pump, args=(proc.stderr, err, max_stderr_bytes, err_over), daemon=True
+        ),
+    ]
+    for thread in threads:
+        thread.start()
+    deadline = started + max(timeout_s, 0.0)
+    timed_out = cancelled = False
+    try:
+        while True:
+            try:
+                proc.wait(timeout=POLL_INTERVAL_SECONDS)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            if out_over.is_set():
+                break
+            if should_cancel is not None and should_cancel():
+                cancelled = True
+                break
+            if time.monotonic() >= deadline:
+                timed_out = True
+                break
+    finally:
+        if proc.poll() is None:
+            _kill_group(proc)
+        _reap_group(proc)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=KILL_GRACE_SECONDS)
+        for thread in threads:
+            thread.join(timeout=KILL_GRACE_SECONDS)
+    killed = timed_out or cancelled or out_over.is_set()
+    return ProcessOutcome(
+        returncode=None if killed else proc.returncode,
+        stdout=bytes(out),
+        stderr=bytes(err),
+        timed_out=timed_out,
+        cancelled=cancelled,
+        output_exceeded=out_over.is_set(),
+        elapsed_ms=int((time.monotonic() - started) * 1000),
+    )
