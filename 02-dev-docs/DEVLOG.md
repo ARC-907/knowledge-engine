@@ -5,6 +5,47 @@ does not fit in a commit message or a CHANGELOG line. Newest first. Decisions
 with lasting effect also get an [ADR](adr/README.md); defects get a row in the
 [bug log](BUGLOG.md).
 
+## 2026-11-01 — 3.1 roadmap candidates on `release/3.1.0`
+
+- **Process.** The remaining roadmap items were split into one feature branch
+  each, built in parallel by narrowly scoped workers that read only their own
+  area of the code, and merged into a `release/3.1.0` integration branch
+  (created from `main`) after the local gate (now parametrised with
+  `GATE_BASE`) and green CI. The shared logs (CHANGELOG, DEVLOG, BUGLOG,
+  ROADMAP) were left to this one integration commit, so the branches never
+  conflicted on them. `release/3.1.0` is pushed for review; `main` and the tags
+  are left to the maintainer.
+- **CI and dependencies ([#53](https://github.com/ARC-907/knowledge-engine/pull/53)).** Windows and macOS are required: while
+  advisory they caught six real defects. uvicorn and hatchling floors follow
+  Dependabot #18 and #19.
+- **Typed rows ([#54](https://github.com/ARC-907/knowledge-engine/pull/54)).** TypedDicts for the tasks, workers and messages
+  tables, cast once where rows are decoded; tests pin each shape to
+  `PRAGMA table_info` and to live rows, so schema drift fails a test. Open
+  question: `workers.resources_json` is returned as raw JSON text while
+  `config_json` is decoded; it is typed and pinned as is rather than changed.
+- **Curation filter ([#55](https://github.com/ARC-907/knowledge-engine/pull/55)).** `curation_statuses` joins the scope
+  dimensions with research-type semantics; sources without record rows return
+  nothing while it is set. This closes the gap the V2 dashboard documented.
+- **Vector backend ([#56](https://github.com/ARC-907/knowledge-engine/pull/56)).** sqlite-vec mirrors the vectors in a sibling
+  database (so `--rebuild` and older releases work without the extension), is
+  kept in sync by a trigger-fed change log, and re-scores candidates exactly,
+  refilling until the result provably equals the scan. 1.36 s to 61 ms per
+  top-10 query on 20 000 x 1024 vectors. Ties now break on chunk id in both
+  backends.
+- **Project-context rename ([#57](https://github.com/ARC-907/knowledge-engine/pull/57)).** SQLite rewrote the foreign keys,
+  indexes and FTS5 shadow tables on rename (checked, not assumed). The worker
+  found that the broker opens stores read-only and never migrates, so a plain
+  rename would have broken search on stores not yet upgraded;
+  `db.document_tables()` reads the old names until the store is migrated.
+  Rolling back to 3.0 after the migration needs a backup, which the upgrade
+  guide and CHANGELOG now say.
+- **Integration.** Branches based on an older `release/3.1.0` were merged
+  forward before landing. Two independent lockfile changes ([#53](https://github.com/ARC-907/knowledge-engine/pull/53), [#56](https://github.com/ARC-907/knowledge-engine/pull/56))
+  combined consistently (`uv lock --check`). Two branches both took ADR 0017;
+  the project-context decision became ADR 0018. Full suite on the integrated
+  tree: 1666 passed, 9 opt-in skipped. No defects were found that needed a
+  bug-log row.
+
 ## 2026-10-30 — V2 qualification (P9) and 3.1.0 release commit
 
 - **Clean install.** Built the wheel from a fresh clone of `main`, installed it
