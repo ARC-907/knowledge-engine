@@ -52,21 +52,18 @@ jobs:
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
-    # Windows/macOS run as advisory until a runner history exists; Linux is required.
-    continue-on-error: ${{ matrix.advisory }}
+    # Every platform is required: Windows and macOS caught real defects
+    # (B-014, B-015, B-017, B-024, B-026, B-027) while they were advisory.
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.12", "3.13", "3.14"]
-        advisory: [false]
         include:
           - os: windows-latest
             python-version: "3.13"
-            advisory: true
           - os: macos-latest
             python-version: "3.13"
-            advisory: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
