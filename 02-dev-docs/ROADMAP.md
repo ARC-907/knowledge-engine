@@ -22,8 +22,8 @@ the [ADRs](adr/README.md).
 | Code and docs for 3.0.0 and the V2 roadmap | Merged on `main` |
 | Package version | `3.1.0` (`engine/pyproject.toml`), release commit merged in [#51](https://github.com/ARC-907/knowledge-engine/pull/51) |
 | `v3.0.0` / `v3.1.0` tags and GitHub Releases | **Not published** (held by the maintainer) |
-| Test suite | 1629 passed, 8 opt-in tests skipped (browser and live Serena; both run in their own CI job or locally) on the P9 candidate |
-| CI | Green on every V2 slice (Linux 3.12–3.14 required, macOS/Windows advisory, browser, tooling, CodeQL, zizmor, docs) |
+| Test suite | 1666 passed, 9 opt-in tests skipped (browser and live Serena; both run in their own CI job or locally) on the `release/3.1.0` candidate |
+| CI | Green on every V2 slice and every 3.1 feature branch (Linux 3.12–3.14, Windows and macOS required since #53; browser, tooling, zizmor, docs; CodeQL runs on PRs to `main`) |
 
 
 ## V2 delivery sequence
@@ -72,9 +72,15 @@ user-visible changes under `[Unreleased]` in the [CHANGELOG](../CHANGELOG.md).
 
 Publishing (tag `v3.0.0` or later, GitHub Release, repository settings) stays a
 maintainer decision and is not part of this plan. Remaining maintainer
-actions: push the `v3.0.0` and `v3.1.0` tags (the release workflow builds the
-GitHub Releases from them), update the repository description, and delete the
-merged `train/*` branches.
+actions:
+
+1. Review the `release/3.1.0` branch and merge it into `main` (a PR runs the
+   CodeQL and Scorecard checks that only run against `main`).
+2. Push the `v3.0.0` and `v3.1.0` tags; the release workflow builds the GitHub
+   Releases from them.
+3. Update the repository description, make the Windows and macOS jobs required
+   in branch protection if wanted, and delete the merged `train/*` and
+   `feat/*` branches.
 
 P0 and R0 may proceed together, but P0 cannot close without the ownership
 decision. After P1, retrieval and evidence work can proceed independently.
@@ -117,7 +123,7 @@ control system, and citation formatting alone is not evidence verification.
 Defer automatic module installation, in-process Python plugins, arbitrary code
 execution forwarding, Serena editing, and vector-backend replacement until
 the relevant compatibility, policy and measured performance needs are established.
-The existing 3.1 candidates below remain backlog, not prerequisites for this plan.
+The 3.1 candidates below were delivered on `release/3.1.0` after the V2 plan; PyPI distribution and shim removal remain open by design.
 
 
 ## Starting point
@@ -205,28 +211,22 @@ candidate and release prerequisites before taking these actions.
 
 ### 3.1 candidates
 
-- **Typed row shapes.** The queue, worker registry and message board return
-  plain dictionaries checked with `require_row`. Typed row definitions
-  (TypedDict or dataclasses) would let mypy check field access in the
-  substrates.
-- **PyPI distribution.** The name `knowledge-engine` belongs to an unrelated
-  project. Publishing needs a free distribution name, a trusted publisher and
-  the `PYPI_PUBLISH` repository variable ([RELEASING.md](RELEASING.md)).
-- **Vector index backend.** Vector search streams every stored vector
-  through a cosine scan (`CorpusEmbeddingIndex`). A pluggable
-  approximate-nearest-neighbour backend such as sqlite-vec would be needed
-  once corpora outgrow that.
-- **Windows and macOS as required checks.** They run on every PR but are
-  advisory, pending a longer green history.
-- **Compatibility shim removal in 4.0.** `knowledge_engine.mcp_server` and
-  the other 3.0 shims are removed one major version later
-  ([CONTRIBUTING.md](../CONTRIBUTING.md), deprecation policy).
+Integrated on the `release/3.1.0` branch (each through its own feature branch,
+the local gate and green CI):
+
+| Candidate | State |
+| --- | --- |
+| Typed row shapes for the queue, worker registry and message board | Done in [#54](https://github.com/ARC-907/knowledge-engine/pull/54) (`runtime.pipeline.rows`; mypy strict on `runtime.pipeline.*`) |
+| Vector index backend | Done in [#56](https://github.com/ARC-907/knowledge-engine/pull/56): optional sqlite-vec accelerator with exact results and scan fallback (ADR 0017) |
+| Windows and macOS as required checks | Done in [#53](https://github.com/ARC-907/knowledge-engine/pull/53) for the CI workflow; making them required in branch protection is a repository setting |
+| Curation status as a search filter (gap left by the V2 dashboard) | Done in [#55](https://github.com/ARC-907/knowledge-engine/pull/55) |
+| Rename the historical `project_docs` tables (3.0 known limitation) | Done in [#57](https://github.com/ARC-907/knowledge-engine/pull/57) (migration 008, ADR 0018) |
+| Dependabot floors for uvicorn and hatchling (3.0.x maintenance) | Done in [#53](https://github.com/ARC-907/knowledge-engine/pull/53); supersedes #18 and #19 |
+| PyPI distribution | **Maintainer decision.** The name `knowledge-engine` belongs to an unrelated project; publishing needs a free distribution name, a trusted publisher and the `PYPI_PUBLISH` repository variable ([RELEASING.md](RELEASING.md)) |
+| Compatibility shim removal | **4.0.** `knowledge_engine.mcp_server` and the other 3.0 shims are removed one major version later ([CONTRIBUTING.md](../CONTRIBUTING.md), deprecation policy) |
 
 ### Known limitations in 3.0
 
-- The project-context subsystem keeps its historical `project_docs` /
-  `project_docs_fts` SQLite table names. Renaming live tables needs its own
-  migration.
 - The Playwright dashboard tests run in the `dashboard (browser smoke)` CI job
   ([#40](https://github.com/ARC-907/knowledge-engine/issues/40)); locally they stay opt-in
   (`KE_UI_TESTS=1`).

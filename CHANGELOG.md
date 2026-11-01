@@ -8,18 +8,25 @@ renamed modules live for one major version (see `CONTRIBUTING.md`).
 
 ## [Unreleased]
 
-## [3.1.0] — 2026-10-30
+## [3.1.0] — 2026-11-01
 
 The V2 roadmap: scoped knowledge, a retrieval broker, revision-bound evidence
 and citations, modules, an optional Serena adapter, new dashboard views and
-developer tooling. Every addition is opt-in; `search` over HTTP, MCP and the
-CLI, the registry, the indexes and existing settings are unchanged.
+developer tooling, plus the 3.1 roadmap candidates: a curation-status filter,
+an optional sqlite-vec vector backend, typed pipeline rows, renamed
+project-context tables, and Windows and macOS as required CI platforms. Every
+addition is opt-in; `search` over HTTP, MCP and the CLI, the registry and
+existing settings are unchanged.
 
 ### Upgrading from 3.0
 
-No action is required: 3.1 keeps its new state in new files (`knowledge.db`,
-`modules.db`) that 3.0 never reads, so rolling back is reinstalling 3.0. To
-turn the features on, run `knowledge-engine knowledge migrate --apply` and
+No action is required to keep working: the V2 features keep their state in new
+files (`knowledge.db`, `modules.db`) that 3.0 never reads. One existing store
+changes: the first project-context command after the upgrade migrates each
+project-context store (migration 008 renames `project_docs` to
+`project_documents`), so rolling back to 3.0 after that means restoring the
+store from a backup. To turn the features on, run
+`knowledge-engine knowledge migrate --apply` and
 `knowledge-engine knowledge snapshot --apply`, then follow
 [01-user-docs/UPGRADING.md](01-user-docs/UPGRADING.md).
 
@@ -281,6 +288,50 @@ turn the features on, run `knowledge-engine knowledge migrate --apply` and
   - an unrecorded old revision showing `unsupported` instead of newer text;
   - a module rendering as degraded, then failed, then ready after a health
     check.
+
+**3.1 roadmap candidates (integrated on `release/3.1.0`)**
+
+- Curation status is a broker scope filter ([#55](https://github.com/ARC-907/knowledge-engine/pull/55)): `curation_statuses` in
+  the query context and scope profiles (HTTP `/knowledge/search`, MCP
+  `knowledge.search`), `--curation STATUS` (repeatable) on `knowledge search`,
+  `knowledge record list` and `knowledge profile set`, and a curation-status
+  filter in the dashboard Knowledge tab. Values are ORed, `[]` selects
+  nothing, and the filter applies before the hit limit; project-context and
+  code-symbol sources return nothing while it is set.
+- Vector search backends ([#56](https://github.com/ARC-907/knowledge-engine/pull/56)): `KE_EMBED_BACKEND=scan|sqlite-vec` and
+  `knowledge-engine embeddings build|search|status --backend`. The
+  `sqlite-vec` backend (optional `vec` extra: `uv sync --extra vec` /
+  `pip install "knowledge-engine[vec]"`) keeps the vectors in a vec0 table in
+  `embeddings.vec.db`, maintained by builds, and returns the same results as
+  the scan, about 20x faster on 20 000 1024-dimension chunks (1.36 s to 61 ms
+  for a top-10 query). When the extension or its table is unavailable or
+  stale, search falls back to the scan with a WARNING and
+  `embeddings status` says why. Decision: ADR 0017.
+
+### Changed
+
+- Project-context content tables `project_docs` and `project_docs_fts` are
+  renamed to `project_documents` and `project_documents_fts` (migration 008,
+  ADR 0018, [#57](https://github.com/ARC-907/knowledge-engine/pull/57)); the `project_doc_*` child tables keep their names. The
+  next project-context MCP tool or CLI command migrates each store in one
+  transaction; until then the retrieval broker keeps reading the old tables.
+  No compatibility views are created, so scripts that query the old tables
+  directly must switch names. Rolling back to 3.0 after the migration needs a
+  backup of the store.
+- Pipeline stores (`runtime.pipeline.queue`, `worker_registry`,
+  `message_board`) and the agent-board store facades return typed rows
+  (`TaskRow`, `WorkerRow`, `MessageRow`, `SafeguardStatus` in the new
+  `runtime.pipeline.rows`); the values are still plain dicts, so HTTP, MCP and
+  CLI output is unchanged. `foundation.db.require_row` is generic, and mypy
+  runs with the full strict defaults on `runtime.pipeline.*` and
+  `agent_board.digest` ([#54](https://github.com/ARC-907/knowledge-engine/pull/54)).
+- Exact score ties in vector search are broken by the lower chunk id, in both
+  backends, so the order is deterministic ([#56](https://github.com/ARC-907/knowledge-engine/pull/56)).
+- `EffectiveScope.from_profile` lists `curation_statuses` when the request
+  leaves them to the profile ([#55](https://github.com/ARC-907/knowledge-engine/pull/55)).
+- CI: the Windows and macOS test jobs are required checks, like the Linux
+  matrix (they were advisory). Dependency floors: `uvicorn[standard]>=0.54.0`
+  and the build backend `hatchling>=1.32.4` ([#53](https://github.com/ARC-907/knowledge-engine/pull/53)).
 
 ### Fixed
 
