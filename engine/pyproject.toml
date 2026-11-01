@@ -196,6 +196,19 @@ disallow_untyped_calls = false
 disallow_any_generics = false
 warn_return_any = false
 
+# The pipeline stores and their typed rows (runtime/pipeline/rows.py): back to
+# the full strict defaults. ``agent_board.digest`` reads those rows directly.
+[[tool.mypy.overrides]]
+module = [
+    "knowledge_engine.agent_board.digest",
+    "knowledge_engine.runtime.pipeline.*",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+disallow_any_generics = true
+warn_return_any = true
+
 [[tool.mypy.overrides]]
 module = ["watchdog.*", "yaml.*"]
 ignore_missing_imports = true

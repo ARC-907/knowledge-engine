@@ -18,10 +18,15 @@ from typing import Any
 
 from ...core.util.time import utc_now_iso
 from ..foundation import db
+from .rows import MessageRow, message_from_row, messages_from_rows
 
 
-def _extract_target_node(msg: dict[str, Any]) -> str | None:
-    """Extract the target node from a message body JSON (system commands use 'target')."""
+def _extract_target_node(msg: MessageRow) -> object:
+    """Extract the target node from a message body JSON (system commands use 'target').
+
+    Typed ``object``: the value is whatever JSON the body holds (normally a
+    string, or ``None``); callers only compare it for equality.
+    """
     body = msg.get("body")
     if not body:
         return None
@@ -32,8 +37,8 @@ def _extract_target_node(msg: dict[str, Any]) -> str | None:
         return None
 
 
-def _extract_target_role(msg: dict[str, Any]) -> str | None:
-    """Extract the target role from a message body JSON."""
+def _extract_target_role(msg: MessageRow) -> object:
+    """Extract the target role from a message body JSON (see ``_extract_target_node``)."""
     body = msg.get("body")
     if not body:
         return None
@@ -65,7 +70,7 @@ def post_message(
     channel: str = "ops",
     model_id: str | None = None,
     thread_id: str | None = None,
-) -> dict[str, Any]:
+) -> MessageRow:
     """Post a message to the board. Returns the created message.
 
     `thread_id` is optional; when supplied it lands in the same INSERT
@@ -107,11 +112,11 @@ def post_message(
     return db.require_row(read_message(message_id), "message", message_id)
 
 
-def read_message(message_id: str) -> dict[str, Any] | None:
+def read_message(message_id: str) -> MessageRow | None:
     """Read a single message by ID."""
     conn = db.get_connection()
     row = conn.execute("SELECT * FROM messages WHERE message_id = ?", (message_id,)).fetchone()
-    return db.dict_from_row(row)
+    return message_from_row(row)
 
 
 # ── Polling ────────────────────────────────────────────────
@@ -125,7 +130,7 @@ def poll_messages(
     sender_node_id: str | None = None,
     limit: int = 50,
     channel: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[MessageRow]:
     """Poll messages with optional filters. Returns newest first."""
     conn = db.get_connection()
 
@@ -159,7 +164,7 @@ def poll_messages(
         f"SELECT * FROM messages WHERE {where} ORDER BY created_at DESC LIMIT ?",
         params,
     ).fetchall()
-    return db.rows_to_dicts(rows)
+    return messages_from_rows(rows)
 
 
 def get_relevant_messages(
@@ -168,7 +173,7 @@ def get_relevant_messages(
     current_task_ids: list[str] | None = None,
     since: str | None = None,
     limit: int = 20,
-) -> list[dict[str, Any]]:
+) -> list[MessageRow]:
     """Get messages relevant to a specific worker.
 
     Relevance rules: same task_id, same product_id, addressed to role,
@@ -176,7 +181,7 @@ def get_relevant_messages(
     """
     all_msgs = poll_messages(since=since, limit=limit * 3)
 
-    relevant = []
+    relevant: list[MessageRow] = []
     task_set = set(current_task_ids or [])
 
     for msg in all_msgs:
@@ -206,7 +211,7 @@ def get_relevant_messages(
 # ── Convenience Posters ──────────────────────────────────────
 
 
-def post_claim(node_id: str, task_id: str, role: str | None = None) -> dict[str, Any]:
+def post_claim(node_id: str, task_id: str, role: str | None = None) -> MessageRow:
     """Announce a task claim on the board."""
     return post_message(
         message_type="claim",
@@ -218,7 +223,7 @@ def post_claim(node_id: str, task_id: str, role: str | None = None) -> dict[str,
     )
 
 
-def post_release(node_id: str, task_id: str, reason: str = "") -> dict[str, Any]:
+def post_release(node_id: str, task_id: str, reason: str = "") -> MessageRow:
     """Announce a task release."""
     return post_message(
         message_type="release",
@@ -230,7 +235,7 @@ def post_release(node_id: str, task_id: str, reason: str = "") -> dict[str, Any]
     )
 
 
-def post_blocker(node_id: str, task_id: str, description: str) -> dict[str, Any]:
+def post_blocker(node_id: str, task_id: str, description: str) -> MessageRow:
     """Flag a blocker for human or coordinator attention."""
     return post_message(
         message_type="blocker",
@@ -243,7 +248,7 @@ def post_blocker(node_id: str, task_id: str, description: str) -> dict[str, Any]
     )
 
 
-def post_heartbeat_msg(node_id: str, tasks: list[str]) -> dict[str, Any]:
+def post_heartbeat_msg(node_id: str, tasks: list[str]) -> MessageRow:
     """Health message for the board."""
     return post_message(
         message_type="node_health",
