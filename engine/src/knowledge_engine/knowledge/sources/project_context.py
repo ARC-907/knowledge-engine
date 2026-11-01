@@ -38,6 +38,7 @@ from typing import Any
 
 from ...project_context import search as pdsearch
 from ...project_context.config import ProjectContextConfig, load_config
+from ...project_context.db import document_tables
 from ...project_context.paths import (
     canonical_root,
     fingerprint_db_path,
@@ -331,8 +332,10 @@ class ProjectContextAdapter:
     def _document(self, link: ProjectLink, doc_id: str, record_id: str) -> tuple[Any, bool]:
         cfg = self._load_config(Path(link.root))
         with _readonly(_content_db(link, cfg)) as conn:
+            # The store may predate migration 008 (read-only: never migrated here).
+            docs, _ = document_tables(conn)
             row = conn.execute(
-                "SELECT pd.record_id, pd.source_path, b.searchable_body FROM project_docs pd"
+                f"SELECT pd.record_id, pd.source_path, b.searchable_body FROM {docs} pd"
                 " LEFT JOIN project_doc_bodies b ON b.record_id = pd.record_id"
                 " WHERE pd.record_id = ? AND pd.project_fp = ?",
                 (doc_id, link.project_fp),

@@ -16,9 +16,9 @@ is rejected by the sanitizer is recorded with no body and no full-text index
 entry. See section 7 of the design spec for the canonical pipeline.
 
 The FTS contract is shared verbatim with the search module:
-``project_docs_fts`` is a contentless ``fts5(searchable_body, summary)`` whose
+``project_documents_fts`` is a contentless ``fts5(searchable_body, summary)`` whose
 ``rowid`` mirrors ``project_context.rowid``; rows are inserted explicitly after the
-``project_docs`` row is written.
+``project_documents`` row is written.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from .models import DocRecord
 #: Default summary length when no summarizer is supplied.
 _DEFAULT_SUMMARY_CHARS = 200
 
-#: Columns written to ``project_docs`` from a :class:`DocRecord`.
+#: Columns written to ``project_documents`` from a :class:`DocRecord`.
 _DOC_COLUMNS = (
     "record_id",
     "pointer_id",
@@ -131,7 +131,7 @@ def _find_duplicate(
     spec, section 7.
     """
     row = project_conn.execute(
-        "SELECT * FROM project_docs "
+        "SELECT * FROM project_documents "
         "WHERE content_hash = ? AND source_path = ? AND branch_fp = ? LIMIT 1",
         (content_hash, source_path, branch_fp),
     ).fetchone()
@@ -139,12 +139,12 @@ def _find_duplicate(
 
 
 def _insert_doc(project_conn: sqlite3.Connection, record: DocRecord) -> None:
-    """Insert a ``project_docs`` row from a record."""
+    """Insert a ``project_documents`` row from a record."""
     row = record.to_row()
     columns = ", ".join(_DOC_COLUMNS)
     placeholders = ", ".join("?" for _ in _DOC_COLUMNS)
     project_conn.execute(
-        f"INSERT INTO project_docs ({columns}) VALUES ({placeholders})",
+        f"INSERT INTO project_documents ({columns}) VALUES ({placeholders})",
         tuple(row[col] for col in _DOC_COLUMNS),
     )
 
@@ -157,10 +157,10 @@ def _insert_fts(
 ) -> None:
     """Index a record in the contentless FTS table, mirroring its rowid."""
     rowid = project_conn.execute(
-        "SELECT rowid FROM project_docs WHERE record_id = ?", (record_id,)
+        "SELECT rowid FROM project_documents WHERE record_id = ?", (record_id,)
     ).fetchone()[0]
     project_conn.execute(
-        "INSERT INTO project_docs_fts(rowid, searchable_body, summary) VALUES (?, ?, ?)",
+        "INSERT INTO project_documents_fts(rowid, searchable_body, summary) VALUES (?, ?, ?)",
         (rowid, searchable_body, summary),
     )
 
@@ -261,7 +261,7 @@ def ingest_record(
     Runs the pipeline from the design spec, section 7, and returns the resulting
     :class:`DocRecord`. Records may end in one of three terminal states:
 
-    * ``ingested`` — new ``project_docs`` row + body + provenance + FTS entry.
+    * ``ingested`` — new ``project_documents`` row + body + provenance + FTS entry.
     * ``skipped_dedupe`` — an identical record already exists; the existing
       record is returned with its ``ingestion_status`` set accordingly.
     * ``rejected`` — the sanitizer flagged the text (oversize/binary/unsafe); a

@@ -19,7 +19,7 @@ from knowledge_engine.project_context.logs import (
     record_test_run,
 )
 
-_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 _PROJECT_FP = "proj_abc1234567890abc"
 _BRANCH_FP = "br_def1234567890abcd"
 

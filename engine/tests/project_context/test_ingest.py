@@ -19,9 +19,11 @@ def registry_conn(tmp_path) -> sqlite3.Connection:
 
 @pytest.fixture()
 def project_conn(tmp_path) -> sqlite3.Connection:
-    """A fresh project content DB with the 002_ through 007_ migrations applied."""
+    """A fresh project content DB with the 002_ through 008_ migrations applied."""
     conn = db.connect(tmp_path / "project.sqlite")
-    db.apply_migrations(conn, only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_"))
+    db.apply_migrations(
+        conn, only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_", "008_")
+    )
     return conn
 
 
@@ -56,7 +58,7 @@ def test_ingest_one_doc_writes_row_and_is_searchable(
     assert record.ingestion_status == schema.INGESTED
     assert record.pointer_id.startswith("ke-doc://doc/")
 
-    rows = project_conn.execute("SELECT * FROM project_docs").fetchall()
+    rows = project_conn.execute("SELECT * FROM project_documents").fetchall()
     assert len(rows) == 1
     assert rows[0]["record_id"] == record.record_id
 
@@ -69,9 +71,9 @@ def test_ingest_one_doc_writes_row_and_is_searchable(
 
     # FTS finds it through the contentless JOIN MATCH.
     hits = project_conn.execute(
-        "SELECT pd.* FROM project_docs_fts f "
-        "JOIN project_docs pd ON pd.rowid = f.rowid "
-        "WHERE project_docs_fts MATCH ? ORDER BY bm25(project_docs_fts) LIMIT ?",
+        "SELECT pd.* FROM project_documents_fts f "
+        "JOIN project_documents pd ON pd.rowid = f.rowid "
+        "WHERE project_documents_fts MATCH ? ORDER BY bm25(project_documents_fts) LIMIT ?",
         ("frobnication", 10),
     ).fetchall()
     assert len(hits) == 1
@@ -114,9 +116,11 @@ def test_reingest_identical_skips_dedupe(
     assert second.ingestion_status == schema.SKIPPED_DEDUPE
     assert second.record_id == first.record_id
 
-    count = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
+    count = project_conn.execute("SELECT COUNT(*) AS c FROM project_documents").fetchone()["c"]
     assert count == 1
-    fts_count = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs_fts").fetchone()["c"]
+    fts_count = project_conn.execute("SELECT COUNT(*) AS c FROM project_documents_fts").fetchone()[
+        "c"
+    ]
     assert fts_count == 1
 
 
@@ -142,7 +146,7 @@ def test_validate_context_mismatch_raises(
             cfg=cfg,
         )
     # Nothing was written.
-    count = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
+    count = project_conn.execute("SELECT COUNT(*) AS c FROM project_documents").fetchone()["c"]
     assert count == 0
 
 
@@ -193,11 +197,11 @@ def test_rejected_secret_stores_no_body_no_fts(
     assert record.sanitization_status in schema.REJECTED_STATES
 
     # Metadata row exists, but no body and no FTS entry.
-    docs = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
+    docs = project_conn.execute("SELECT COUNT(*) AS c FROM project_documents").fetchone()["c"]
     assert docs == 1
     bodies = project_conn.execute("SELECT COUNT(*) AS c FROM project_doc_bodies").fetchone()["c"]
     assert bodies == 0
-    fts = project_conn.execute("SELECT COUNT(*) AS c FROM project_docs_fts").fetchone()["c"]
+    fts = project_conn.execute("SELECT COUNT(*) AS c FROM project_documents_fts").fetchone()["c"]
     assert fts == 0
 
 

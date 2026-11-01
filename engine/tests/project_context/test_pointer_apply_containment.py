@@ -22,7 +22,7 @@ from knowledge_engine.project_context.config import ProjectContextConfig
 from knowledge_engine.project_context.scanner import pointer_apply
 from knowledge_engine.project_context.scanner.pointer_plan import BACKUP_SUFFIX
 
-PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 SOURCE = '''def greet(name):
     """This is a long docstring.

@@ -21,7 +21,7 @@ MIGRATIONS = (
     / "migrations"
 )
 
-PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 
 def _registry(tmp_path: Path) -> sqlite3.Connection:
@@ -97,19 +97,19 @@ def test_ingest_markdown_writes_row_and_fts(tmp_path: Path) -> None:
     assert stats["ingested"] >= 1
     assert stats["run_id"]
 
-    # A project_docs row exists for the markdown file.
+    # A project_documents row exists for the markdown file.
     row = project.execute(
-        "SELECT record_id FROM project_docs WHERE source_path = ?",
+        "SELECT record_id FROM project_documents WHERE source_path = ?",
         ("docs/intro.md",),
     ).fetchone()
     assert row is not None
 
     # FTS finds the body using the shared join contract.
     hit = project.execute(
-        "SELECT pd.record_id FROM project_docs_fts f "
-        "JOIN project_docs pd ON pd.rowid = f.rowid "
-        "WHERE project_docs_fts MATCH ? "
-        "ORDER BY bm25(project_docs_fts) LIMIT ?",
+        "SELECT pd.record_id FROM project_documents_fts f "
+        "JOIN project_documents pd ON pd.rowid = f.rowid "
+        "WHERE project_documents_fts MATCH ? "
+        "ORDER BY bm25(project_documents_fts) LIMIT ?",
         ("brown", 5),
     ).fetchone()
     assert hit is not None

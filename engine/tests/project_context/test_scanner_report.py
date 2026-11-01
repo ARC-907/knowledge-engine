@@ -12,7 +12,7 @@ from pathlib import Path
 from knowledge_engine.project_context import config as _config, db as _db, schema
 from knowledge_engine.project_context.scanner import report
 
-_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 
 def _make_project(tmp_path: Path) -> Path:
@@ -34,7 +34,7 @@ def _default_cfg():
 
 
 def _project_conn(tmp_path: Path):
-    """Create a fresh project DB with migrations 002-007 applied."""
+    """Create a fresh project DB with migrations 002-008 applied."""
     conn = _db.connect(tmp_path / "project.sqlite")
     _db.apply_migrations(conn, only_prefixes=_PROJECT_PREFIXES)
     return conn
@@ -74,12 +74,12 @@ def test_report_writes_nothing_to_project_db(tmp_path: Path) -> None:
     cfg = _default_cfg()
     conn = _project_conn(tmp_path)
     try:
-        before = conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
+        before = conn.execute("SELECT COUNT(*) AS c FROM project_documents").fetchone()["c"]
         assert before == 0
 
         report.run(root, cfg, conn=conn)
 
-        after = conn.execute("SELECT COUNT(*) AS c FROM project_docs").fetchone()["c"]
+        after = conn.execute("SELECT COUNT(*) AS c FROM project_documents").fetchone()["c"]
         assert after == 0, "report mode must not write to the project DB"
     finally:
         conn.close()

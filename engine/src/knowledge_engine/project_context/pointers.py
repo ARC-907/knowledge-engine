@@ -196,7 +196,7 @@ def resolve(
 
     record_id = prow["record_id"]
     drow = project_conn.execute(
-        "SELECT * FROM project_docs WHERE record_id = ?", (record_id,)
+        "SELECT * FROM project_documents WHERE record_id = ?", (record_id,)
     ).fetchone()
 
     envelope: dict[str, Any] = {
@@ -298,7 +298,7 @@ def validate_pointer(project_conn: sqlite3.Connection, uri: str) -> dict[str, bo
     result["exists"] = True
 
     drow = project_conn.execute(
-        "SELECT content_hash FROM project_docs WHERE record_id = ?",
+        "SELECT content_hash FROM project_documents WHERE record_id = ?",
         (prow["record_id"],),
     ).fetchone()
     if drow is not None and drow["content_hash"] == prow["content_hash"]:

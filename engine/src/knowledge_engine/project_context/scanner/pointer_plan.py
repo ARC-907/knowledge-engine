@@ -73,7 +73,7 @@ def _provenance_span(conn: sqlite3.Connection, record_id: str) -> Any:
     """Return the source span recorded for ``record_id`` in provenance, if any.
 
     The span lives in ``project_doc_provenance.source_span_json`` (the
-    ``project_docs`` table itself carries no span column). Returns the decoded
+    ``project_documents`` table itself carries no span column). Returns the decoded
     JSON value, or ``None`` when no span was provenance-recorded.
     """
     row = conn.execute(
@@ -134,7 +134,7 @@ def run(
     """
     applied = _applied_record_ids(project_conn)
     rows = project_conn.execute(
-        "SELECT * FROM project_docs WHERE category = ? ORDER BY created_at, record_id",
+        "SELECT * FROM project_documents WHERE category = ? ORDER BY created_at, record_id",
         (CATEGORY_DOCSTRING,),
     ).fetchall()
 
