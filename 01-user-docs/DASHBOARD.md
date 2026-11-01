@@ -31,11 +31,11 @@ first. The tab says so when the store is empty or `KE_KNOWLEDGE_ENABLED=0`.
 - **Workspace and project.** Choose a project to search only its records.
   Tick *also records outside any project* to add workspace-wide records.
 - **Mode and hits.** `fts`, `vector` or `hybrid`, and 1 to 100 hits.
-- **Filters** (sources, collections, research types, tags). A group with
-  nothing ticked is left to the scope profile. Values in one group are ORed,
-  groups are ANDed, and every tag must be present. Filters apply before the
-  hit limit. Curation status is record metadata; the broker does not filter
-  on it.
+- **Filters** (sources, collections, research types, curation status, tags).
+  A group with nothing ticked is left to the scope profile. Values in one
+  group are ORed, groups are ANDed, and every tag must be present. Filters
+  apply before the hit limit. Project-context documents have no curation
+  status, so ticking any status leaves them out.
 - **Per-source status.** Each selected source reports `ok`, `unavailable`,
   `timeout` or `error`, with its hit count. When some sources fail, a
   *Partial result* warning says that their hits are missing. When every

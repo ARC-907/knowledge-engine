@@ -221,6 +221,17 @@ def test_export_rechecks_scope(lab: dict[str, Any]) -> None:
     assert export_citations(lab["ev"], CitationExportRequest.model_validate(request)).citations
 
 
+def test_export_rechecks_curation_scope(lab: dict[str, Any]) -> None:
+    lab["store"].classify("module:papers", "paper-1", curation_status="reviewed")
+    request = _request(lab)
+    request["context"] = {"workspace_id": "lab", "curation_statuses": ["reviewed"]}
+    # The note is still unclassified, outside a reviewed-only scope: the export is denied.
+    with pytest.raises(DeniedError):
+        export_citations(lab["ev"], CitationExportRequest.model_validate(request))
+    lab["store"].classify("module:papers", "note-1", curation_status="reviewed")
+    assert export_citations(lab["ev"], CitationExportRequest.model_validate(request)).citations
+
+
 def test_escaping_helpers() -> None:
     assert citations.escape_markdown("a *b* [c]\n<d>") == r"a \*b\* \[c\] \<d\>"
     assert citations.markdown_url("https://x.org/a b<c>") == "<https://x.org/a%20b%3Cc%3E>"

@@ -115,7 +115,7 @@ class EvidenceSourceAdapter:
             source_id=self._source_id,
             source_kind=self._kind,
             modes=modes,
-            filters=("project", "collection", "research_type", "tag"),
+            filters=("project", "collection", "research_type", "tag", "curation"),
             locator_kinds=("text", "unsupported"),
             supports_open=True,
         )

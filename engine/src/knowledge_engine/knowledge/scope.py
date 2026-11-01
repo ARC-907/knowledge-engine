@@ -17,6 +17,10 @@ dimension omitted (``None``)   use the profile's value for that dimension
 ``source_ids=[]`` (explicit)   no sources: the scope is empty, nothing matches
 ``collection_ids=[]``          no collections: nothing matches
 ``research_types=[]``          no types: nothing matches
+``curation_statuses=[]``       no curation statuses: nothing matches
+``curation_statuses`` set      only records classified in ``knowledge.db``
+                               with one of them; sources without record rows
+                               (project context, code symbols) match nothing
 values within one list         ORed (any of them)
 ``tags``                       ANDed (every tag must be present)
 ``tags=[]`` (explicit)         no tag constraint (overrides the profile's tags)
@@ -34,6 +38,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from .contracts import (
+    CurationStatus,
     EffectiveScope,
     QueryContext,
     ResearchType,
@@ -70,6 +75,9 @@ class RecordView:
     research_type: ResearchType
     tags: frozenset[str] = frozenset()
     collection_ids: frozenset[str] = frozenset()
+    #: ``None`` for a record no ``knowledge.db`` row classifies (project
+    #: context, code symbols): it matches no curation constraint.
+    curation_status: CurationStatus | None = None
 
 
 def builtin_profile(workspace_id: str, profile_id: str = DEFAULT_PROFILE_ID) -> ScopeProfile:
@@ -139,6 +147,7 @@ def resolve_scope(
     collections = pick("collection_ids", context.collection_ids, profile.collection_ids)
     types = pick("research_types", context.research_types, profile.research_types)
     tags = pick("tags", context.tags, profile.tags)
+    statuses = pick("curation_statuses", context.curation_statuses, profile.curation_statuses)
 
     if sources is not None:
         missing = sorted(set(sources) - catalog.sources)
@@ -167,11 +176,14 @@ def resolve_scope(
 
     if types is not None:
         types = tuple(sorted(set(types), key=lambda t: t.value))
+    if statuses is not None:
+        statuses = tuple(sorted(set(statuses), key=lambda s: s.value))
 
     empty = (
         (sources is not None and not sources)
         or (collections is not None and not collections)
         or (types is not None and not types)
+        or (statuses is not None and not statuses)
     )
     return EffectiveScope(
         workspace_id=catalog.workspace_id,
@@ -181,6 +193,7 @@ def resolve_scope(
         source_ids=() if empty else resolved_sources,
         collection_ids=collections,
         research_types=types,
+        curation_statuses=statuses,
         tags=tuple(sorted(set(tags))),
         from_profile=tuple(from_profile),
         empty=empty,
@@ -200,6 +213,10 @@ def record_in_scope(record: RecordView, scope: EffectiveScope) -> bool:
     if scope.collection_ids is not None and not (record.collection_ids & set(scope.collection_ids)):
         return False
     if scope.research_types is not None and record.research_type not in scope.research_types:
+        return False
+    if scope.curation_statuses is not None and record.curation_status not in (
+        scope.curation_statuses
+    ):
         return False
     return set(scope.tags) <= record.tags
 
