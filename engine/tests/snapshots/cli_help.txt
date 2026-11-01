@@ -137,6 +137,7 @@ options:
 usage: knowledge-engine embeddings build [-h] [--incremental | --rebuild]
                                          [--provider {fake,ollama,remote}]
                                          [--model MODEL] [--db DB]
+                                         [--backend {scan,sqlite-vec}]
                                          [--batch BATCH]
                                          [--chunk-size CHUNK_SIZE]
                                          [--chunk-overlap CHUNK_OVERLAP]
@@ -153,6 +154,10 @@ options:
   --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
   --db DB               index database (default: $KE_EMBEDDINGS_DB or
                         <data_dir>/embeddings.db)
+  --backend {scan,sqlite-vec}
+                        vector search backend (default: $KE_EMBED_BACKEND or
+                        scan); `build --backend sqlite-vec` creates or
+                        refreshes the sqlite-vec table
   --batch BATCH         chunks per embedding request (default: $KE_EMBED_BATCH
                         or 32)
   --chunk-size CHUNK_SIZE
@@ -165,6 +170,7 @@ options:
 usage: knowledge-engine embeddings search [-h] [--top TOP] [--library LIBRARY]
                                           [--provider {fake,ollama,remote}]
                                           [--model MODEL] [--db DB]
+                                          [--backend {scan,sqlite-vec}]
                                           query
 
 positional arguments:
@@ -180,10 +186,15 @@ options:
   --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
   --db DB               index database (default: $KE_EMBEDDINGS_DB or
                         <data_dir>/embeddings.db)
+  --backend {scan,sqlite-vec}
+                        vector search backend (default: $KE_EMBED_BACKEND or
+                        scan); `build --backend sqlite-vec` creates or
+                        refreshes the sqlite-vec table
 ### knowledge-engine embeddings status --help
 usage: knowledge-engine embeddings status [-h]
                                           [--provider {fake,ollama,remote}]
                                           [--model MODEL] [--db DB]
+                                          [--backend {scan,sqlite-vec}]
 
 options:
   -h, --help            show this help message and exit
@@ -193,6 +204,10 @@ options:
   --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
   --db DB               index database (default: $KE_EMBEDDINGS_DB or
                         <data_dir>/embeddings.db)
+  --backend {scan,sqlite-vec}
+                        vector search backend (default: $KE_EMBED_BACKEND or
+                        scan); `build --backend sqlite-vec` creates or
+                        refreshes the sqlite-vec table
 ### knowledge-engine knowledge --help
 usage: knowledge-engine knowledge [-h]
                                   {migrate,status,workspace,project,source,collection,record,profile,project-context,search,open,snapshot,evidence,cite} ...

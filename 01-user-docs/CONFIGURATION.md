@@ -77,6 +77,7 @@ is used instead.
 | `KE_EMBED_REMOTE_URL` | string | *(empty)* | Endpoint of the `remote` embedding provider (POST {model, input} per text; answers {embedding} or {embeddings}). | `retrieval.embeddings.factory` |
 | `KE_EMBED_ALLOW_REMOTE` | bool | `0` | Opt-in gate of the `remote` embedding provider: corpus text is sent off-machine only when this is on. | `retrieval.embeddings.factory` |
 | `KE_EMBEDDINGS_DB` | string (optional) | *(unset)* | Corpus embedding index (SQLite). Unset: <data_dir>/embeddings.db. | `retrieval.embeddings.factory` |
+| `KE_EMBED_BACKEND` | string | `scan` | Vector search backend of the corpus embedding index: `scan` (stream every stored vector through a cosine scan) or `sqlite-vec` (nearest-neighbour search in a vec0 table kept in <embeddings db>.vec.db; needs the `vec` extra and `knowledge-engine embeddings build --backend sqlite-vec`). Same results; when the extension or table is unavailable or stale, search falls back to `scan` with a warning. | `retrieval.embeddings.index` |
 
 ## Scoped knowledge metadata
 

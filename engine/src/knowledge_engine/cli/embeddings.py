@@ -5,6 +5,12 @@ yet, a model mismatch, an unreachable provider -- prints the structured error
 (``{"error": {"type", "detail", "hint", "embedding"}}``), is logged at ERROR
 on stderr, and exits with status 1. An invalid option combination is a
 ``value_error``; a database that cannot be opened or written is an ``io_error``.
+
+``--backend`` (default ``KE_EMBED_BACKEND``) picks the vector backend: ``build
+--backend sqlite-vec`` creates or refreshes the sqlite-vec table, and
+``status`` reports the backend that answers searches. When the configured
+backend cannot be used, ``status`` lists why under ``warnings`` (also logged at
+WARNING) -- searches then use the scan; that is never an error.
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ def _open_index(args: argparse.Namespace) -> CorpusEmbeddingIndex:
         model=args.model,
         batch_size=getattr(args, "batch", None),
         db_path=args.db,
+        backend=getattr(args, "backend", None),
         **chunking,
     )
 
@@ -54,12 +61,21 @@ def _run(args: argparse.Namespace, action: str) -> int:
     try:
         index = _open_index(args)
         if action == "build":
-            _print_json(index.build(incremental=args.incremental, rebuild=args.rebuild))
+            stats = index.build(incremental=args.incremental, rebuild=args.rebuild)
+            _print_json(stats)
+            warning = stats.get("backend", {}).get("warning")
+            if warning:
+                _logger.warning(
+                    "embeddings build: the sqlite-vec table was not updated: %s", warning
+                )
         elif action == "search":
             hits = index.search(args.query, top=args.top, library=args.library)
             _print_json([hit.to_dict() for hit in hits])
         else:
-            _print_json(index.status())
+            report = index.status()
+            _print_json(report)
+            for warning in report.get("warnings", []):
+                _logger.warning("embeddings status: %s", warning)
     except EmbeddingError as exc:
         _logger.error(
             "embeddings %s failed: %s%s", action, exc, f" ({exc.hint})" if exc.hint else ""
