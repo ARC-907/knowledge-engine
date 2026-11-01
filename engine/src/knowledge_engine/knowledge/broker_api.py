@@ -58,8 +58,9 @@ class SearchRequest(_Request):
     )
     context: dict[str, Any] = Field(
         description="A QueryContext: workspace_id is required; project_id, profile_id, "
-        "source_ids, collection_ids, research_types, tags, include_workspace, mode, limit, "
-        "timeout_ms and byte_budget are optional (see the knowledge contracts)."
+        "source_ids, collection_ids, research_types, curation_statuses, tags, "
+        "include_workspace, mode, limit, timeout_ms and byte_budget are optional (see the "
+        "knowledge contracts)."
     )
 
 

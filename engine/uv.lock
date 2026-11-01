@@ -1100,7 +1100,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "sqlite-vec", marker = "extra == 'vec'", specifier = ">=0.1.9" },
     { name = "starlette", specifier = ">=0.40" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
     { name = "watchdog", specifier = ">=4.0" },
 ]
 provides-extras = ["vec"]

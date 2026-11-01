@@ -15,6 +15,7 @@ from typing import Any
 
 from ...core.util.time import utc_now_iso
 from ..foundation import config, db
+from .rows import AuditEntry, TaskRow, task_from_row, tasks_from_rows
 
 VALID_STATES = [
     "queued",
@@ -82,7 +83,7 @@ def create_task(
     notes: str | None = None,
     input_json: str | None = None,
     meta: str | None = None,
-) -> dict[str, Any]:
+) -> TaskRow:
     """Create a new task in 'queued' state."""
     if not _is_valid_task_type(task_type):
         raise ValueError(f"Invalid task_type: {task_type}")
@@ -96,7 +97,9 @@ def create_task(
         "allow_local_docs": True,
         "allow_cloud_synthesis": False,
     }
-    audit = [{"timestamp": now, "event": "created", "worker": None, "detail": None}]
+    audit: list[AuditEntry] = [
+        {"timestamp": now, "event": "created", "worker": None, "detail": None}
+    ]
 
     conn = db.get_connection()
     conn.execute(
@@ -133,14 +136,14 @@ def create_task(
     return db.require_row(read_task(task_id), "task", task_id)
 
 
-def read_task(task_id: str) -> dict[str, Any] | None:
+def read_task(task_id: str) -> TaskRow | None:
     """Read a task by ID."""
     conn = db.get_connection()
     row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
-    return db.dict_from_row(row)
+    return task_from_row(row)
 
 
-def list_tasks(state: str | None = None) -> list[dict[str, Any]]:
+def list_tasks(state: str | None = None) -> list[TaskRow]:
     """List tasks, optionally filtered by state. Ordered by priority then created_at."""
     conn = db.get_connection()
     if state:
@@ -152,7 +155,7 @@ def list_tasks(state: str | None = None) -> list[dict[str, Any]]:
         rows = conn.execute(
             "SELECT * FROM tasks ORDER BY priority, created_at",
         ).fetchall()
-    return db.rows_to_dicts(rows)
+    return tasks_from_rows(rows)
 
 
 def transition_task(
@@ -161,7 +164,7 @@ def transition_task(
     worker: str | None = None,
     detail: str | None = None,
     extra_fields: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> TaskRow:
     """Move a task to a new state. Updates audit trail and timestamps."""
     if new_state not in VALID_STATES:
         raise ValueError(f"Invalid state: {new_state}")
@@ -210,10 +213,9 @@ def transition_task(
             else:
                 updates[k] = v
 
-    # Append audit entry
-    audit = task.get("audit_trail", [])
-    if not isinstance(audit, list):
-        audit = []
+    # Append audit entry. A NULL or undecodable column starts a fresh trail.
+    stored: object = task.get("audit_trail", [])
+    audit: list[AuditEntry] = stored if isinstance(stored, list) else []
     audit.append(
         {
             "timestamp": now,
@@ -248,7 +250,7 @@ def claim_task(
     worker_id: str,
     capabilities: list[str],
     allowed_layers: list[str] | None = None,
-) -> dict[str, Any] | None:
+) -> TaskRow | None:
     """Pull-based claim: find highest-priority queued task this worker can handle.
 
     Sets a lease expiry — if the worker dies, the lease expires and another
@@ -294,7 +296,7 @@ def release_expired_claims(timeout_seconds: int | None = None) -> list[str]:
     ).fetchall()
 
     for row in rows:
-        task = db.dict_from_row(row)
+        task = task_from_row(row)
         if task is None:
             continue
         lease_str = task.get("lease_expires_at")

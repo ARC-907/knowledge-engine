@@ -11,7 +11,8 @@ configuration ``{"project_id": ...}``). The adapter:
   started by one. Symbol search is lexical: an explicit selection with mode
   ``vector``/``hybrid`` fails ``unavailable``.
 * **scopes like project context**: the project's records are records of that
-  project with research type ``other`` and no tags or collections, decided by
+  project with research type ``other`` and no tags, collections or curation
+  status (so a curation constraint excludes them), decided by
   :func:`~knowledge_engine.knowledge.scope.record_in_scope`.
 * **maps symbols to files**: a hit is the repository file holding the symbol
   (record id :func:`~.tools.record_id_for`, revision id content-addressed over
@@ -165,7 +166,7 @@ class SerenaSourceAdapter:
             # Every mode is accepted so an unselected source stays silent in
             # vector/hybrid queries; an explicit selection must use ``fts``.
             modes=("fts", "vector", "hybrid"),
-            filters=("project", "collection", "research_type", "tag"),
+            filters=("project", "collection", "research_type", "tag", "curation"),
             locator_kinds=("code", "unsupported"),
             supports_open=True,
             max_limit=50,

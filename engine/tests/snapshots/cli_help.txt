@@ -408,6 +408,7 @@ usage: knowledge-engine knowledge record list [-h] [--project PROJECT]
                                               [--profile PROFILE]
                                               [--source ID] [--collection ID]
                                               [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                              [--curation {unclassified,inbox,reviewed,archived}]
                                               [--tag TAG] [--context CONTEXT]
                                               [--limit LIMIT]
                                               [--offset OFFSET]
@@ -425,6 +426,9 @@ options:
   --collection ID       collection id (repeatable; ORed)
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
+  --curation {unclassified,inbox,reviewed,archived}
+                        curation status (repeatable; ORed; sources without
+                        record rows match nothing)
   --tag TAG             tag (repeatable; ANDed)
   --context CONTEXT     a full QueryContext as JSON (overrides the flags)
   --limit LIMIT
@@ -477,6 +481,7 @@ options:
 usage: knowledge-engine knowledge profile set [-h] [--description DESCRIPTION]
                                               [--source ID] [--collection ID]
                                               [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                              [--curation {unclassified,inbox,reviewed,archived}]
                                               [--tag TAG]
                                               workspace_id profile_id
 
@@ -491,6 +496,9 @@ options:
   --collection ID       collection id (repeatable; ORed)
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
+  --curation {unclassified,inbox,reviewed,archived}
+                        curation status (repeatable; ORed; sources without
+                        record rows match nothing)
   --tag TAG             tag (repeatable; ANDed)
 ### knowledge-engine knowledge project-context --help
 usage: knowledge-engine knowledge project-context [-h] {link,unlink} ...
@@ -535,6 +543,7 @@ usage: knowledge-engine knowledge search [-h] [--workspace WORKSPACE]
                                          [--profile PROFILE] [--source ID]
                                          [--collection ID]
                                          [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                         [--curation {unclassified,inbox,reviewed,archived}]
                                          [--tag TAG] [--context CONTEXT]
                                          [--mode {fts,vector,hybrid}]
                                          [--limit LIMIT]
@@ -556,6 +565,9 @@ options:
   --collection ID       collection id (repeatable; ORed)
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
+  --curation {unclassified,inbox,reviewed,archived}
+                        curation status (repeatable; ORed; sources without
+                        record rows match nothing)
   --tag TAG             tag (repeatable; ANDed)
   --context CONTEXT     a full QueryContext as JSON (overrides the flags)
   --mode {fts,vector,hybrid}
@@ -573,6 +585,7 @@ usage: knowledge-engine knowledge open [-h] [--revision REVISION]
                                        [--profile PROFILE] [--source ID]
                                        [--collection ID]
                                        [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                       [--curation {unclassified,inbox,reviewed,archived}]
                                        [--tag TAG] [--context CONTEXT]
                                        [--timeout-ms TIMEOUT_MS]
                                        source_id record_id
@@ -593,6 +606,9 @@ options:
   --collection ID       collection id (repeatable; ORed)
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
+  --curation {unclassified,inbox,reviewed,archived}
+                        curation status (repeatable; ORed; sources without
+                        record rows match nothing)
   --tag TAG             tag (repeatable; ANDed)
   --context CONTEXT     a full QueryContext as JSON (overrides the flags)
   --timeout-ms TIMEOUT_MS

@@ -85,6 +85,7 @@ def check_scope(
         research_type=record.research_type,
         tags=frozenset(record.tags),
         collection_ids=frozenset(record.collection_ids),
+        curation_status=record.curation_status,
     )
     if record.scope.workspace_id != scope.workspace_id or not record_in_scope(view, scope):
         raise DeniedError(

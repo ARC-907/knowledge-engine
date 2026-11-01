@@ -82,6 +82,8 @@
   const RESEARCH_TYPES = [
     'reference', 'paper', 'article', 'transcript', 'code', 'note', 'dataset', 'synthesis', 'other',
   ];
+  // Values of the CurationStatus contract (knowledge.contracts).
+  const CURATION_STATUSES = ['unclassified', 'inbox', 'reviewed', 'archived'];
 
   // Labels for the evidence VerificationState values. They describe how the
   // evidence resolved, never whether a claim is true.
@@ -205,6 +207,7 @@
 
       // ── scoped knowledge state (POST /knowledge/search, open, citations) ──
       researchTypeOptions: RESEARCH_TYPES,
+      curationOptions: CURATION_STATUSES,
       kn: {
         loaded: false,
         unavailable: '',
@@ -218,6 +221,7 @@
         sourceIds: [],
         collectionIds: [],
         researchTypes: [],
+        curationStatuses: [],
         tags: '',
         mode: 'fts',
         limit: 10,
@@ -580,6 +584,7 @@
         if (this.kn.sourceIds.length) ctx.source_ids = [...this.kn.sourceIds];
         if (this.kn.collectionIds.length) ctx.collection_ids = [...this.kn.collectionIds];
         if (this.kn.researchTypes.length) ctx.research_types = [...this.kn.researchTypes];
+        if (this.kn.curationStatuses.length) ctx.curation_statuses = [...this.kn.curationStatuses];
         const tags = this.kn.tags.split(',').map((t) => t.trim()).filter(Boolean);
         if (tags.length) ctx.tags = tags;
         ctx.mode = this.kn.mode;

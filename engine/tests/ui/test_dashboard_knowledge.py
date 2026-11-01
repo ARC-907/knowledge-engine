@@ -119,8 +119,20 @@ def site(
         store.create_project(WS, "Forest", project_id="forest")
         tides = corpus_record_id("libs/field/tides.md")
         owls = corpus_record_id("libs/field/owls.md")
-        store.classify("corpus:base", tides, project_id="harbour", research_type="note")
-        store.classify("corpus:base", owls, project_id="forest", research_type="article")
+        store.classify(
+            "corpus:base",
+            tides,
+            project_id="harbour",
+            research_type="note",
+            curation_status="inbox",
+        )
+        store.classify(
+            "corpus:base",
+            owls,
+            project_id="forest",
+            research_type="article",
+            curation_status="reviewed",
+        )
         store.create_collection(WS, "Reading list", collection_id="reading", project_id="harbour")
         store.add_members("reading", [("corpus:base", tides)])
         snapshot(
@@ -194,6 +206,38 @@ def test_knowledge_filters_change_results(site: Site, page: Any) -> None:
     _search(page, "field notes")
     expect(hits).to_have_count(1)
     expect(hits.first).to_contain_text("Owls")
+    assert page.errors == []  # type: ignore[attr-defined]
+
+
+def test_curation_filter_changes_results(site: Site, page: Any) -> None:
+    from playwright.sync_api import expect
+
+    _open_tab(page, site, "knowledge")
+    expect(page.locator("#kn-workspace")).to_have_value(WS)
+    _search(page, "field notes")
+    hits = page.locator(".knowledge-hit")
+    expect(hits).to_have_count(3)
+
+    page.locator("details summary", has_text="Filters").click()
+    curation = page.locator("#kn-curation")
+    curation.get_by_label("reviewed").check()
+    _search(page, "field notes")
+    expect(hits).to_have_count(1)
+    expect(hits.first).to_contain_text("Owls")
+
+    # Statuses in one group are ORed.
+    curation.get_by_label("inbox").check()
+    _search(page, "field notes")
+    expect(hits).to_have_count(2)
+
+    # A status no record has: an empty, healthy answer.
+    curation.get_by_label("reviewed").uncheck()
+    curation.get_by_label("inbox").uncheck()
+    curation.get_by_label("archived").check()
+    _search(page, "field notes")
+    expect(hits).to_have_count(0)
+    expect(page.locator("#kn-partial")).to_be_hidden()
+    expect(page.locator("#kn-error")).to_be_hidden()
     assert page.errors == []  # type: ignore[attr-defined]
 
 
