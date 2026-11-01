@@ -4,8 +4,10 @@
 corpus root, embeds the chunks with an embedding provider (Ollama ``bge-m3`` by
 default, see :mod:`.factory`) and stores them in their own SQLite database
 together with the model, dimension and chunking that produced them. Search is
-cosine similarity, streamed over the stored vectors; :mod:`knowledge_engine.retrieval.hybrid`
-fuses it with the FTS5 ranking.
+cosine similarity, streamed over the stored vectors (``scan``) or accelerated
+by a sqlite-vec ``vec0`` mirror with identical results (``sqlite-vec``, see
+:mod:`.backends`); :mod:`knowledge_engine.retrieval.hybrid` fuses it with the
+FTS5 ranking.
 
 Operate it with ``knowledge-engine embeddings build|search|status``; HTTP
 ``GET /search?mode=vector|hybrid`` and the MCP ``search`` tool's ``mode`` use it.

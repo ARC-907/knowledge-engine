@@ -63,6 +63,8 @@ MASK = "********"
 
 #: Values accepted by ``KE_EMBED_PROVIDER`` (and ``--provider`` of the embeddings CLI).
 EMBED_PROVIDERS = ("ollama", "remote", "fake")
+#: Values accepted by ``KE_EMBED_BACKEND`` (and ``--backend`` of the embeddings CLI).
+EMBED_BACKENDS = ("scan", "sqlite-vec")
 #: Values of ``KE_LOG_FORMAT``.
 LOG_FORMATS = ("text", "json")
 
@@ -484,6 +486,18 @@ class Settings(BaseSettings):
         read_by="retrieval.embeddings.factory",
     )
 
+    embed_backend: str = _env(
+        "KE_EMBED_BACKEND",
+        "scan",
+        "Vector search backend of the corpus embedding index: `scan` (stream every stored "
+        "vector through a cosine scan) or `sqlite-vec` (nearest-neighbour search in a vec0 "
+        "table kept in <embeddings db>.vec.db; needs the `vec` extra and "
+        "`knowledge-engine embeddings build --backend sqlite-vec`). Same results; when the "
+        "extension or table is unavailable or stale, search falls back to `scan` with a warning.",
+        section="embeddings",
+        read_by="retrieval.embeddings.index",
+    )
+
     # ── Scoped knowledge metadata (knowledge.db) ─────────────────
     knowledge_enabled: EnvBool = _env(
         "KE_KNOWLEDGE_ENABLED",
@@ -722,6 +736,18 @@ class Settings(BaseSettings):
             return "ollama"
         if text not in EMBED_PROVIDERS:
             raise ValueError(f"unknown embedding provider {value!r}")
+        return text
+
+    @field_validator("embed_backend", mode="before")
+    @classmethod
+    def _normalise_embed_backend(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        text = value.strip().lower()
+        if not text:
+            return "scan"
+        if text not in EMBED_BACKENDS:
+            raise ValueError(f"unknown vector backend {value!r}")
         return text
 
     @field_validator("embed_model", mode="before")

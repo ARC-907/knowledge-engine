@@ -55,6 +55,12 @@ Source = "https://github.com/ARC-907/knowledge-engine"
 [project.scripts]
 knowledge-engine = "knowledge_engine.cli:main"
 
+[project.optional-dependencies]
+# sqlite-vec vector search backend (KE_EMBED_BACKEND=sqlite-vec).
+vec = [
+    "sqlite-vec>=0.1.9",
+]
+
 # PEP 735 dependency groups (not installed by end users; `uv sync` installs `dev`).
 [dependency-groups]
 dev = [
@@ -78,6 +84,8 @@ test = [
     "hypothesis>=6.100",
     # Starlette >=1.0 test client speaks httpx2; without it TestClient warns.
     "httpx2>=2.0",
+    # The optional `vec` extra, so CI exercises the sqlite-vec backend on every OS.
+    "sqlite-vec>=0.1.9",
 ]
 build = [
     "twine>=6.0",

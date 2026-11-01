@@ -20,6 +20,16 @@ BUILD_COMMAND = "knowledge-engine embeddings build"
 PRIVATE_DETAILS = frozenset({"db_path"})
 
 
+def same_model(a: str, b: str) -> bool:
+    """True when two model names denote the same model (``x`` and ``x:latest`` match)."""
+
+    def norm(name: str) -> str:
+        text = name.strip()
+        return text[: -len(":latest")] if text.endswith(":latest") else text
+
+    return norm(a) == norm(b)
+
+
 class EmbeddingError(RuntimeError):
     """Base class: vector search or index maintenance cannot proceed."""
 
@@ -103,4 +113,5 @@ __all__ = [
     "EmbeddingModelMismatchError",
     "EmbeddingProviderError",
     "EmbeddingUnavailableError",
+    "same_model",
 ]

@@ -20,8 +20,13 @@ markdown heading. Only the first ``max_embed_chars`` (2000) characters of a
 chunk are sent to the model -- a chunk can exceed ``chunk_size`` when a single
 line is very long -- while the full chunk text is stored and returned.
 
-Search streams the stored vectors from SQLite in pages and keeps only the best
-``top`` candidates, so memory does not grow with the index. Nothing here runs
+Search has two backends (``KE_EMBED_BACKEND``, see :mod:`.backends`). ``scan``
+(the default) streams the stored vectors from SQLite in pages and keeps only
+the best ``top`` candidates, so memory does not grow with the index.
+``sqlite-vec`` asks a ``vec0`` mirror of the vectors for the nearest chunks,
+re-scores them exactly and widens the request until the answer provably equals
+the scan's; when the mirror cannot be used it falls back to the scan with a
+WARNING. Exact ties are broken by the lower chunk id in both. Nothing here runs
 at import time; every connection is opened per call and closed again, so one
 instance can be shared across threads.
 """
@@ -30,9 +35,10 @@ from __future__ import annotations
 
 import heapq
 import logging
+import math
 import sqlite3
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -50,6 +56,19 @@ from ...core.util.vectors import (
     pack_vector,
     unpack_vector,
 )
+from .backends import (
+    LOG_TABLE,
+    MAX_KNN,
+    SCAN,
+    SQLITE_VEC,
+    BackendUnavailableError,
+    SqliteVecAccelerator,
+    SqliteVecStore,
+    install_tracking,
+    parse_backend,
+    tracking_installed,
+    vec_db_path,
+)
 from .errors import (
     BUILD_COMMAND,
     REBUILD_COMMAND,
@@ -57,6 +76,7 @@ from .errors import (
     EmbeddingIndexMissingError,
     EmbeddingModelMismatchError,
     EmbeddingProviderError,
+    same_model,
 )
 
 if TYPE_CHECKING:
@@ -77,6 +97,14 @@ MAX_EMBED_CHARS = 2000
 MIN_FILE_CHARS = 50
 #: Rows fetched per page while scanning vectors.
 SCAN_PAGE = 256
+#: Chunks first requested from the sqlite-vec backend per wanted hit (doubled on refill).
+KNN_OVERFETCH = 4
+#: Smallest first sqlite-vec request.
+KNN_MIN_FETCH = 64
+#: Slack for float32 rounding in the backend's distances when proving a result exact.
+KNN_MARGIN = 1e-3
+#: Chunk ids per ``IN (...)`` lookup while re-scoring candidates.
+_ID_BATCH = 500
 
 #: Directory names skipped during the corpus walk (dot-directories are skipped too).
 SKIP_DIRS = frozenset(
@@ -95,7 +123,16 @@ SKIP_DIRS = frozenset(
 
 #: Tables of the pre-3.0 builder (no model/dim recorded); dropped by ``--rebuild``.
 LEGACY_TABLES = ("chunks", "files")
-_TABLES = ("embedding_chunks", "embedding_files", "embedding_index")
+_TABLES = ("embedding_chunks", "embedding_files", "embedding_index", LOG_TABLE)
+
+#: A scored chunk: ``(score, chunk id, rel_path, library, chunk_idx)``.
+Scored = tuple[float, int, str, str, int]
+
+
+def _rank(item: Scored) -> tuple[float, int]:
+    """Ranking key of a scored chunk: higher score first, then the lower chunk id."""
+    return (item[0], -item[1])
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS embedding_index (
@@ -244,16 +281,6 @@ def library_of(rel_path: str) -> str:
     return parts[0] if parts else "unknown"
 
 
-def same_model(a: str, b: str) -> bool:
-    """True when two model names denote the same model (``x`` and ``x:latest`` match)."""
-
-    def norm(name: str) -> str:
-        text = name.strip()
-        return text[: -len(":latest")] if text.endswith(":latest") else text
-
-    return norm(a) == norm(b)
-
-
 def _is_unreachable(exc: BaseException) -> bool:
     """True when ``exc`` (or its cause chain) is a transport-level failure."""
     seen: set[int] = set()
@@ -324,6 +351,7 @@ class CorpusEmbeddingIndex:
         chunk_size: int = CHUNK_SIZE,
         chunk_overlap: int = CHUNK_OVERLAP,
         max_embed_chars: int = MAX_EMBED_CHARS,
+        backend: str = SCAN,
     ) -> None:
         if batch_size < 1:
             raise ValueError("batch_size must be a positive integer")
@@ -342,6 +370,10 @@ class CorpusEmbeddingIndex:
         self.chunk_size = int(chunk_size)
         self.chunk_overlap = int(chunk_overlap)
         self.max_embed_chars = int(max_embed_chars)
+        self._backend = parse_backend(backend)
+        self._vec_store = SqliteVecStore(vec_db_path(self._db_path))
+        # The last reason the accelerator was skipped (logged once at WARNING, then DEBUG).
+        self._fallback_reason: str | None = None
         self._embedded_any = False
 
     @classmethod
@@ -353,13 +385,15 @@ class CorpusEmbeddingIndex:
         model: str | None = None,
         batch_size: int | None = None,
         db_path: Path | str | None = None,
+        backend: str | None = None,
         **chunking: int,
     ) -> CorpusEmbeddingIndex:
         """The index described by ``settings`` (default: the current environment).
 
         ``provider`` is a provider name (``ollama``/``remote``/``fake``) or a
         ready provider; ``model``, ``batch_size`` and ``db_path`` override
-        ``KE_EMBED_MODEL``, ``KE_EMBED_BATCH`` and ``KE_EMBEDDINGS_DB``.
+        ``KE_EMBED_MODEL``, ``KE_EMBED_BATCH`` and ``KE_EMBEDDINGS_DB``;
+        ``backend`` overrides ``KE_EMBED_BACKEND``.
         Raises :class:`~.errors.EmbeddingUnavailableError` when the provider
         cannot be configured.
         """
@@ -377,11 +411,15 @@ class CorpusEmbeddingIndex:
             resolved,
             corpus_root=settings.resolve_paths(warn_missing_corpus=False).corpus_root,
             batch_size=batch,
+            backend=backend if backend is not None else settings.embed_backend,
             **chunking,
         )
 
     def __repr__(self) -> str:
-        return f"CorpusEmbeddingIndex(db_path={str(self._db_path)!r}, provider={self._provider!r})"
+        return (
+            f"CorpusEmbeddingIndex(db_path={str(self._db_path)!r}, provider={self._provider!r}, "
+            f"backend={self._backend!r})"
+        )
 
     # ── properties ───────────────────────────────────────────────
 
@@ -396,6 +434,16 @@ class CorpusEmbeddingIndex:
     @property
     def corpus_root(self) -> Path | None:
         return self._corpus_root
+
+    @property
+    def backend(self) -> str:
+        """The configured vector backend (``scan`` or ``sqlite-vec``)."""
+        return self._backend
+
+    @property
+    def vec_db_path(self) -> Path:
+        """The sibling database holding the sqlite-vec mirror (used by ``sqlite-vec`` only)."""
+        return self._vec_store.path
 
     @property
     def chunking(self) -> tuple[int, int, int]:
@@ -490,8 +538,11 @@ class CorpusEmbeddingIndex:
             "exists": self.exists(),
             "built": False,
             "configured": {"provider": self._provider.name, "model": self._provider.model_id},
+            "warnings": [],
         }
         if not report["exists"]:
+            report["backend"] = self.backend_status(None)
+            self._collect_backend_warning(report)
             return report
         conn = self._open_existing()
         try:
@@ -499,6 +550,8 @@ class CorpusEmbeddingIndex:
             report["legacy_tables"] = [name for name in LEGACY_TABLES if name in tables]
             info = _read_info(conn)
             if info is None:
+                report["backend"] = self.backend_status(None)
+                self._collect_backend_warning(report)
                 return report
             files, incomplete = conn.execute(
                 "SELECT COUNT(*), COALESCE(SUM(file_hash = ''), 0) FROM embedding_files"
@@ -523,8 +576,53 @@ class CorpusEmbeddingIndex:
                 ],
                 "size_mb": round(self._db_path.stat().st_size / 1024 / 1024, 2),
                 "compatible": same_model(info.model, self._provider.model_id),
+                "backend": self.backend_status(info),
             }
         )
+        self._collect_backend_warning(report)
+        return report
+
+    @staticmethod
+    def _collect_backend_warning(report: dict[str, Any]) -> None:
+        warning = report["backend"].get("warning")
+        if warning:
+            report["warnings"].append(f"vector search uses the scan backend: {warning}")
+
+    def backend_status(self, info: IndexInfo | None) -> dict[str, Any]:
+        """Which backend answers searches now and, when it is not the configured one, why."""
+        report: dict[str, Any] = {"configured": self._backend, "active": SCAN}
+        if self._backend == SCAN:
+            return report
+        report["vec_db_path"] = str(self._vec_store.path)
+        if info is None:
+            report["warning"] = f"the embedding index has not been built; run `{BUILD_COMMAND}`"
+            return report
+        try:
+            vec, version = self._vec_store.open()
+        except BackendUnavailableError as exc:
+            report["warning"] = str(exc)
+            return report
+        except (sqlite3.Error, OSError) as exc:
+            report["warning"] = f"the sqlite-vec table could not be opened: {exc}"
+            return report
+        report["sqlite_vec_version"] = version
+        try:
+            main = self._open_existing()
+            try:
+                reason = self._vec_store.staleness(main, vec, info)
+                meta = self._vec_store.meta(vec)
+            finally:
+                main.close()
+        except sqlite3.Error as exc:
+            reason, meta = f"the sqlite-vec table could not be read: {exc}", None
+        finally:
+            vec.close()
+        if reason:
+            report["warning"] = reason
+        else:
+            report["active"] = SQLITE_VEC
+        if meta is not None:
+            report["vectors"] = meta[2]
         return report
 
     # ── build ────────────────────────────────────────────────────
@@ -769,14 +867,18 @@ class CorpusEmbeddingIndex:
                     REBUILD_COMMAND,
                 )
             info, incremental = self._start_info(conn, incremental)
+            backend, tracked_before = self._prepare_backend(conn)
             stats = self._build_files(conn, root, info, incremental)
             with transaction(conn):
                 conn.execute(
                     "UPDATE embedding_index SET updated_at = ? WHERE id = 1", (utc_now_iso(),)
                 )
             final = _read_info(conn)
+            if tracked_before is not None and final is not None:
+                backend = self._sync_backend(conn, final, full=not tracked_before)
         finally:
             conn.close()
+        stats["backend"] = backend
         elapsed = time.monotonic() - start
         stats.update(
             {
@@ -799,6 +901,46 @@ class CorpusEmbeddingIndex:
             self._db_path,
         )
         return stats
+
+    def _prepare_backend(self, conn: sqlite3.Connection) -> tuple[dict[str, Any], bool | None]:
+        """Set up change tracking for the sqlite-vec mirror before a build.
+
+        Returns the backend report and whether tracking was already installed
+        (``None`` when the mirror is not maintained by this build).
+        """
+        report: dict[str, Any] = {"configured": self._backend, "active": SCAN}
+        if self._backend == SCAN:
+            return report, None
+        try:
+            SqliteVecStore.probe()
+        except BackendUnavailableError as exc:
+            _logger.warning("the sqlite-vec table is not maintained by this build: %s", exc)
+            report["warning"] = str(exc)
+            return report, None
+        tracked = tracking_installed(conn)
+        install_tracking(conn)
+        return report, tracked
+
+    def _sync_backend(
+        self, conn: sqlite3.Connection, info: IndexInfo, *, full: bool
+    ) -> dict[str, Any]:
+        report: dict[str, Any] = {"configured": self._backend, "active": SCAN}
+        try:
+            report["sync"] = self._vec_store.sync(conn, info, full=full)
+        except BackendUnavailableError as exc:
+            report["warning"] = str(exc)
+        except (sqlite3.Error, OSError) as exc:
+            report["warning"] = f"the sqlite-vec table could not be updated: {exc}"
+        else:
+            report["active"] = SQLITE_VEC
+        if "warning" in report:
+            _logger.warning(
+                "the sqlite-vec table at %s could not be synced; vector search will use the "
+                "scan backend: %s",
+                self._vec_store.path,
+                report["warning"],
+            )
+        return report
 
     def _build_files(
         self, conn: sqlite3.Connection, root: Path, info: IndexInfo, incremental: bool
@@ -879,14 +1021,7 @@ class CorpusEmbeddingIndex:
 
     # ── search ───────────────────────────────────────────────────
 
-    def embed_query(self, query: str) -> tuple[CosineScorer, IndexInfo]:
-        """Embed ``query`` after checking the provider matches the index.
-
-        Returns a scorer for the query vector and the index info. Raises
-        :class:`~.errors.EmbeddingIndexMissingError`,
-        :class:`~.errors.EmbeddingModelMismatchError` or
-        :class:`~.errors.EmbeddingProviderError`.
-        """
+    def _query_vector(self, query: str) -> tuple[list[float], IndexInfo]:
         if not query or not query.strip():
             raise ValueError("query must not be empty")
         conn = self._open_existing()
@@ -907,14 +1042,37 @@ class CorpusEmbeddingIndex:
             raise EmbeddingProviderError(
                 f"provider {self._provider.name} returned no vector for the query"
             )
-        vector = vectors[0]
+        vector = [float(value) for value in vectors[0]]
         if info.dim and len(vector) != info.dim:
             raise self._mismatch(info, dim=len(vector))
+        return vector, info
+
+    def embed_query(self, query: str) -> tuple[CosineScorer, IndexInfo]:
+        """Embed ``query`` after checking the provider matches the index.
+
+        Returns a scorer for the query vector and the index info. Raises
+        :class:`~.errors.EmbeddingIndexMissingError`,
+        :class:`~.errors.EmbeddingModelMismatchError` or
+        :class:`~.errors.EmbeddingProviderError`.
+        """
+        vector, info = self._query_vector(query)
         return CosineScorer(vector), info
 
-    def _scan(
-        self, scorer: CosineScorer, info: IndexInfo, library: str | None
-    ) -> Iterator[tuple[float, int, str, str, int]]:
+    def _score_row(
+        self, scorer: CosineScorer, info: IndexInfo, row: tuple[Any, ...]
+    ) -> Scored | None:
+        """Score one ``(id, chunk_idx, embedding, rel_path, library)`` row (``None``: unreadable)."""
+        chunk_id, chunk_idx, blob, rel_path, lib = row
+        try:
+            score = scorer(unpack_vector(blob))
+        except VectorDimensionError as exc:
+            raise self._mismatch(info, dim=exc.right) from exc
+        except ValueError as exc:
+            _logger.warning("skipping unreadable vector of %s: %s", rel_path, exc)
+            return None
+        return score, int(chunk_id), str(rel_path), str(lib), int(chunk_idx)
+
+    def _scan(self, scorer: CosineScorer, info: IndexInfo, library: str | None) -> Iterator[Scored]:
         """Yield ``(score, chunk id, rel_path, library, chunk_idx)`` for every stored chunk."""
         sql = (
             "SELECT c.id, c.chunk_idx, c.embedding, f.rel_path, f.library "
@@ -928,19 +1086,14 @@ class CorpusEmbeddingIndex:
         try:
             cursor = conn.execute(sql, params)
             while rows := cursor.fetchmany(SCAN_PAGE):
-                for chunk_id, chunk_idx, blob, rel_path, lib in rows:
-                    try:
-                        score = scorer(unpack_vector(blob))
-                    except VectorDimensionError as exc:
-                        raise self._mismatch(info, dim=exc.right) from exc
-                    except ValueError as exc:
-                        _logger.warning("skipping unreadable vector of %s: %s", rel_path, exc)
-                        continue
-                    yield score, int(chunk_id), str(rel_path), str(lib), int(chunk_idx)
+                for row in rows:
+                    item = self._score_row(scorer, info, row)
+                    if item is not None:
+                        yield item
         finally:
             conn.close()
 
-    def _hydrate(self, scored: list[tuple[float, int, str, str, int]]) -> list[VectorHit]:
+    def _hydrate(self, scored: list[Scored]) -> list[VectorHit]:
         if not scored:
             return []
         ids = [item[1] for item in scored]
@@ -967,6 +1120,26 @@ class CorpusEmbeddingIndex:
         hits.sort(key=lambda hit: (-hit.score, hit.rel_path, hit.chunk_idx))
         return hits
 
+    @staticmethod
+    def _best_per_file(
+        items: Iterable[Scored],
+        accept: Callable[[str], bool] | None,
+        verdicts: dict[str, bool],
+    ) -> dict[str, Scored]:
+        """Each accepted file's best chunk; ``accept`` is asked once per file (memo in ``verdicts``)."""
+        best: dict[str, Scored] = {}
+        for item in items:
+            rel_path = item[2]
+            allowed = verdicts.get(rel_path)
+            if allowed is None:
+                allowed = verdicts[rel_path] = accept(rel_path) if accept is not None else True
+            if not allowed:
+                continue
+            current = best.get(rel_path)
+            if current is None or _rank(item) > _rank(current):
+                best[rel_path] = item
+        return best
+
     def search(self, query: str, *, top: int = 10, library: str | None = None) -> list[VectorHit]:
         """The ``top`` chunks most similar to ``query`` (several may come from one file).
 
@@ -974,8 +1147,11 @@ class CorpusEmbeddingIndex:
         """
         if top < 1:
             raise ValueError("top must be a positive integer")
-        scorer, info = self.embed_query(query)
-        best = heapq.nlargest(top, self._scan(scorer, info, library), key=lambda item: item[0])
+        vector, info = self._query_vector(query)
+        scorer = CosineScorer(vector)
+        best = self._accelerated(vector, scorer, info, top=top, library=library)
+        if best is None:
+            best = heapq.nlargest(top, self._scan(scorer, info, library), key=_rank)
         return self._hydrate(best)
 
     def search_files(
@@ -992,21 +1168,157 @@ class CorpusEmbeddingIndex:
         """
         if top < 1:
             raise ValueError("top must be a positive integer")
-        scorer, info = self.embed_query(query)
+        vector, info = self._query_vector(query)
+        scorer = CosineScorer(vector)
         verdicts: dict[str, bool] = {}
-        best: dict[str, tuple[float, int, str, str, int]] = {}
-        for item in self._scan(scorer, info, None):
-            rel_path = item[2]
-            allowed = verdicts.get(rel_path)
-            if allowed is None:
-                allowed = verdicts[rel_path] = accept(rel_path) if accept is not None else True
-            if not allowed:
-                continue
-            current = best.get(rel_path)
-            if current is None or item[0] > current[0]:
-                best[rel_path] = item
-        winners = heapq.nlargest(top, best.values(), key=lambda item: item[0])
+        winners = self._accelerated(
+            vector, scorer, info, top=top, per_file=True, accept=accept, verdicts=verdicts
+        )
+        if winners is None:
+            best = self._best_per_file(self._scan(scorer, info, None), accept, verdicts)
+            winners = heapq.nlargest(top, best.values(), key=_rank)
         return self._hydrate(winners)
+
+    # ── the sqlite-vec accelerator ───────────────────────────────
+
+    def _fallback(self, reason: str) -> None:
+        """Log why this search uses the scan (WARNING once per distinct reason)."""
+        if reason != self._fallback_reason:
+            self._fallback_reason = reason
+            _logger.warning("vector search falls back to the scan backend: %s", reason)
+        else:
+            _logger.debug("vector search falls back to the scan backend: %s", reason)
+
+    def _accelerated(
+        self,
+        vector: list[float],
+        scorer: CosineScorer,
+        info: IndexInfo,
+        *,
+        top: int,
+        library: str | None = None,
+        per_file: bool = False,
+        accept: Callable[[str], bool] | None = None,
+        verdicts: dict[str, bool] | None = None,
+    ) -> list[Scored] | None:
+        """The scan's answer computed with the sqlite-vec mirror; ``None``: use the scan."""
+        if self._backend != SQLITE_VEC or info.dim == 0:
+            return None
+        try:
+            vec, _version = self._vec_store.open()
+        except BackendUnavailableError as exc:
+            self._fallback(str(exc))
+            return None
+        except (sqlite3.Error, OSError) as exc:
+            self._fallback(f"the sqlite-vec table could not be opened: {exc}")
+            return None
+        try:
+            main = self._open_existing()
+            try:
+                try:
+                    reason = self._vec_store.staleness(main, vec, info)
+                except sqlite3.Error as exc:
+                    reason = f"the sqlite-vec table could not be read: {exc}"
+                if reason:
+                    self._fallback(reason)
+                    return None
+                return self._knn(
+                    SqliteVecAccelerator(vec),
+                    main,
+                    vector,
+                    scorer,
+                    info,
+                    top=top,
+                    library=library,
+                    per_file=per_file,
+                    accept=accept,
+                    verdicts=verdicts if verdicts is not None else {},
+                )
+            finally:
+                main.close()
+        finally:
+            vec.close()
+
+    def _knn(
+        self,
+        accelerator: SqliteVecAccelerator,
+        main: sqlite3.Connection,
+        vector: list[float],
+        scorer: CosineScorer,
+        info: IndexInfo,
+        *,
+        top: int,
+        library: str | None,
+        per_file: bool,
+        accept: Callable[[str], bool] | None,
+        verdicts: dict[str, bool],
+    ) -> list[Scored] | None:
+        """Over-fetch nearest chunks, re-score them exactly, refill until the answer is proven.
+
+        Every chunk the backend did not return is at least as far as the last
+        one it did, so (up to :data:`KNN_MARGIN` of float32 rounding) no
+        unseen chunk scores above ``floor``: everything above it is known
+        exactly. The answer is final once ``top`` chunks (or accepted files)
+        score above it, or the backend ran out of chunks. Filters therefore
+        apply before the cut; at the :data:`~.backends.MAX_KNN` cap the query
+        is answered by the scan instead (logged at WARNING).
+        """
+        scores: dict[int, Scored | None] = {}
+        k = min(max(top * KNN_OVERFETCH, KNN_MIN_FETCH), MAX_KNN)
+        while True:
+            try:
+                ids = accelerator.nearest(vector, k, library)
+            except sqlite3.Error as exc:
+                self._fallback(f"the sqlite-vec query failed: {exc}")
+                return None
+            self._rescore(main, scorer, info, [i for i in ids if i not in scores], scores)
+            candidates = [item for i in ids if (item := scores.get(i)) is not None]
+            exhausted = len(ids) < k
+            if exhausted:
+                floor = -math.inf
+            else:
+                last = scores.get(ids[-1])
+                floor = last[0] + KNN_MARGIN if last is not None else math.inf
+            if per_file:
+                pool = list(self._best_per_file(candidates, accept, verdicts).values())
+            else:
+                pool = candidates
+            sure = [item for item in pool if item[0] > floor]
+            if exhausted or len(sure) >= top:
+                return heapq.nlargest(top, sure, key=_rank)
+            if k >= MAX_KNN:
+                _logger.warning(
+                    "the sqlite-vec backend reached its cap of %d chunks before %d %s were "
+                    "certain; this query is answered by the scan",
+                    MAX_KNN,
+                    top,
+                    "accepted files" if per_file else "chunks",
+                )
+                return None
+            k = min(k * 2, MAX_KNN)
+
+    def _rescore(
+        self,
+        conn: sqlite3.Connection,
+        scorer: CosineScorer,
+        info: IndexInfo,
+        ids: list[int],
+        out: dict[int, Scored | None],
+    ) -> None:
+        """Exact scores of the chunks ``ids`` into ``out`` (``None`` for unreadable or gone)."""
+        for start in range(0, len(ids), _ID_BATCH):
+            batch = ids[start : start + _ID_BATCH]
+            placeholders = ",".join("?" for _ in batch)
+            rows = conn.execute(
+                "SELECT c.id, c.chunk_idx, c.embedding, f.rel_path, f.library "
+                "FROM embedding_chunks c JOIN embedding_files f ON f.id = c.file_id "
+                f"WHERE c.id IN ({placeholders})",
+                batch,
+            ).fetchall()
+            for chunk_id in batch:
+                out[chunk_id] = None
+            for row in rows:
+                out[int(row[0])] = self._score_row(scorer, info, row)
 
 
 def open_index(settings: Settings) -> tuple[CorpusEmbeddingIndex | None, str | None]:
