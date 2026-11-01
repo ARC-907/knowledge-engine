@@ -3306,7 +3306,7 @@
           },
           "context": {
             "additionalProperties": true,
-            "description": "A QueryContext: workspace_id is required; project_id, profile_id, source_ids, collection_ids, research_types, tags, include_workspace, mode, limit, timeout_ms and byte_budget are optional (see the knowledge contracts).",
+            "description": "A QueryContext: workspace_id is required; project_id, profile_id, source_ids, collection_ids, research_types, curation_statuses, tags, include_workspace, mode, limit, timeout_ms and byte_budget are optional (see the knowledge contracts).",
             "title": "Context",
             "type": "object"
           }

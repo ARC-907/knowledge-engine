@@ -242,6 +242,7 @@ def _context(args: argparse.Namespace) -> dict[str, Any]:
         source_ids=args.source,
         collection_ids=args.collection,
         research_types=args.type,
+        curation_statuses=args.curation,
         tags=args.tag,
     )
 
@@ -331,6 +332,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], tuple[str, dict[str, Any]]]] 
                 source_ids=a.source,
                 collection_ids=a.collection,
                 research_types=a.type,
+                curation_statuses=a.curation,
                 tags=a.tag,
             )
         },

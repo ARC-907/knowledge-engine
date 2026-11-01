@@ -84,6 +84,7 @@ MCP tools named `knowledge_*`.
 knowledge-engine knowledge project create default "Thesis"          # prints the new project_id
 knowledge-engine knowledge collection create default "Methods" --id methods
 knowledge-engine knowledge record list --tag draft                  # default workspace
+knowledge-engine knowledge record list --curation inbox             # the review queue
 knowledge-engine knowledge collection add methods --record corpus:base <record_id>
 knowledge-engine knowledge record classify corpus:base <record_id> --type paper --status reviewed --add-tag ml
 knowledge-engine knowledge record classify corpus:base <record_id> --project <project_id>
@@ -110,8 +111,13 @@ knowledge-engine knowledge record classify corpus:base <record_id> --project <pr
 - An omitted selection uses the profile (`--profile`, else
   `KE_KNOWLEDGE_PROFILE`; the built-in `default` profile means "every source,
   no other filter").
-- An explicitly empty source, collection or research-type list matches
-  nothing; an empty tag list means "no tag filter".
+- An explicitly empty source, collection, research-type or curation-status
+  list matches nothing; an empty tag list means "no tag filter".
+- A curation-status selection (`curation_statuses`, `--curation`, repeatable)
+  keeps only records whose curation status is one of the values. Records of
+  sources that keep no rows in `knowledge.db` (project context, code symbols)
+  have no curation status, so any curation selection excludes them. A profile
+  can carry a default (`knowledge profile set default curated --curation reviewed`).
 - Several values of one kind are alternatives (OR); several tags must all be
   present (AND); different kinds combine with AND.
 - With a project, only that project's records match; add `include_workspace`

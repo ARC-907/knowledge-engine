@@ -919,6 +919,21 @@
             "description": "None: no collection constraint.",
             "title": "Collection Ids"
           },
+          "curation_statuses": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CurationStatus"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None: no curation-status constraint. Sources that keep no record rows (project context, code symbols) match nothing under a constraint.",
+            "title": "Curation Statuses"
+          },
           "empty": {
             "default": false,
             "description": "An explicit empty selection: nothing can match.",
@@ -3452,6 +3467,20 @@
             ],
             "title": "Collection Ids"
           },
+          "curation_statuses": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CurationStatus"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curation Statuses"
+          },
           "description": {
             "default": "",
             "maxLength": 2000,
@@ -3598,7 +3627,7 @@
         "properties": {
           "context": {
             "additionalProperties": true,
-            "description": "A QueryContext: workspace_id is required; project_id, profile_id, source_ids, collection_ids, research_types, tags, include_workspace, mode, limit, timeout_ms and byte_budget are optional (see the knowledge contracts).",
+            "description": "A QueryContext: workspace_id is required; project_id, profile_id, source_ids, collection_ids, research_types, curation_statuses, tags, include_workspace, mode, limit, timeout_ms and byte_budget are optional (see the knowledge contracts).",
             "title": "Context",
             "type": "object"
           },

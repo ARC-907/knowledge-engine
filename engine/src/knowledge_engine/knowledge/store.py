@@ -1230,8 +1230,8 @@ class KnowledgeStore:
         """Resolve ``context`` and load its sources and in-scope records in one transaction.
 
         Every id is validated (typed errors as :meth:`resolve`). The record
-        metadata (project, research type, tags, collection membership, logical
-        path, title) of every in-scope record is loaded, at most
+        metadata (project, research type, curation status, tags, collection
+        membership, logical path, title) of every in-scope record is loaded, at most
         :data:`MAX_SNAPSHOT_RECORDS`; a larger scope is ``invalid_scope``.
         """
 
@@ -1277,7 +1277,7 @@ class KnowledgeStore:
         if count > MAX_SNAPSHOT_RECORDS:
             raise InvalidScopeError(
                 f"the scope holds {count} records, more than one search can load"
-                f" ({MAX_SNAPSHOT_RECORDS}); narrow it by project, collection, type or tag",
+                f" ({MAX_SNAPSHOT_RECORDS}); narrow it by project, collection, type, curation status or tag",
                 details={"records": count, "max_records": MAX_SNAPSHOT_RECORDS},
             )
         tags: dict[tuple[str, str], set[str]] = {}
@@ -1298,8 +1298,8 @@ class KnowledgeStore:
             members.setdefault((row[0], row[1]), set()).add(row[2])
         out: dict[str, dict[str, SnapshotRecord]] = {}
         for row in conn.execute(
-            "SELECT r.source_id, r.record_id, r.project_id, r.research_type, r.logical_path,"
-            " r.title " + base,
+            "SELECT r.source_id, r.record_id, r.project_id, r.research_type,"
+            " r.curation_status, r.logical_path, r.title " + base,
             params,
         ):
             key = (row["source_id"], row["record_id"])
@@ -1310,6 +1310,7 @@ class KnowledgeStore:
                 research_type=ResearchType(row["research_type"]),
                 tags=frozenset(tags.get(key, ())),
                 collection_ids=frozenset(members.get(key, ())),
+                curation_status=CurationStatus(row["curation_status"]),
             )
             out.setdefault(row["source_id"], {})[row["record_id"]] = SnapshotRecord(
                 view=view, logical_path=row["logical_path"], title=row["title"]
@@ -1394,6 +1395,9 @@ def _scope_filter(scope: EffectiveScope) -> tuple[str, list[Any]]:
     if scope.research_types is not None:
         clauses.append(f"r.research_type IN ({_placeholders(scope.research_types)})")
         params.extend(t.value for t in scope.research_types)
+    if scope.curation_statuses is not None:
+        clauses.append(f"r.curation_status IN ({_placeholders(scope.curation_statuses)})")
+        params.extend(c.value for c in scope.curation_statuses)
     if scope.tags:
         clauses.append(
             "(SELECT COUNT(DISTINCT t.tag) FROM record_tags t WHERE t.source_id = r.source_id"

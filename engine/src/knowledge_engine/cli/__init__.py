@@ -403,6 +403,12 @@ def _selection_options(parser: argparse.ArgumentParser) -> None:
         choices=RESEARCH_TYPES,
         help="research type (repeatable; ORed)",
     )
+    parser.add_argument(
+        "--curation",
+        action="append",
+        choices=CURATION_STATUSES,
+        help="curation status (repeatable; ORed; sources without record rows match nothing)",
+    )
     parser.add_argument("--tag", action="append", metavar="TAG", help="tag (repeatable; ANDed)")
 
 

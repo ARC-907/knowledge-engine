@@ -42,7 +42,7 @@ from .contracts import (
 )
 
 #: Filter dimensions an adapter can apply natively (before its own ranking/limit).
-FilterDimension = Literal["project", "collection", "research_type", "tag"]
+FilterDimension = Literal["project", "collection", "research_type", "tag", "curation"]
 LocatorKind = Literal["text", "pdf", "transcript", "code", "unsupported"]
 
 
