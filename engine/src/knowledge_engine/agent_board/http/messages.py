@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import ConfigDict, Field, model_validator
 
 from ...core.errors import payload_invalid
+from ...runtime.pipeline.rows import as_payload, as_payloads
 from .. import schemas, scopes, store
 from .bodies import SCOPE_DOC, _BoardBody, _message_field, _pop_scope, _required, _string
 from .trust import (
@@ -152,7 +153,7 @@ def list_messages(
     scope: str | None = Query(None),
 ) -> list[dict[str, Any]]:
     _require_trust(req)
-    return _scoped_read(
+    rows = _scoped_read(
         store.poll,
         since=since,
         channel=channel,
@@ -163,6 +164,7 @@ def list_messages(
         limit=limit,
         scope=scope,
     )
+    return as_payloads(rows)
 
 
 @router.get("/messages/{message_id}")
@@ -171,7 +173,7 @@ def get_message(req: Request, message_id: str, scope: str | None = Query(None)) 
     msg = _scoped_read(store.read, message_id, scope=scope)
     if not msg:
         raise HTTPException(404, "message not found")
-    return msg
+    return as_payload(msg)
 
 
 @router.post("/messages", status_code=201, dependencies=WRITE_GATE)
@@ -189,7 +191,7 @@ def post_message(
         raise HTTPException(507, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return msg
+    return as_payload(msg)
 
 
 @router.post("/messages/{message_id}/ack", status_code=200, dependencies=WRITE_GATE)
@@ -206,7 +208,7 @@ def ack_message(
     msg = _scoped_read(store.ack_message, message_id, acker, scope=scope)
     if msg is None:
         raise HTTPException(404, "message not found")
-    return msg
+    return as_payload(msg)
 
 
 # ── Threads / search / digest ──────────────────────────────────
@@ -220,8 +222,8 @@ def get_thread(
     scope: str | None = Query(None),
 ) -> list[dict[str, Any]]:
     _require_trust(req)
-    return _scoped_read(
-        store.thread_messages, correlation_id=correlation_id, limit=limit, scope=scope
+    return as_payloads(
+        _scoped_read(store.thread_messages, correlation_id=correlation_id, limit=limit, scope=scope)
     )
 
 
