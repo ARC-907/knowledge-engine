@@ -1,7 +1,7 @@
 """Tests for the embeddings index (offline, StubProvider only).
 
-A fresh project DB (migrations 002-007) is created per test. Records are
-inserted directly into ``project_docs`` and ``project_doc_bodies`` so the index
+A fresh project DB (migrations 002-008) is created per test. Records are
+inserted directly into ``project_documents`` and ``project_doc_bodies`` so the index
 layer can be exercised without the full ingestion pipeline. No network access is
 made: the deterministic :class:`StubProvider` produces all vectors.
 """
@@ -15,7 +15,7 @@ import pytest
 from knowledge_engine.project_context.db import apply_migrations, connect
 from knowledge_engine.project_context.embeddings import index, providers
 
-_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 
 @pytest.fixture()
@@ -41,9 +41,9 @@ def _insert_doc(
     searchable_body: str,
     summary: str = "",
 ) -> None:
-    """Insert one record across project_docs + project_doc_bodies."""
+    """Insert one record across project_documents + project_doc_bodies."""
     conn.execute(
-        "INSERT INTO project_docs "
+        "INSERT INTO project_documents "
         "(record_id, project_fp, branch_fp, category, content_hash, "
         " created_at, updated_at, summary) "
         "VALUES (?,?,?,?,?,?,?,?)",

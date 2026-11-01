@@ -28,7 +28,7 @@ from knowledge_engine.project_context.config import load_config
 from knowledge_engine.project_context.mcp_tools import log_tools
 
 _REGISTRY_PREFIXES = ("001_",)
-_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 _MIGRATIONS = (
     Path(__file__).resolve().parents[2]
     / "src"

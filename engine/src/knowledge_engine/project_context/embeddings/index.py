@@ -13,7 +13,7 @@ upstream.
 
 Functions:
 
-- :func:`generate` -- embed the searchable bodies of project_docs rows.
+- :func:`generate` -- embed the searchable bodies of project_documents rows.
 - :func:`refresh` -- re-embed changed (or all) rows.
 - :func:`semantic_search` -- rank stored vectors by cosine to a query vector.
 - :func:`similar_records` -- rank stored vectors by cosine to one record.
@@ -64,7 +64,7 @@ def _fetch_docs(
     base = (
         "SELECT pd.record_id AS record_id, "
         "COALESCE(b.searchable_body, '') AS searchable_body "
-        "FROM project_docs pd "
+        "FROM project_documents pd "
         "LEFT JOIN project_doc_bodies b ON b.record_id = pd.record_id"
     )
     if record_ids is None:
@@ -117,7 +117,7 @@ def generate(
     record_ids: list[str] | None = None,
     model: str | None = None,
 ) -> int:
-    """Embed searchable bodies of project_docs rows and store the vectors.
+    """Embed searchable bodies of project_documents rows and store the vectors.
 
     Embeds the rows identified by ``record_ids`` (or every row when ``None``)
     using ``provider`` and writes one packed vector per row into
@@ -219,7 +219,7 @@ def _summaries_for(
         return {}
     placeholders = ",".join("?" for _ in record_ids)
     cur = conn.execute(
-        f"SELECT record_id, summary FROM project_docs WHERE record_id IN ({placeholders})",
+        f"SELECT record_id, summary FROM project_documents WHERE record_id IN ({placeholders})",
         record_ids,
     )
     return {str(row["record_id"]): str(row["summary"] or "") for row in cur.fetchall()}

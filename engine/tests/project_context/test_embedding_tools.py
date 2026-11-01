@@ -22,7 +22,7 @@ from knowledge_engine.project_context.embeddings import (
 )
 from knowledge_engine.project_context.mcp_tools import base, embedding_tools
 
-PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 
 # --------------------------------------------------------------------------- #
@@ -48,10 +48,10 @@ def _registry_db():
 
 
 def _insert_doc(conn, record_id: str, body: str) -> None:
-    """Insert a minimal project_docs row plus its body and FTS shadow rows."""
+    """Insert a minimal project_documents row plus its body and FTS shadow rows."""
     conn.execute(
         """
-        INSERT INTO project_docs
+        INSERT INTO project_documents
             (record_id, project_fp, branch_fp, category, content_hash,
              created_at, updated_at, summary)
         VALUES (?, 'proj_x', 'br_x', 'doc', ?, 'now', 'now', ?)
@@ -63,10 +63,10 @@ def _insert_doc(conn, record_id: str, body: str) -> None:
         (record_id, body),
     )
     rowid = conn.execute(
-        "SELECT rowid FROM project_docs WHERE record_id = ?", (record_id,)
+        "SELECT rowid FROM project_documents WHERE record_id = ?", (record_id,)
     ).fetchone()["rowid"]
     conn.execute(
-        "INSERT INTO project_docs_fts(rowid, searchable_body, summary) VALUES(?,?,?)",
+        "INSERT INTO project_documents_fts(rowid, searchable_body, summary) VALUES(?,?,?)",
         (rowid, body, body[:40]),
     )
     conn.commit()

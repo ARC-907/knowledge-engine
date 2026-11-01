@@ -20,7 +20,7 @@ from knowledge_engine.project_context.config import ProjectContextConfig
 from knowledge_engine.project_context.scanner import pointer_apply, pointer_plan
 from knowledge_engine.project_context.schema import CATEGORY_DOCSTRING
 
-PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 SOURCE = '''def greet(name):
     """This is a long docstring.
@@ -84,7 +84,7 @@ def _ingest_docstring(
         text=_docstring_body(),
         cfg=cfg,
     )
-    # Record the span in provenance (project_docs has no span column); the plan
+    # Record the span in provenance (project_documents has no span column); the plan
     # reads the span from project_doc_provenance.source_span_json.
     project_conn.execute(
         "INSERT INTO project_doc_provenance "

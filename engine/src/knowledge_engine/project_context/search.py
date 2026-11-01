@@ -1,8 +1,10 @@
 """Full-text search over the per-project documentation store.
 
-This module queries the contentless ``project_docs_fts`` FTS5 index and joins
-back to ``project_docs`` so callers can apply branch / category / path / commit
-filters and order results by BM25 relevance.
+This module queries the contentless ``project_documents_fts`` FTS5 index and
+joins back to ``project_documents`` so callers can apply branch / category /
+path / commit filters and order results by BM25 relevance. Table names are
+resolved per connection (:func:`~knowledge_engine.project_context.db.document_tables`),
+so read-only callers can still search a store that predates migration 008.
 
 Results are compact by default: ``mode="summary"`` returns metadata plus a
 highlighted snippet and never includes the document body. ``mode="full"``
@@ -16,9 +18,10 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from .db import document_tables
 from .schema import RESULT_FULL, RESULT_SUMMARY
 
-# Columns selected from ``project_docs`` that populate each result dict.
+# Columns selected from ``project_documents`` that populate each result dict.
 _RECORD_COLUMNS = (
     "record_id",
     "category",
@@ -28,7 +31,7 @@ _RECORD_COLUMNS = (
 )
 
 # FTS snippet helper: column 0 is ``searchable_body``; mark hits with <mark>.
-_SNIPPET_EXPR = "snippet(project_docs_fts, 0, '<mark>', '</mark>', '...', 12)"
+_SNIPPET_EXPR = "snippet({fts}, 0, '<mark>', '</mark>', '...', 12)"
 
 
 def search(
@@ -48,7 +51,8 @@ def search(
     """Search the project FTS index and return ranked result dicts.
 
     Args:
-        project_conn: Open connection to a project DB (migrations 002-007).
+        project_conn: Open connection to a project DB (migrations 002-008;
+            a read-only store without 008 is read under its legacy names).
         query: An FTS5 MATCH expression.
         limit: Maximum number of rows to return.
         branch_fp: Restrict to a single branch fingerprint.
@@ -68,7 +72,8 @@ def search(
         ``source_path``, ``summary``, ``snippet`` and ``score``. In full mode a
         ``body`` (or ``body_status``) key is added.
     """
-    where: list[str] = ["project_docs_fts MATCH ?"]
+    docs, fts = document_tables(project_conn)
+    where: list[str] = [f"{fts} MATCH ?"]
     params: list[Any] = [query]
     _apply_filters(
         where,
@@ -85,11 +90,11 @@ def search(
 
     sql = (
         f"SELECT pd.record_id, pd.category, pd.branch_fp, pd.source_path, "
-        f"pd.summary, {_SNIPPET_EXPR} AS snippet, bm25(project_docs_fts) AS score "
-        f"FROM project_docs_fts f "
-        f"JOIN project_docs pd ON pd.rowid = f.rowid "
+        f"pd.summary, {_SNIPPET_EXPR.format(fts=fts)} AS snippet, bm25({fts}) AS score "
+        f"FROM {fts} f "
+        f"JOIN {docs} pd ON pd.rowid = f.rowid "
         f"WHERE {' AND '.join(where)} "
-        f"ORDER BY bm25(project_docs_fts) "
+        f"ORDER BY bm25({fts}) "
         f"LIMIT ?"
     )
     params.append(int(limit))
@@ -110,9 +115,10 @@ def get_record(
     The shape mirrors :func:`search` results minus the ``snippet`` and
     ``score`` fields (there is no MATCH query to derive them from).
     """
+    docs, _ = document_tables(project_conn)
     sql = (
         "SELECT record_id, category, branch_fp, source_path, summary "
-        "FROM project_docs WHERE record_id = ?"
+        f"FROM {docs} WHERE record_id = ?"
     )
     row = project_conn.execute(sql, (record_id,)).fetchone()
     if row is None:
@@ -190,9 +196,10 @@ def _filtered_listing(
         column_prefix="",
     )
 
+    docs, _ = document_tables(project_conn)
     sql = (
         "SELECT record_id, category, branch_fp, source_path, summary "
-        "FROM project_docs "
+        f"FROM {docs} "
         f"WHERE {' AND '.join(where)} "
         "ORDER BY created_at DESC "
         "LIMIT ?"

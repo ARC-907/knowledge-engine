@@ -211,7 +211,7 @@ def _search_by_commit(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     sql = (
         "SELECT record_id, pointer_id, project_fp, branch_fp, category, subtype, "
         "source_path, summary, git_commit, git_branch, created_at, updated_at "
-        "FROM project_docs WHERE git_commit=?"
+        "FROM project_documents WHERE git_commit=?"
     )
     params: list[Any] = [commit]
     if branch_fp:

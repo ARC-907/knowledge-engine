@@ -24,7 +24,7 @@ from knowledge_engine.project_context.config import ProjectContextConfig
 from knowledge_engine.project_context.mcp_tools import git_tools
 from knowledge_engine.project_context.mcp_tools.base import ToolContext
 
-_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 
 def _payload(result: dict) -> object:
