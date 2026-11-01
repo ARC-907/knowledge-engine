@@ -12,6 +12,8 @@ from collections import Counter
 from collections.abc import Iterable
 from typing import Any
 
+from ..runtime.pipeline.rows import MessageRow
+
 #: The sweeper's sender id; its own ``digest`` posts are excluded by default.
 SWEEPER_NODE_ID = "board-sweeper"
 DIGEST_SELF_TYPES = frozenset({"digest"})
@@ -31,9 +33,10 @@ def empty_digest(
     return summarize([], channel=channel, since=since)
 
 
-def has_ack(msg: dict[str, Any]) -> bool:
+def has_ack(msg: MessageRow) -> bool:
     """True if ``msg`` has at least one acknowledgement in ``ack_by``."""
-    ack = msg.get("ack_by")
+    # ``object``: an undecodable ``ack_by`` stays the raw string.
+    ack: object = msg.get("ack_by")
     if isinstance(ack, list):
         return bool(ack)
     if isinstance(ack, str):
@@ -41,7 +44,7 @@ def has_ack(msg: dict[str, Any]) -> bool:
     return False
 
 
-def is_sweeper_digest(msg: dict[str, Any]) -> bool:
+def is_sweeper_digest(msg: MessageRow) -> bool:
     """True for a digest the sweeper itself posted."""
     return (
         msg.get("sender_node_id") == SWEEPER_NODE_ID
@@ -49,12 +52,12 @@ def is_sweeper_digest(msg: dict[str, Any]) -> bool:
     )
 
 
-def without_sweeper_digests(msgs: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def without_sweeper_digests(msgs: Iterable[MessageRow]) -> list[MessageRow]:
     """Drop the sweeper's own digest posts (otherwise digests count digests)."""
     return [m for m in msgs if not is_sweeper_digest(m)]
 
 
-def _most_recent_per_type(msgs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _most_recent_per_type(msgs: list[MessageRow]) -> dict[str, dict[str, Any]]:
     """First message per type in poll order (newest first)."""
     out: dict[str, dict[str, Any]] = {}
     for msg in msgs:
@@ -69,7 +72,7 @@ def _most_recent_per_type(msgs: list[dict[str, Any]]) -> dict[str, dict[str, Any
     return out
 
 
-def _open_blockers(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _open_blockers(msgs: list[MessageRow]) -> list[dict[str, Any]]:
     return [
         {
             "message_id": msg.get("message_id"),
@@ -83,14 +86,14 @@ def _open_blockers(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _top_senders(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _top_senders(msgs: list[MessageRow]) -> list[dict[str, Any]]:
     counts = Counter(msg.get("sender_node_id") or "unknown" for msg in msgs)
     # Stable: equal counts keep first-seen order, like the original dict sort.
     ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:TOP_SENDERS]
     return [{"from": sender, "count": count} for sender, count in ranked]
 
 
-def _busy_threads(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _busy_threads(msgs: list[MessageRow]) -> list[dict[str, Any]]:
     counts = Counter(c for msg in msgs if (c := msg.get("correlation_id")))
     return [
         {"correlation_id": cid, "count": count}
@@ -100,7 +103,7 @@ def _busy_threads(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def summarize(
-    msgs: list[dict[str, Any]],
+    msgs: list[MessageRow],
     *,
     channel: str | None = None,
     since: str | None = None,

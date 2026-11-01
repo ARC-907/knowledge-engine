@@ -1,6 +1,6 @@
 -- Migration 008 — Rename the document tables to match the subsystem name
 -- (project_docs -> project_documents, project_docs_fts -> project_documents_fts).
--- See ADR 0017. Migrations 002-007 are left untouched: they are already
+-- See ADR 0018. Migrations 002-007 are left untouched: they are already
 -- recorded in existing databases, so fresh and upgraded databases reach the
 -- same schema by running the same sequence.
 --

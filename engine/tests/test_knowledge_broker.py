@@ -278,6 +278,32 @@ def test_filters_apply_before_the_limit(world: World, mode: str) -> None:
     assert typed.hits == () and not typed.partial
 
 
+@pytest.mark.parametrize("mode", ["fts", "vector", "hybrid"])
+def test_curation_filter_applies_before_the_limit(world: World, mode: str) -> None:
+    weak = [rid(f"libs/a/weak{n:02d}.md") for n in range(1, 6)]
+    for record in weak:
+        world.store.classify(CORPUS_SOURCE_ID, record, curation_status="reviewed")
+    unfiltered = world.broker.search(world.ctx(limit=5, mode=mode), "fox")
+    if mode == "fts":  # the strong (unclassified) files outrank every reviewed file
+        assert not set(paths_of(unfiltered)) & set(weak)
+    reviewed = world.broker.search(
+        world.ctx(limit=5, mode=mode, curation_statuses=["reviewed"]), "fox"
+    )
+    assert sorted(paths_of(reviewed)) == sorted(weak)
+    assert reviewed.effective_scope.curation_statuses == ("reviewed",)
+    ored = world.broker.search(
+        world.ctx(limit=5, mode=mode, curation_statuses=["archived", "reviewed"]), "fox"
+    )
+    assert sorted(paths_of(ored)) == sorted(weak)
+    archived = world.broker.search(
+        world.ctx(limit=3, mode=mode, curation_statuses=["archived"]), "fox"
+    )
+    assert archived.hits == () and not archived.partial
+    # Open rechecks the same constraint.
+    with pytest.raises(UnknownScopeError):
+        world.broker.open(world.ctx(curation_statuses=["archived"]), CORPUS_SOURCE_ID, weak[0])
+
+
 def test_multi_collection_record_is_returned_once_with_merged_membership(world: World) -> None:
     owl = rid("libs/b/owl.md")
     world.store.create_collection(WS, "Birds", collection_id="birds")
@@ -716,6 +742,14 @@ def test_project_context_projects_sharing_a_store_never_leak(linked: World) -> N
         linked.broker.search(linked.ctx(collection_ids=["c"], source_ids=[PC]), "runbook").hits
         == ()
     )
+    # So does any curation constraint, "unclassified" included: they have no record rows.
+    for status in ("unclassified", "inbox", "reviewed", "archived"):
+        curated = linked.broker.search(
+            linked.ctx(curation_statuses=[status], source_ids=[PC]), "deployment runbook"
+        )
+        assert curated.hits == () and not curated.partial
+    with pytest.raises(UnknownScopeError):
+        linked.broker.open(linked.ctx(curation_statuses=["unclassified"]), PC, "alpha:a1")
 
 
 def test_project_context_open_and_revisions(linked: World) -> None:

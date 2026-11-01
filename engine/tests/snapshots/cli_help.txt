@@ -137,6 +137,7 @@ options:
 usage: knowledge-engine embeddings build [-h] [--incremental | --rebuild]
                                          [--provider {fake,ollama,remote}]
                                          [--model MODEL] [--db DB]
+                                         [--backend {scan,sqlite-vec}]
                                          [--batch BATCH]
                                          [--chunk-size CHUNK_SIZE]
                                          [--chunk-overlap CHUNK_OVERLAP]
@@ -153,6 +154,10 @@ options:
   --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
   --db DB               index database (default: $KE_EMBEDDINGS_DB or
                         <data_dir>/embeddings.db)
+  --backend {scan,sqlite-vec}
+                        vector search backend (default: $KE_EMBED_BACKEND or
+                        scan); `build --backend sqlite-vec` creates or
+                        refreshes the sqlite-vec table
   --batch BATCH         chunks per embedding request (default: $KE_EMBED_BATCH
                         or 32)
   --chunk-size CHUNK_SIZE
@@ -165,6 +170,7 @@ options:
 usage: knowledge-engine embeddings search [-h] [--top TOP] [--library LIBRARY]
                                           [--provider {fake,ollama,remote}]
                                           [--model MODEL] [--db DB]
+                                          [--backend {scan,sqlite-vec}]
                                           query
 
 positional arguments:
@@ -180,10 +186,15 @@ options:
   --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
   --db DB               index database (default: $KE_EMBEDDINGS_DB or
                         <data_dir>/embeddings.db)
+  --backend {scan,sqlite-vec}
+                        vector search backend (default: $KE_EMBED_BACKEND or
+                        scan); `build --backend sqlite-vec` creates or
+                        refreshes the sqlite-vec table
 ### knowledge-engine embeddings status --help
 usage: knowledge-engine embeddings status [-h]
                                           [--provider {fake,ollama,remote}]
                                           [--model MODEL] [--db DB]
+                                          [--backend {scan,sqlite-vec}]
 
 options:
   -h, --help            show this help message and exit
@@ -193,6 +204,10 @@ options:
   --model MODEL         embedding model (default: $KE_EMBED_MODEL or bge-m3)
   --db DB               index database (default: $KE_EMBEDDINGS_DB or
                         <data_dir>/embeddings.db)
+  --backend {scan,sqlite-vec}
+                        vector search backend (default: $KE_EMBED_BACKEND or
+                        scan); `build --backend sqlite-vec` creates or
+                        refreshes the sqlite-vec table
 ### knowledge-engine knowledge --help
 usage: knowledge-engine knowledge [-h]
                                   {migrate,status,workspace,project,source,collection,record,profile,project-context,search,open,snapshot,evidence,cite} ...
@@ -393,6 +408,7 @@ usage: knowledge-engine knowledge record list [-h] [--project PROJECT]
                                               [--profile PROFILE]
                                               [--source ID] [--collection ID]
                                               [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                              [--curation {unclassified,inbox,reviewed,archived}]
                                               [--tag TAG] [--context CONTEXT]
                                               [--limit LIMIT]
                                               [--offset OFFSET]
@@ -410,6 +426,9 @@ options:
   --collection ID       collection id (repeatable; ORed)
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
+  --curation {unclassified,inbox,reviewed,archived}
+                        curation status (repeatable; ORed; sources without
+                        record rows match nothing)
   --tag TAG             tag (repeatable; ANDed)
   --context CONTEXT     a full QueryContext as JSON (overrides the flags)
   --limit LIMIT
@@ -462,6 +481,7 @@ options:
 usage: knowledge-engine knowledge profile set [-h] [--description DESCRIPTION]
                                               [--source ID] [--collection ID]
                                               [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                              [--curation {unclassified,inbox,reviewed,archived}]
                                               [--tag TAG]
                                               workspace_id profile_id
 
@@ -476,6 +496,9 @@ options:
   --collection ID       collection id (repeatable; ORed)
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
+  --curation {unclassified,inbox,reviewed,archived}
+                        curation status (repeatable; ORed; sources without
+                        record rows match nothing)
   --tag TAG             tag (repeatable; ANDed)
 ### knowledge-engine knowledge project-context --help
 usage: knowledge-engine knowledge project-context [-h] {link,unlink} ...
@@ -520,6 +543,7 @@ usage: knowledge-engine knowledge search [-h] [--workspace WORKSPACE]
                                          [--profile PROFILE] [--source ID]
                                          [--collection ID]
                                          [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                         [--curation {unclassified,inbox,reviewed,archived}]
                                          [--tag TAG] [--context CONTEXT]
                                          [--mode {fts,vector,hybrid}]
                                          [--limit LIMIT]
@@ -541,6 +565,9 @@ options:
   --collection ID       collection id (repeatable; ORed)
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
+  --curation {unclassified,inbox,reviewed,archived}
+                        curation status (repeatable; ORed; sources without
+                        record rows match nothing)
   --tag TAG             tag (repeatable; ANDed)
   --context CONTEXT     a full QueryContext as JSON (overrides the flags)
   --mode {fts,vector,hybrid}
@@ -558,6 +585,7 @@ usage: knowledge-engine knowledge open [-h] [--revision REVISION]
                                        [--profile PROFILE] [--source ID]
                                        [--collection ID]
                                        [--type {reference,paper,article,transcript,code,note,dataset,synthesis,other}]
+                                       [--curation {unclassified,inbox,reviewed,archived}]
                                        [--tag TAG] [--context CONTEXT]
                                        [--timeout-ms TIMEOUT_MS]
                                        source_id record_id
@@ -578,6 +606,9 @@ options:
   --collection ID       collection id (repeatable; ORed)
   --type {reference,paper,article,transcript,code,note,dataset,synthesis,other}
                         research type (repeatable; ORed)
+  --curation {unclassified,inbox,reviewed,archived}
+                        curation status (repeatable; ORed; sources without
+                        record rows match nothing)
   --tag TAG             tag (repeatable; ANDed)
   --context CONTEXT     a full QueryContext as JSON (overrides the flags)
   --timeout-ms TIMEOUT_MS

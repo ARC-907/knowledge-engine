@@ -1,4 +1,4 @@
-# ADR 0017 — Rename the project-context document tables; no compatibility views
+# ADR 0018 — Rename the project-context document tables; no compatibility views
 
 - **Status:** Accepted (3.1.0; roadmap "Known limitations in 3.0")
 - **Date:** 2026-11

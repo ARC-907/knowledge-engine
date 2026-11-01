@@ -124,7 +124,7 @@ class CorpusAdapter:
             source_id=self._source_id,
             source_kind="corpus",
             modes=modes,
-            filters=("project", "collection", "research_type", "tag"),
+            filters=("project", "collection", "research_type", "tag", "curation"),
             locator_kinds=("text", "unsupported"),
             supports_open=True,
         )

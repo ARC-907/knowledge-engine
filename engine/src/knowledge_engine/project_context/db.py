@@ -18,7 +18,7 @@ unique across both sets, so the historical prefix filter
 Storage note: the document table and its FTS5 index are
 ``project_documents`` / ``project_documents_fts`` since migration 008
 (3.1.0); before that they kept the pre-2.0 names ``project_docs`` /
-``project_docs_fts`` (ADR 0017). Read-only readers that cannot migrate a
+``project_docs_fts`` (ADR 0018). Read-only readers that cannot migrate a
 store (the retrieval broker) resolve the names with :func:`document_tables`.
 The child tables keep their ``project_doc_*`` names.
 """

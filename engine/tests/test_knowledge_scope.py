@@ -54,11 +54,31 @@ def _populate(s: KnowledgeStore) -> None:
     s.create_collection("lab", "Reading", collection_id="c-reading")
     s.create_collection("lab", "Alpha notes", collection_id="c-alpha", project_id="alpha")
     s.create_collection("lab", "Beta notes", collection_id="c-beta", project_id="beta")
-    s.classify("corpus:base", "r1", research_type="paper", tags=["ML", "survey"])
-    s.classify("corpus:base", "r2", research_type="note", tags=["ml"], project_id="alpha")
-    s.classify("corpus:base", "r3", research_type="note", project_id="beta")
     s.classify(
-        "notes:local", "r4", research_type="paper", tags=["ml", "Survey"], project_id="alpha"
+        "corpus:base",
+        "r1",
+        research_type="paper",
+        tags=["ML", "survey"],
+        curation_status="reviewed",
+    )
+    s.classify(
+        "corpus:base",
+        "r2",
+        research_type="note",
+        tags=["ml"],
+        project_id="alpha",
+        curation_status="inbox",
+    )
+    s.classify(
+        "corpus:base", "r3", research_type="note", project_id="beta", curation_status="archived"
+    )
+    s.classify(
+        "notes:local",
+        "r4",
+        research_type="paper",
+        tags=["ml", "Survey"],
+        project_id="alpha",
+        curation_status="reviewed",
     )
     # r5 stays as legacy content: unclassified, research type other, no project.
     s.add_members("c-ml", [("corpus:base", "r1"), ("notes:local", "r4")])
@@ -71,6 +91,19 @@ CASES: list[tuple[str, dict[str, Any], set[str]]] = [
     ("explicit empty sources select nothing", {"source_ids": []}, set()),
     ("explicit empty collections select nothing", {"collection_ids": []}, set()),
     ("explicit empty types select nothing", {"research_types": []}, set()),
+    ("explicit empty curation selects nothing", {"curation_statuses": []}, set()),
+    ("one curation status", {"curation_statuses": ["reviewed"]}, {"r1", "r4"}),
+    (
+        "curation statuses are ORed",
+        {"curation_statuses": ["inbox", "archived"]},
+        {"r2", "r3"},
+    ),
+    ("legacy content is unclassified", {"curation_statuses": ["unclassified"]}, {"r5"}),
+    (
+        "curation AND project",
+        {"project_id": "alpha", "curation_statuses": ["reviewed"]},
+        {"r4"},
+    ),
     ("one source", {"source_ids": ["notes:local"]}, {"r4", "r5"}),
     ("sources are ORed", {"source_ids": ["corpus:base", "notes:local"]}, ALL),
     ("one tag", {"tags": ["ml"]}, {"r1", "r2", "r4"}),
@@ -112,6 +145,7 @@ def _views(store: KnowledgeStore) -> list[RecordView]:
             research_type=r.research_type,
             tags=frozenset(r.tags),
             collection_ids=frozenset(r.collection_ids),
+            curation_status=r.curation_status,
         )
         for r in records
     ]
@@ -140,12 +174,49 @@ def test_effective_scope_reports_profile_and_emptiness(store: KnowledgeStore) ->
     scope = store.resolve(QueryContext(workspace_id="lab"))
     assert scope.source_ids == ("corpus:base", "notes:local")
     assert scope.profile_id == "default"
-    assert set(scope.from_profile) == {"source_ids", "collection_ids", "research_types", "tags"}
+    assert set(scope.from_profile) == {
+        "source_ids",
+        "collection_ids",
+        "research_types",
+        "curation_statuses",
+        "tags",
+    }
     assert not scope.empty
     empty = store.resolve(QueryContext(workspace_id="lab", source_ids=[]))
     assert empty.empty and empty.source_ids == ()
     explicit = store.resolve(QueryContext(workspace_id="lab", tags=["ml"]))
     assert "tags" not in explicit.from_profile
+    no_status = store.resolve(QueryContext(workspace_id="lab", curation_statuses=[]))
+    assert no_status.empty and no_status.source_ids == ()
+    assert no_status.curation_statuses == ()
+
+
+def test_curation_profile_default_and_override(store: KnowledgeStore) -> None:
+    store.set_profile(
+        ScopeProfile(workspace_id="lab", profile_id="curated", curation_statuses=["reviewed"])
+    )
+    scope, records, _ = store.query_records(QueryContext(workspace_id="lab", profile_id="curated"))
+    assert _ids(records) == {"r1", "r4"}
+    assert "curation_statuses" in scope.from_profile
+    assert scope.curation_statuses == ("reviewed",)
+    # An explicit selection replaces the profile's curation statuses.
+    scope, records, _ = store.query_records(
+        QueryContext(workspace_id="lab", profile_id="curated", curation_statuses=["inbox"])
+    )
+    assert _ids(records) == {"r2"}
+    assert "curation_statuses" not in scope.from_profile
+
+
+def test_record_without_curation_matches_no_curation_constraint(store: KnowledgeStore) -> None:
+    # Sources that keep no record rows (project context, code symbols) build
+    # views without a curation status; any curation constraint excludes them.
+    view = RecordView(
+        source_id="corpus:base", record_id="pc", project_id=None, research_type=ResearchType.OTHER
+    )
+    assert record_in_scope(view, store.resolve(QueryContext(workspace_id="lab")))
+    for status in ("unclassified", "inbox", "reviewed", "archived"):
+        scope = store.resolve(QueryContext(workspace_id="lab", curation_statuses=[status]))
+        assert not record_in_scope(view, scope)
 
 
 @pytest.mark.parametrize(

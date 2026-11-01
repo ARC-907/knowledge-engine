@@ -50,6 +50,8 @@ Handler = Callable[[argparse.Namespace, argparse.ArgumentParser], int]
 SEARCH_MODES = ("fts", "vector", "hybrid")
 #: ``embeddings --provider`` values (``knowledge_engine.core.settings.EMBED_PROVIDERS``).
 EMBED_PROVIDERS = ("fake", "ollama", "remote")
+#: ``embeddings --backend`` values (``knowledge_engine.core.settings.EMBED_BACKENDS``).
+EMBED_BACKENDS = ("scan", "sqlite-vec")
 
 
 def _positive_int(text: str) -> int:
@@ -311,6 +313,13 @@ def _embedding_options(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="index database (default: $KE_EMBEDDINGS_DB or <data_dir>/embeddings.db)",
     )
+    parser.add_argument(
+        "--backend",
+        choices=EMBED_BACKENDS,
+        default=None,
+        help="vector search backend (default: $KE_EMBED_BACKEND or scan); "
+        "`build --backend sqlite-vec` creates or refreshes the sqlite-vec table",
+    )
 
 
 def _add_embeddings_parser(sub: Any) -> None:
@@ -402,6 +411,12 @@ def _selection_options(parser: argparse.ArgumentParser) -> None:
         action="append",
         choices=RESEARCH_TYPES,
         help="research type (repeatable; ORed)",
+    )
+    parser.add_argument(
+        "--curation",
+        action="append",
+        choices=CURATION_STATUSES,
+        help="curation status (repeatable; ORed; sources without record rows match nothing)",
     )
     parser.add_argument("--tag", action="append", metavar="TAG", help="tag (repeatable; ANDed)")
 
@@ -738,6 +753,7 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "CAPABILITIES",
     "CURATION_STATUSES",
+    "EMBED_BACKENDS",
     "EMBED_PROVIDERS",
     "LONG_RUNNING",
     "PROG",

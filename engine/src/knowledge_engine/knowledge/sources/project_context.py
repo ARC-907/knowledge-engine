@@ -12,10 +12,11 @@ slug (and so one content DB file) never see each other's documents.
 
 Project-context documents are not classified in ``knowledge.db``: each one
 is a workspace record of its linked project with research type ``other``, no
-tags and no collections, decided by the same reference predicate
-(:func:`~knowledge_engine.knowledge.scope.record_in_scope`) every other source
-obeys. A project query therefore never returns another project's documents;
-a query constrained by collection or tag returns none of them.
+tags, no collections and no curation status, decided by the same reference
+predicate (:func:`~knowledge_engine.knowledge.scope.record_in_scope`) every
+other source obeys. A project query therefore never returns another project's
+documents; a query constrained by collection, tag or curation status returns
+none of them.
 
 Record ids are ``<project_id>:<document id>``. The revision id of a hit is the
 content-addressed id of the stored sanitized body; ``open`` serves it when it
@@ -184,7 +185,7 @@ class ProjectContextAdapter:
             source_id=self._source_id,
             source_kind=SOURCE_KIND,
             modes=("fts",),
-            filters=("project", "collection", "research_type", "tag"),
+            filters=("project", "collection", "research_type", "tag", "curation"),
             locator_kinds=("text", "unsupported"),
             supports_open=True,
         )
