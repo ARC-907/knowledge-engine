@@ -20,7 +20,7 @@ from knowledge_engine.project_context import db, git_context
 from knowledge_engine.project_context.config import ProjectContextConfig
 from knowledge_engine.project_context.models import DiffSummary, GitContext
 
-_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 
 # ── collect: graceful degradation ────────────────────────────────────

@@ -18,7 +18,8 @@
               "project",
               "collection",
               "research_type",
-              "tag"
+              "tag",
+              "curation"
             ],
             "type": "string"
           },
@@ -1423,6 +1424,17 @@
     },
     "EffectiveScope": {
       "$defs": {
+        "CurationStatus": {
+          "description": "Review maturity. Never inferred from model output.",
+          "enum": [
+            "unclassified",
+            "inbox",
+            "reviewed",
+            "archived"
+          ],
+          "title": "CurationStatus",
+          "type": "string"
+        },
         "ResearchType": {
           "description": "Controlled content classification. Unknown values fail validation.",
           "enum": [
@@ -1459,6 +1471,22 @@
           "default": null,
           "description": "None: no collection constraint.",
           "title": "Collection Ids"
+        },
+        "curation_statuses": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CurationStatus"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None: no curation-status constraint. Sources that keep no record rows (project context, code symbols) match nothing under a constraint.",
+          "title": "Curation Statuses"
         },
         "empty": {
           "default": false,
@@ -2580,6 +2608,17 @@
     },
     "QueryContext": {
       "$defs": {
+        "CurationStatus": {
+          "description": "Review maturity. Never inferred from model output.",
+          "enum": [
+            "unclassified",
+            "inbox",
+            "reviewed",
+            "archived"
+          ],
+          "title": "CurationStatus",
+          "type": "string"
+        },
         "ResearchType": {
           "description": "Controlled content classification. Unknown values fail validation.",
           "enum": [
@@ -2624,7 +2663,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "Scope and budget of one query.\n\nSelection semantics (ADR 0006):\n\n* ``None`` (omitted) takes the dimension from the named profile\n  (``profile_id``, default: the configured profile);\n* an explicit empty ``source_ids`` / ``collection_ids`` / ``research_types``\n  selects **no** sources and returns nothing;\n* values within one list are ORed; ``tags`` are ANDed; dimensions are ANDed;\n  an explicit empty ``tags`` list means \"no tag constraint\" (and overrides\n  the profile's tags);\n* unknown ids are ``unknown_scope`` errors, never an empty or a global query;\n* with ``project_id`` only that project's records match, plus\n  workspace-wide records (no project) when ``include_workspace`` is true.\n\n``principal`` is set by trusted code only; :func:`parse_query_context`\nrejects it in caller-supplied payloads.",
+      "description": "Scope and budget of one query.\n\nSelection semantics (ADR 0006):\n\n* ``None`` (omitted) takes the dimension from the named profile\n  (``profile_id``, default: the configured profile);\n* an explicit empty ``source_ids`` / ``collection_ids`` / ``research_types``\n  / ``curation_statuses`` selects **no** sources and returns nothing;\n* values within one list are ORed; ``tags`` are ANDed; dimensions are ANDed;\n  an explicit empty ``tags`` list means \"no tag constraint\" (and overrides\n  the profile's tags);\n* unknown ids are ``unknown_scope`` errors, never an empty or a global query;\n* with ``project_id`` only that project's records match, plus\n  workspace-wide records (no project) when ``include_workspace`` is true.\n\n``principal`` is set by trusted code only; :func:`parse_query_context`\nrejects it in caller-supplied payloads.",
       "properties": {
         "byte_budget": {
           "default": 1048576,
@@ -2649,6 +2688,22 @@
           "default": null,
           "maxLength": 200,
           "title": "Collection Ids"
+        },
+        "curation_statuses": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CurationStatus"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "maxLength": 200,
+          "title": "Curation Statuses"
         },
         "include_workspace": {
           "default": false,
@@ -2892,6 +2947,17 @@
     },
     "ScopeProfile": {
       "$defs": {
+        "CurationStatus": {
+          "description": "Review maturity. Never inferred from model output.",
+          "enum": [
+            "unclassified",
+            "inbox",
+            "reviewed",
+            "archived"
+          ],
+          "title": "CurationStatus",
+          "type": "string"
+        },
         "ResearchType": {
           "description": "Controlled content classification. Unknown values fail validation.",
           "enum": [
@@ -2927,6 +2993,21 @@
           ],
           "default": null,
           "title": "Collection Ids"
+        },
+        "curation_statuses": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CurationStatus"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Curation Statuses"
         },
         "description": {
           "default": "",
@@ -3127,6 +3208,17 @@
           "title": "CodeLocator",
           "type": "object"
         },
+        "CurationStatus": {
+          "description": "Review maturity. Never inferred from model output.",
+          "enum": [
+            "unclassified",
+            "inbox",
+            "reviewed",
+            "archived"
+          ],
+          "title": "CurationStatus",
+          "type": "string"
+        },
         "EffectiveScope": {
           "additionalProperties": false,
           "description": "The resolved scope a request actually ran with (returned to the caller).",
@@ -3147,6 +3239,22 @@
               "default": null,
               "description": "None: no collection constraint.",
               "title": "Collection Ids"
+            },
+            "curation_statuses": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/CurationStatus"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "None: no curation-status constraint. Sources that keep no record rows (project context, code symbols) match nothing under a constraint.",
+              "title": "Curation Statuses"
             },
             "empty": {
               "default": false,

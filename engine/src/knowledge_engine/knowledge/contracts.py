@@ -361,7 +361,7 @@ class QueryContext(ContractModel):
     * ``None`` (omitted) takes the dimension from the named profile
       (``profile_id``, default: the configured profile);
     * an explicit empty ``source_ids`` / ``collection_ids`` / ``research_types``
-      selects **no** sources and returns nothing;
+      / ``curation_statuses`` selects **no** sources and returns nothing;
     * values within one list are ORed; ``tags`` are ANDed; dimensions are ANDed;
       an explicit empty ``tags`` list means "no tag constraint" (and overrides
       the profile's tags);
@@ -385,6 +385,11 @@ class QueryContext(ContractModel):
     ] = None
     research_types: Annotated[
         tuple[ResearchType, ...] | None, BeforeValidator(_unique), Field(max_length=MAX_SELECTION)
+    ] = None
+    curation_statuses: Annotated[
+        tuple[CurationStatus, ...] | None,
+        BeforeValidator(_unique),
+        Field(max_length=MAX_SELECTION),
     ] = None
     tags: Annotated[
         tuple[str, ...] | None, BeforeValidator(_tags_or_none), Field(max_length=MAX_SELECTION)
@@ -444,6 +449,7 @@ class ScopeProfile(ContractModel):
     source_ids: Annotated[tuple[SourceId, ...] | None, BeforeValidator(_unique)] = None
     collection_ids: Annotated[tuple[CollectionId, ...] | None, BeforeValidator(_unique)] = None
     research_types: Annotated[tuple[ResearchType, ...] | None, BeforeValidator(_unique)] = None
+    curation_statuses: Annotated[tuple[CurationStatus, ...] | None, BeforeValidator(_unique)] = None
     tags: Annotated[tuple[str, ...], BeforeValidator(_tags_or_none)] = ()
 
 
@@ -460,6 +466,11 @@ class EffectiveScope(ContractModel):
     )
     research_types: tuple[ResearchType, ...] | None = Field(
         default=None, description="None: no research-type constraint."
+    )
+    curation_statuses: tuple[CurationStatus, ...] | None = Field(
+        default=None,
+        description="None: no curation-status constraint. Sources that keep no record rows"
+        " (project context, code symbols) match nothing under a constraint.",
     )
     tags: tuple[str, ...] = Field(default=(), description="Every tag must be present (AND).")
     from_profile: tuple[str, ...] = Field(

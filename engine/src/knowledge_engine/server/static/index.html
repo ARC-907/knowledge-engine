@@ -210,11 +210,20 @@
               </label>
             </template>
           </fieldset>
+          <fieldset id="kn-curation">
+            <legend class="text-xs text-muted mb-1">Curation status</legend>
+            <template x-for="c in curationOptions" :key="c">
+              <label class="flex items-center gap-1">
+                <input type="checkbox" :value="c" x-model="kn.curationStatuses">
+                <span x-text="c"></span>
+              </label>
+            </template>
+            <p class="text-xs text-faint mt-2">Project-context documents carry no curation status: any ticked status leaves them out.</p>
+          </fieldset>
           <div>
             <label for="kn-tags" class="block text-xs text-muted mb-1">Tags (comma-separated; all must match)</label>
             <input id="kn-tags" x-model="kn.tags" autocomplete="off" placeholder="e.g. climate, 2024"
               class="w-full bg-canvas border border-edge rounded px-2 py-1">
-            <p class="text-xs text-faint mt-2">Curation status is record metadata; the search broker does not filter on it.</p>
           </div>
         </div>
       </details>

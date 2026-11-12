@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable, Iterator
+from contextlib import closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -275,6 +276,32 @@ def test_filters_apply_before_the_limit(world: World, mode: str) -> None:
     assert sorted(paths_of(env)) == sorted(weak)
     typed = world.broker.search(world.ctx(limit=3, mode=mode, research_types=["paper"]), "fox")
     assert typed.hits == () and not typed.partial
+
+
+@pytest.mark.parametrize("mode", ["fts", "vector", "hybrid"])
+def test_curation_filter_applies_before_the_limit(world: World, mode: str) -> None:
+    weak = [rid(f"libs/a/weak{n:02d}.md") for n in range(1, 6)]
+    for record in weak:
+        world.store.classify(CORPUS_SOURCE_ID, record, curation_status="reviewed")
+    unfiltered = world.broker.search(world.ctx(limit=5, mode=mode), "fox")
+    if mode == "fts":  # the strong (unclassified) files outrank every reviewed file
+        assert not set(paths_of(unfiltered)) & set(weak)
+    reviewed = world.broker.search(
+        world.ctx(limit=5, mode=mode, curation_statuses=["reviewed"]), "fox"
+    )
+    assert sorted(paths_of(reviewed)) == sorted(weak)
+    assert reviewed.effective_scope.curation_statuses == ("reviewed",)
+    ored = world.broker.search(
+        world.ctx(limit=5, mode=mode, curation_statuses=["archived", "reviewed"]), "fox"
+    )
+    assert sorted(paths_of(ored)) == sorted(weak)
+    archived = world.broker.search(
+        world.ctx(limit=3, mode=mode, curation_statuses=["archived"]), "fox"
+    )
+    assert archived.hits == () and not archived.partial
+    # Open rechecks the same constraint.
+    with pytest.raises(UnknownScopeError):
+        world.broker.open(world.ctx(curation_statuses=["archived"]), CORPUS_SOURCE_ID, weak[0])
 
 
 def test_multi_collection_record_is_returned_once_with_merged_membership(world: World) -> None:
@@ -577,12 +604,17 @@ def test_open_unknown_or_out_of_scope_records(world: World) -> None:
 # ── project context ──────────────────────────────────────────────────
 
 
-def _project_context_root(root: Path, docs: dict[str, list[tuple[str, str]]]) -> None:
+def _project_context_root(
+    root: Path, docs: dict[str, list[tuple[str, str]]], *, legacy: bool = False
+) -> None:
     """One root whose registry holds every fingerprint of ``docs`` under the name ``app``.
 
     Projects sharing a name share one content DB file, so the broker must filter
-    by fingerprint to keep them apart.
+    by fingerprint to keep them apart. ``legacy`` leaves the content DB at
+    migration 007 with the pre-rename ``project_docs*`` tables (a 3.0/3.1 store
+    that no read-write open has migrated yet).
     """
+    from knowledge_engine.core.util import sqlite as ke_sqlite
     from knowledge_engine.project_context import db as pddb
     from knowledge_engine.project_context.config import ProjectContextConfig
     from knowledge_engine.project_context.paths import (
@@ -597,7 +629,12 @@ def _project_context_root(root: Path, docs: dict[str, list[tuple[str, str]]]) ->
     registry = pddb.connect(fingerprint_db_path(root, cfg))
     pddb.apply_registry_migrations(registry)
     content = pddb.connect(project_db_path(root, cfg, "app"))
-    pddb.apply_project_migrations(content)
+    if legacy:
+        found = ke_sqlite.discover_migrations(pddb.MIGRATIONS_DIR)
+        ke_sqlite.apply_migrations(content, [m for m in found if m.version <= 7])
+    else:
+        pddb.apply_project_migrations(content)
+    docs_table, fts_table = pddb.document_tables(content)
     for fp, items in docs.items():
         registry.execute(
             "INSERT INTO projects (project_fp, name, root_path, created_at, updated_at)"
@@ -606,7 +643,7 @@ def _project_context_root(root: Path, docs: dict[str, list[tuple[str, str]]]) ->
         )
         for doc_id, body in items:
             content.execute(
-                "INSERT INTO project_docs (record_id, project_fp, branch_fp, category,"
+                f"INSERT INTO {docs_table} (record_id, project_fp, branch_fp, category,"
                 " content_hash, created_at, updated_at, source_path, summary)"
                 " VALUES (?, ?, 'br_main', 'doc', 'h', ?, ?, ?, ?)",
                 (doc_id, fp, now, now, f"docs/{doc_id}.md", body[:40]),
@@ -616,10 +653,10 @@ def _project_context_root(root: Path, docs: dict[str, list[tuple[str, str]]]) ->
                 (doc_id, body),
             )
             rowid = content.execute(
-                "SELECT rowid FROM project_docs WHERE record_id = ?", (doc_id,)
+                f"SELECT rowid FROM {docs_table} WHERE record_id = ?", (doc_id,)
             ).fetchone()[0]
             content.execute(
-                "INSERT INTO project_docs_fts (rowid, searchable_body, summary) VALUES (?, ?, ?)",
+                f"INSERT INTO {fts_table} (rowid, searchable_body, summary) VALUES (?, ?, ?)",
                 (rowid, body, body[:40]),
             )
     registry.commit()
@@ -643,6 +680,40 @@ def linked(world: World) -> World:
     link_project(world.store, WS, "alpha", str(world.root / "repo"), project_fp="proj_alpha")
     link_project(world.store, WS, "beta", str(world.root / "repo"), project_fp="proj_beta")
     return world
+
+
+def _pc_hits(world: World, query: str) -> list[tuple[str, str | None, str, float]]:
+    env = world.broker.search(world.ctx(source_ids=[PC]), query)
+    return [(h.record_id, h.revision_id, h.excerpt, h.ranking.native_score) for h in env.hits]
+
+
+def test_project_context_store_before_and_after_the_table_rename(world: World) -> None:
+    """A store still at migration 007 is searchable read-only; 008 keeps the hits."""
+    from knowledge_engine.project_context import db as pddb
+    from knowledge_engine.project_context.config import ProjectContextConfig
+    from knowledge_engine.project_context.paths import project_db_path
+
+    repo = world.root / "repo"
+    _project_context_root(
+        repo, {"proj_one": [("d1", BODY), ("d2", "owl runbook appendix")]}, legacy=True
+    )
+    world.store.create_project(WS, "One", project_id="one")
+    link_project(world.store, WS, "one", str(repo), project_fp="proj_one")
+
+    legacy_hits = _pc_hits(world, "runbook")
+    legacy_open = world.broker.open(world.ctx(), PC, "one:d1")
+    content_db = project_db_path(repo, ProjectContextConfig(), "app")
+    with closing(pddb.connect(content_db)) as conn:
+        untouched = pddb.schema_version(conn)  # the read-only broker never migrates
+        applied = pddb.apply_project_migrations(conn)
+    upgraded_hits = _pc_hits(world, "runbook")
+    upgraded_open = world.broker.open(world.ctx(), PC, "one:d1")
+
+    assert (untouched, applied) == (7, 1)
+    assert sorted(h[0] for h in legacy_hits) == ["one:d1", "one:d2"]
+    assert upgraded_hits == legacy_hits
+    assert legacy_open.content == upgraded_open.content == BODY
+    assert legacy_open.revision_id == upgraded_open.revision_id
 
 
 def test_project_context_projects_sharing_a_store_never_leak(linked: World) -> None:
@@ -671,6 +742,14 @@ def test_project_context_projects_sharing_a_store_never_leak(linked: World) -> N
         linked.broker.search(linked.ctx(collection_ids=["c"], source_ids=[PC]), "runbook").hits
         == ()
     )
+    # So does any curation constraint, "unclassified" included: they have no record rows.
+    for status in ("unclassified", "inbox", "reviewed", "archived"):
+        curated = linked.broker.search(
+            linked.ctx(curation_statuses=[status], source_ids=[PC]), "deployment runbook"
+        )
+        assert curated.hits == () and not curated.partial
+    with pytest.raises(UnknownScopeError):
+        linked.broker.open(linked.ctx(curation_statuses=["unclassified"]), PC, "alpha:a1")
 
 
 def test_project_context_open_and_revisions(linked: World) -> None:

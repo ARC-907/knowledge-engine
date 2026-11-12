@@ -14,6 +14,7 @@ Modules:
                          (named `worker_registry` to avoid clashing with the
                          corpus registry at knowledge_engine.registry).
   - task_classifier.py   Tiny classifier for domain/complexity routing.
+  - rows.py              Typed row shapes (TypedDicts) the three stores return.
 
 Submodules are imported lazily (``knowledge_engine.runtime.pipeline.queue``
 works as an attribute or an import).
@@ -24,7 +25,7 @@ from __future__ import annotations
 import importlib
 from types import ModuleType
 
-__all__ = ["message_board", "queue", "task_classifier", "worker_registry"]
+__all__ = ["message_board", "queue", "rows", "task_classifier", "worker_registry"]
 
 
 def __getattr__(name: str) -> ModuleType:

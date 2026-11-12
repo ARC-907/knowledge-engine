@@ -23,3 +23,5 @@ both ways.
 | [0014](0014-module-catalog-store-and-script-protocol.md) | Module catalog in its own `modules.db`; script wire protocol v1 | Accepted |
 | [0015](0015-module-jobs-cancellation-and-ingestion.md) | Module jobs, cancellation and the host-ingestion interface | Accepted |
 | [0016](0016-serena-read-only-adapter.md) | Serena: read-only adapter, pinned witness, one process per project | Accepted |
+| [0017](0017-vector-backend-seam-and-sqlite-vec.md) | Vector search backends: exact-result seam, sqlite-vec accelerator | Accepted |
+| [0018](0018-project-context-table-rename.md) | Rename the project-context document tables; no compatibility views | Accepted |

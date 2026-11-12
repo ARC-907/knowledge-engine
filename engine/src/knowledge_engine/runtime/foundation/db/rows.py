@@ -57,8 +57,11 @@ def rows_to_dicts(rows: Iterable[sqlite3.Row | None]) -> list[Row]:
     return [d for r in rows if r is not None if (d := dict_from_row(r)) is not None]
 
 
-def require_row(row: Row | None, what: str, key: str) -> Row:
+def require_row[R](row: R | None, what: str, key: str) -> R:
     """Return ``row``, or raise :class:`RowNotFoundError` naming ``what`` / ``key``.
+
+    Generic over the row type, so a typed row (a ``TypedDict`` such as
+    ``runtime.pipeline.rows.TaskRow``) keeps its type through the check.
 
     For reads that follow a write in the same call (``create_x`` returning
     ``get_x(id)``): the row can only be missing if another writer deleted it

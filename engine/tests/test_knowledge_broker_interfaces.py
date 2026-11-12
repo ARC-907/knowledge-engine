@@ -138,6 +138,50 @@ def test_three_surfaces_return_the_same_envelope(
     assert sorted(h["record_id"] for h in http_wide["hits"]) == sorted([FOX, OWL])
 
 
+def test_curation_filter_parity(
+    env: dict[str, Path],
+    client: TestClient,
+    mcp_server: Any,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from knowledge_engine.knowledge.store import KnowledgeStore
+
+    with KnowledgeStore.open(env["data"] / "knowledge.db") as store:
+        store.classify(CORPUS_SOURCE_ID, OWL, curation_status="reviewed")
+        store.classify(CORPUS_SOURCE_ID, FOX, curation_status="archived")
+    for statuses, expected in (
+        (["reviewed"], [OWL]),
+        (["inbox"], []),
+        (["reviewed", "archived"], sorted([FOX, OWL])),
+    ):
+        context = {"workspace_id": "default", "curation_statuses": statuses}
+        http = client.post("/knowledge/search", json={"query": "hunt", "context": context})
+        assert http.status_code == 200, http.text
+        is_error, mcp_body = _call(
+            mcp_server, "knowledge.search", {"query": "hunt", "context": context}
+        )
+        assert not is_error
+        flags = [arg for status in statuses for arg in ("--curation", status)]
+        code, cli_body, _ = _cli(capsys, "search", "hunt", *flags)
+        assert code == 0
+        assert _stable(http.json()) == _stable(mcp_body) == _stable(cli_body)
+        body = http.json()
+        assert sorted(h["record_id"] for h in body["hits"]) == expected
+        assert body["effective_scope"]["curation_statuses"] == sorted(statuses)
+    bad = client.post(
+        "/knowledge/search",
+        json={"query": "hunt", "context": {"workspace_id": "default", "curation_statuses": ["x"]}},
+    )
+    assert bad.status_code == 400, bad.text
+    assert bad.json()["error"]["code"] == "invalid_input"
+    is_error, mcp_bad = _call(
+        mcp_server,
+        "knowledge.search",
+        {"query": "hunt", "context": {"workspace_id": "default", "curation_statuses": ["x"]}},
+    )
+    assert is_error and mcp_bad["error"]["code"] == "invalid_input"
+
+
 def test_open_parity(
     client: TestClient, mcp_server: Any, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -153,11 +153,12 @@ def test_every_command_is_routed() -> None:
 
 def test_cli_choice_constants_match_their_sources() -> None:
     """The CLI mirrors the search modes and provider names to stay lazy; keep them in sync."""
-    from knowledge_engine.core.settings import EMBED_PROVIDERS
+    from knowledge_engine.core.settings import EMBED_BACKENDS, EMBED_PROVIDERS
     from knowledge_engine.retrieval.hybrid import SEARCH_MODES
 
     assert set(cli.SEARCH_MODES) == set(SEARCH_MODES)
     assert set(cli.EMBED_PROVIDERS) == set(EMBED_PROVIDERS)
+    assert cli.EMBED_BACKENDS == EMBED_BACKENDS
     from knowledge_engine.knowledge.contracts import CurationStatus, ResearchType
 
     assert tuple(item.value for item in ResearchType) == cli.RESEARCH_TYPES

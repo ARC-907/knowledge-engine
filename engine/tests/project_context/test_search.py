@@ -1,8 +1,8 @@
 """Tests for the project-context full-text search module.
 
-A fresh project DB (migrations 002-007) is created per test. Rows are inserted
-directly into ``project_docs`` / ``project_doc_bodies`` and the contentless
-``project_docs_fts`` index, mirroring the FTS contract used by the ingestion
+A fresh project DB (migrations 002-008) is created per test. Rows are inserted
+directly into ``project_documents`` / ``project_doc_bodies`` and the contentless
+``project_documents_fts`` index, mirroring the FTS contract used by the ingestion
 pipeline, so the search layer can be exercised in isolation.
 """
 
@@ -17,7 +17,7 @@ from knowledge_engine.project_context.config import ProjectContextConfig
 from knowledge_engine.project_context.db import apply_migrations, connect
 from knowledge_engine.project_context.schema import RESULT_FULL
 
-_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+_PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 
 
 @pytest.fixture()
@@ -45,7 +45,7 @@ def _insert(
 ) -> None:
     """Insert one record across the three storage tables per the FTS contract."""
     conn.execute(
-        "INSERT INTO project_docs "
+        "INSERT INTO project_documents "
         "(record_id, project_fp, branch_fp, category, content_hash, "
         " created_at, updated_at, source_path, summary, git_commit) "
         "VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -67,10 +67,10 @@ def _insert(
         (record_id, body),
     )
     rowid = conn.execute(
-        "SELECT rowid FROM project_docs WHERE record_id = ?", (record_id,)
+        "SELECT rowid FROM project_documents WHERE record_id = ?", (record_id,)
     ).fetchone()["rowid"]
     conn.execute(
-        "INSERT INTO project_docs_fts(rowid, searchable_body, summary) VALUES(?,?,?)",
+        "INSERT INTO project_documents_fts(rowid, searchable_body, summary) VALUES(?,?,?)",
         (rowid, body, summary),
     )
     conn.commit()

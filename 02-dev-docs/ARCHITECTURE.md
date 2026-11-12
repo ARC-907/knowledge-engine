@@ -125,7 +125,7 @@ engine/                            the engine (code layer): pyproject.toml, uv.l
                                    locators, store.py revisions + idempotent ingestion + outbox, resolve.py exact-revision
                                    open, citations.py claim validation + Markdown/CSL-JSON, snapshot.py `knowledge snapshot`)
     runtime/                       foundation/ (config.py YAML + .env loader; db/ versioned SQLite backbone, schema/001–008_*.sql),
-                                   pipeline/ (queue, message_board, worker_registry, task_classifier), sandbox/ (NoopSandbox hook)
+                                   pipeline/ (queue, message_board, worker_registry, task_classifier, rows), sandbox/ (NoopSandbox hook)
   tests/                           pytest suite; snapshots/ (cli_help.txt, openapi.json, mcp_tools.json,
                                    knowledge_contracts.json); fixtures/
 
@@ -378,7 +378,8 @@ Several subsystems are **opt-in** and the lean core works without them:
   foundation: `queue` (lease-based SQLite task queue), `message_board`
   (append-only coordination channel), `worker_registry` (heartbeats +
   auto-release of stale claims), `task_classifier` (small model classifying
-  tasks by domain/complexity). Teams running coordinated agent pipelines wire
+  tasks by domain/complexity), `rows` (the typed row shapes those stores
+  return). Teams running coordinated agent pipelines wire
   this in; the lean-core happy path never touches it.
 - `agent_board/` — the coordination surface built on `runtime/pipeline/message_board`:
   schema-validated channels + types (`schemas.py`), FTS5 search +

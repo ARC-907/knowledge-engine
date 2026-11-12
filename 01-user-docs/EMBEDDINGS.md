@@ -74,7 +74,8 @@ with `--chunk-size`, `--chunk-overlap` and `--max-chars`; a changed setting
 re-embeds every file.
 
 Other `build` options: `--provider fake|ollama|remote`, `--model`, `--batch`
-(chunks per request), `--db` (index file), `--rebuild` (drop the index first).
+(chunks per request), `--db` (index file), `--rebuild` (drop the index first),
+`--backend scan|sqlite-vec` (see [backends](#vector-search-backends)).
 
 ### One model per index
 
@@ -101,8 +102,85 @@ knowledge-engine embeddings search "your query" --top 5 --library libraries
 ```
 
 Output is JSON: `score` (cosine similarity), `rel_path`, `library`, `heading`,
-`text`, `chunk_idx`. Search streams the stored vectors, so memory use does not
-grow with the index.
+`text`, `chunk_idx`. With the default `scan` backend, search streams the stored
+vectors, so memory use does not grow with the index.
+
+## Vector search backends
+
+How a `vector` or `hybrid` search finds the nearest chunks is pluggable
+(`KE_EMBED_BACKEND`, or `--backend` on the `embeddings` commands):
+
+| Backend | How it searches | Needs |
+| --- | --- | --- |
+| `scan` (default) | Streams every stored vector through a cosine scan | nothing extra |
+| `sqlite-vec` | Nearest-neighbour search in a [sqlite-vec](https://github.com/asg017/sqlite-vec) `vec0` table | the `vec` extra |
+
+Both return **the same results**. The `sqlite-vec` backend is an accelerator,
+not an approximation: it asks `vec0` for more chunks than it needs, re-scores
+them exactly, and asks for more until no chunk it has not seen can beat the
+ones it returns. Filters (enabled entries, `kind`) still apply before the
+result is cut to `limit`. If one query would need more than 4096 chunks
+(a very selective filter), that query is answered by the scan and a WARNING
+is logged. Exact ties are broken by the lower chunk id in both backends.
+
+Rough timings on one machine, 20,000 random 1024-dimensional vectors:
+
+| Query | `scan` | `sqlite-vec` |
+| --- | --- | --- |
+| `embeddings search --top 10` | ~1.4 s | ~60 ms |
+| `vector` search, 30 files | ~1.4 s | ~65 ms |
+| `hybrid` candidates, 200 files | ~1.4 s | ~150 ms |
+
+For a few thousand chunks the scan is fast enough; the accelerator pays off
+on large corpora.
+
+### Installing and enabling sqlite-vec
+
+```pwsh
+# from a checkout (in engine/)
+uv sync --extra vec
+# or from a package index
+pip install "knowledge-engine[vec]"
+
+# build (or refresh) the vec table, then use it
+knowledge-engine embeddings build --incremental --backend sqlite-vec
+$env:KE_EMBED_BACKEND = "sqlite-vec"
+knowledge-engine embeddings status
+```
+
+The default install does not include the `vec` extra; nothing changes until you
+opt in.
+
+The `vec0` table lives in a **sibling database** next to the index
+(`embeddings.db` → `embeddings.vec.db`), never inside it, so the index stays
+usable and rebuildable without the extension. Your Python's `sqlite3` module
+must be able to load extensions (the Python builds `uv` installs can; some
+system Pythons cannot).
+
+### Keeping the vec table in sync
+
+A build run with the `sqlite-vec` backend keeps the table in step: the first
+one copies every vector; later ones (`--incremental` or full) apply only the
+chunks that changed, using a change log the index keeps once the backend is
+set up. `--rebuild` with the backend recreates the table. A build run with the
+`scan` backend leaves the table behind; it is then **stale** until the next
+`sqlite-vec` build.
+
+### Fallback
+
+The accelerator never fails a search. If the package is not installed, the
+extension cannot be loaded, the vec table is missing, or it is stale (built
+for another model or dimension, behind the index, or the index was rebuilt
+without it), searches use the `scan` backend instead:
+
+- the reason is logged once at WARNING;
+- `embeddings status` shows `"backend": {"configured": "sqlite-vec", "active": "scan", "warning": ...}`
+  and repeats the reason under `warnings`;
+- `embeddings build --backend sqlite-vec` reports it under `backend.warning`
+  when the table could not be updated (the build itself still succeeds).
+
+The one-model rule is unchanged: a model mismatch is still an
+`embedding_model_mismatch` error with either backend.
 
 ## Configuration
 
@@ -115,6 +193,7 @@ grow with the index.
 | `KE_EMBED_REMOTE_URL` | *(empty)* | Endpoint of the `remote` provider |
 | `KE_EMBED_ALLOW_REMOTE` | `0` | Opt-in gate of the `remote` provider |
 | `KE_EMBEDDINGS_DB` | `$KE_DATA_DIR/embeddings.db` | Where the index is stored |
+| `KE_EMBED_BACKEND` | `scan` | `scan` or `sqlite-vec` (see [backends](#vector-search-backends)) |
 | `KE_CORPUS_ROOT` | `${KE_HOME}/corpus` | Which corpus to embed |
 
 Command-line flags win over the variables. The full reference is
@@ -158,4 +237,5 @@ A file whose embedding failed is retried by the next `--incremental` run.
 | `embedding_unavailable` | `remote` is selected without `KE_EMBED_ALLOW_REMOTE=1` or without `KE_EMBED_REMOTE_URL`. (An unknown `KE_EMBED_PROVIDER` name is not an error: it is logged as a WARNING and `ollama` is used.) |
 | Build is slow | Expected on the first full build. Use `--incremental` after; raise `KE_EMBED_BATCH` if your machine copes. |
 | Build fails with `timed out after 60s` | Each embedding request must finish within 60 s. A CPU-only Ollama embeds `bge-m3` at roughly 1–2 s per chunk, so lower `KE_EMBED_BATCH` (or `--batch`) to 8–16. |
+| `status` shows `"active": "scan"` with a `warning` | The `sqlite-vec` backend is configured but cannot be used; searches still work through the scan. Install the `vec` extra and/or run `knowledge-engine embeddings build --incremental --backend sqlite-vec`. |
 | Results feel off | Different embedding models suit different content. Try another model and `--rebuild`. |

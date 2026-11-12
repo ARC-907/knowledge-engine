@@ -70,7 +70,7 @@ def ctx(tmp_path: Path) -> ToolContext:
     project = pddb.connect(paths.project_db_path(root, cfg, slug))
     pddb.apply_migrations(
         project,
-        only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_"),
+        only_prefixes=("002_", "003_", "004_", "005_", "006_", "007_", "008_"),
     )
     run_id = ingest.begin_run(project, registry, project_fp, branch_fp, schema.MODE_INGEST)
     record = ingest.ingest_record(

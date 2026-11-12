@@ -49,6 +49,7 @@ knowledge-engine knowledge search "spring tides" --project harbour --include-wor
 | `include_workspace` | `false` | With `project_id`: also records that belong to no project |
 | `profile_id` | `KE_KNOWLEDGE_PROFILE` | Fills every selection you omit |
 | `source_ids`, `collection_ids`, `research_types` | from the profile | Values ORed; an explicit `[]` selects nothing |
+| `curation_statuses` | from the profile | `unclassified`, `inbox`, `reviewed`, `archived`; values ORed; an explicit `[]` selects nothing. Sources without record rows (project context, code symbols) return nothing when set. CLI: `--curation STATUS` (repeatable) |
 | `tags` | from the profile | ANDed; `[]` means no tag constraint |
 | `mode` | `fts` | `fts`, `vector` or `hybrid` |
 | `limit` | `10` (1–100) | Hits returned |
@@ -60,8 +61,12 @@ workspace, project, source, collection or profile is an `unknown_scope` error,
 never an empty or global result. A `principal` in the request is rejected.
 
 Filters apply **before** the limit. A query filtered to a project, collection,
-type or tag still returns up to `limit` matching hits, not the matching part of
-an unfiltered top `limit`.
+type, curation status or tag still returns up to `limit` matching hits, not the
+matching part of an unfiltered top `limit`.
+
+```bash
+knowledge-engine knowledge search "spring tides" --curation reviewed --curation inbox
+```
 
 ### The response
 
@@ -99,8 +104,9 @@ an unfiltered top `limit`.
     "source_ids": ["corpus:base"],
     "collection_ids": null,
     "research_types": null,
+    "curation_statuses": null,
     "tags": [],
-    "from_profile": ["source_ids", "collection_ids", "research_types", "tags"],
+    "from_profile": ["source_ids", "collection_ids", "research_types", "curation_statuses", "tags"],
     "empty": false
   },
   "source_status": [
@@ -202,8 +208,9 @@ HTTP: `PUT` / `DELETE /knowledge/workspaces/{workspace_id}/project-context/links
 - Only linked projects are searchable. One fingerprint can be linked to one
   project only.
 - Each document belongs to its linked project, with research type `other`, no
-  tags and no collections. A query constrained by collection or tag returns no
-  project-context documents.
+  tags, no collections and no curation status. A query constrained by
+  collection, tag or curation status (any status, `unclassified` included)
+  returns no project-context documents.
 - Record ids are `<project_id>:<document id>`. The source supports `fts` only;
   in `vector`/`hybrid` mode it is reported `unavailable` and the response is
   partial.

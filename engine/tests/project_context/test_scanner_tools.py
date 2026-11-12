@@ -155,7 +155,7 @@ def test_scanner_ingest_without_project_fp_uses_the_registered_root(tmp_path: Pa
         assert payload["ingested"] >= 1
         stored = ctx.project_conn(project["project_fp"])
         assert stored is not None
-        fps = {r[0] for r in stored.execute("SELECT DISTINCT project_fp FROM project_docs")}
+        fps = {r[0] for r in stored.execute("SELECT DISTINCT project_fp FROM project_documents")}
         assert fps == {project["project_fp"]}  # a real fingerprint, never NULL
     finally:
         ctx.close()

@@ -14,7 +14,7 @@ from knowledge_engine.project_context.schema import (
     POINTER_DOCSTRING,
 )
 
-PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 PROJECT_FP = "proj_abc123def4560000"
 BRANCH_FP = "br_0011223344556677"
 RECORD_ID = "rec_0001"
@@ -41,7 +41,7 @@ def project_conn(tmp_path: Path) -> sqlite3.Connection:
     db.apply_migrations(conn, only_prefixes=PROJECT_PREFIXES)
     conn.execute(
         """
-        INSERT INTO project_docs (
+        INSERT INTO project_documents (
             record_id, project_fp, branch_fp, category, content_hash,
             created_at, updated_at, summary, sanitization_status,
             ingestion_run_id, git_commit, source_path

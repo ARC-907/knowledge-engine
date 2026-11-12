@@ -18,6 +18,7 @@ from typing import Any
 
 from ...core.util.time import utc_now_iso
 from ..foundation import config, db
+from .rows import SafeguardStatus, WorkerRow, worker_from_row, workers_from_rows
 
 # ── Registration ───────────────────────────────────────────
 
@@ -33,7 +34,7 @@ def register_worker(
     ollama_model: str | None = None,
     role: str | None = None,
     display_name: str | None = None,
-) -> dict[str, Any]:
+) -> WorkerRow:
     """Register or update a worker. Auto-fills from nodes.yaml if available."""
     nodes_config = config.load_nodes()
     node_cfg = nodes_config.get("nodes", {}).get(node_id, {})
@@ -97,24 +98,24 @@ def unregister_worker(node_id: str) -> bool:
 # ── Queries ────────────────────────────────────────────────
 
 
-def get_worker(node_id: str) -> dict[str, Any] | None:
+def get_worker(node_id: str) -> WorkerRow | None:
     """Get a specific worker's registration."""
     conn = db.get_connection()
     row = conn.execute("SELECT * FROM workers WHERE node_id = ?", (node_id,)).fetchone()
-    return db.dict_from_row(row)
+    return worker_from_row(row)
 
 
-def list_workers(online_only: bool = False) -> list[dict[str, Any]]:
+def list_workers(online_only: bool = False) -> list[WorkerRow]:
     """List all registered workers."""
     conn = db.get_connection()
     if online_only:
         rows = conn.execute("SELECT * FROM workers WHERE status = 'online'").fetchall()
     else:
         rows = conn.execute("SELECT * FROM workers").fetchall()
-    return db.rows_to_dicts(rows)
+    return workers_from_rows(rows)
 
 
-def get_workers_with_capability(capability: str) -> list[dict[str, Any]]:
+def get_workers_with_capability(capability: str) -> list[WorkerRow]:
     """Find online workers that have a specific capability."""
     workers = list_workers(online_only=True)
     return [w for w in workers if capability in w.get("capabilities", [])]
@@ -127,7 +128,7 @@ def send_heartbeat(
     node_id: str,
     current_tasks: list[str] | None = None,
     resources: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
+) -> WorkerRow | None:
     """Record a heartbeat with optional resource snapshot."""
     now = utc_now_iso()
     conn = db.get_connection()
@@ -185,7 +186,7 @@ def mark_workers_offline(node_ids: list[str]) -> None:
 # ── Safeguard Controls ────────────────────────────────────────
 
 
-def set_safeguard(node_id: str, locked: bool, reason: str = "") -> dict[str, Any] | None:
+def set_safeguard(node_id: str, locked: bool, reason: str = "") -> WorkerRow | None:
     """Lock or unlock a worker's safeguard. Returns updated worker or None."""
     conn = db.get_connection()
     conn.execute(
@@ -198,7 +199,7 @@ def set_safeguard(node_id: str, locked: bool, reason: str = "") -> dict[str, Any
     return get_worker(node_id)
 
 
-def get_safeguard_status(node_id: str) -> dict[str, Any] | None:
+def get_safeguard_status(node_id: str) -> SafeguardStatus | None:
     """Return safeguard status for a worker."""
     w = get_worker(node_id)
     if not w:
@@ -211,7 +212,7 @@ def get_safeguard_status(node_id: str) -> dict[str, Any] | None:
     }
 
 
-def list_safeguard_statuses() -> list[dict[str, Any]]:
+def list_safeguard_statuses() -> list[SafeguardStatus]:
     """Return safeguard status for all workers."""
     workers = list_workers()
     return [

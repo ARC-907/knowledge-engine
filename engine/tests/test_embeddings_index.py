@@ -334,6 +334,8 @@ def test_missing_index_is_a_structured_error(tmp_path: Path, corpus: Path) -> No
         "exists": False,
         "built": False,
         "configured": {"provider": "fake", "model": "fake-hash-64"},
+        "warnings": [],
+        "backend": {"configured": "scan", "active": "scan"},
     }
 
 

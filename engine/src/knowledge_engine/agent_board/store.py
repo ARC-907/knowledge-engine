@@ -30,6 +30,7 @@ from ..core.logsafe import log_safe
 from ..core.util.time import utc_now_iso
 from ..runtime.foundation import db
 from ..runtime.pipeline import message_board as mb
+from ..runtime.pipeline.rows import MessageRow, messages_from_rows
 from . import digest as digest_mod, schemas
 from .scopes import scope_db_path, scope_exists
 
@@ -186,7 +187,7 @@ def update_config(patch: dict[str, Any]) -> dict[str, Any]:
 
 
 @_scoped
-def post_with_validation(payload: dict[str, Any]) -> dict[str, Any]:
+def post_with_validation(payload: dict[str, Any]) -> MessageRow:
     """Schema-validate then post. Returns the created message or raises.
 
     Raises `ValueError` with all collected errors joined on '; '.
@@ -195,7 +196,7 @@ def post_with_validation(payload: dict[str, Any]) -> dict[str, Any]:
     draft, errors = schemas.validate(payload, known_channels=cfg["channels"])
     if errors or draft is None:
         raise ValueError("; ".join(errors))
-    msg = mb.post_message(
+    return mb.post_message(
         message_type=draft.message_type,
         sender_node_id=draft.sender_node_id,
         sender_role=draft.sender_role,
@@ -214,11 +215,10 @@ def post_with_validation(payload: dict[str, Any]) -> dict[str, Any]:
         model_id=draft.model_id,
         thread_id=draft.thread_id,
     )
-    return msg or {}
 
 
 @_scoped
-def read(message_id: str) -> dict[str, Any] | None:
+def read(message_id: str) -> MessageRow | None:
     return mb.read_message(message_id)
 
 
@@ -231,7 +231,7 @@ def poll(
     product_id: str | None = None,
     sender_node_id: str | None = None,
     limit: int = 50,
-) -> list[dict[str, Any]]:
+) -> list[MessageRow]:
     return mb.poll_messages(
         since=since,
         task_id=task_id,
@@ -250,7 +250,7 @@ def relevant_for(
     current_task_ids: list[str] | None = None,
     since: str | None = None,
     limit: int = 20,
-) -> list[dict[str, Any]]:
+) -> list[MessageRow]:
     return mb.get_relevant_messages(
         node_id=node_id,
         role=role,
@@ -268,7 +268,7 @@ def thread_messages(
     correlation_id: str | None = None,
     thread_id: str | None = None,
     limit: int = 100,
-) -> list[dict[str, Any]]:
+) -> list[MessageRow]:
     """Return a thread's messages, oldest-first for natural reading order.
 
     Either `correlation_id` or `thread_id` is required (correlation_id wins
@@ -292,7 +292,7 @@ def thread_messages(
                ORDER BY created_at ASC LIMIT ?""",
             (thread_id, limit),
         ).fetchall()
-    return db.rows_to_dicts(rows)
+    return messages_from_rows(rows)
 
 
 # ── FTS5 search ────────────────────────────────────────────────
@@ -425,7 +425,7 @@ def digest(
 
 
 @_scoped
-def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
+def get_unacked_blockers(threshold_hours: int = 2) -> list[MessageRow]:
     """Blockers that are requires_ack=1, unacked, and older than threshold."""
     cutoff = utc_now_iso(-timedelta(hours=threshold_hours))
     conn = db.get_connection()
@@ -437,11 +437,11 @@ def get_unacked_blockers(threshold_hours: int = 2) -> list[dict[str, Any]]:
              AND (ack_by IS NULL OR ack_by IN ('', '[]'))""",
         (cutoff,),
     ).fetchall()
-    return db.rows_to_dicts(rows)
+    return messages_from_rows(rows)
 
 
 @_scoped
-def ack_message(message_id: str, acker: str) -> dict[str, Any] | None:
+def ack_message(message_id: str, acker: str) -> MessageRow | None:
     """Append `acker` to ack_by JSON list. Returns the updated message.
 
     Race-safe: the append happens inside a `BEGIN IMMEDIATE` transaction

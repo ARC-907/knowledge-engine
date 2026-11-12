@@ -12,7 +12,7 @@ from knowledge_engine.project_context import db as pddb, pointers
 from knowledge_engine.project_context.hashing import content_hash
 from knowledge_engine.project_context.mcp_tools import base, pointer_tools
 
-PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_")
+PROJECT_PREFIXES = ("002_", "003_", "004_", "005_", "006_", "007_", "008_")
 PROJECT_FP = "proj_aaaaaaaaaaaaaaaa"
 BRANCH_FP = "br_bbbbbbbbbbbbbbbb"
 RECORD_ID = "rec_0001"
@@ -46,7 +46,7 @@ def _seed_project_db(path: Path) -> tuple[object, str]:
     chash = content_hash(BODY_TEXT)
     conn.execute(
         """
-        INSERT INTO project_docs (
+        INSERT INTO project_documents (
             record_id, project_fp, branch_fp, source_path, category,
             content_hash, sanitization_status, ingestion_status,
             created_at, updated_at, summary
